@@ -15,6 +15,27 @@ const storedComments: Array<{
   authorUserId: string | null;
 }> = [];
 
+const storedDocuments = new Map<
+  string,
+  {
+    id: string;
+    companyId: string;
+    issueId: string;
+    key: string;
+    title: string | null;
+    format: string;
+    body: string;
+    latestRevisionId: string | null;
+    latestRevisionNumber: number;
+    createdByAgentId: string | null;
+    createdByUserId: string | null;
+    updatedByAgentId: string | null;
+    updatedByUserId: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+  }
+>();
+
 const mockIssueService = vi.hoisted(() => ({
   getById: vi.fn(),
   addComment: vi.fn(),
@@ -40,12 +61,17 @@ const mockAgentService = vi.hoisted(() => ({
   getById: vi.fn(),
 }));
 
+const mockDocumentService = vi.hoisted(() => ({
+  upsertIssueDocument: vi.fn(),
+  getIssueDocumentByKey: vi.fn(),
+}));
+
 const mockLogActivity = vi.hoisted(() => vi.fn(async () => undefined));
 
 vi.mock("../services/index.js", () => ({
   accessService: () => mockAccessService,
   agentService: () => mockAgentService,
-  documentService: () => ({}),
+  documentService: () => mockDocumentService,
   executionWorkspaceService: () => ({}),
   goalService: () => ({}),
   heartbeatService: () => mockHeartbeatService,
@@ -78,6 +104,7 @@ function createApp() {
 describe("issue comment encoding routes", () => {
   beforeEach(() => {
     storedComments.length = 0;
+    storedDocuments.clear();
     vi.clearAllMocks();
 
     mockIssueService.getById.mockResolvedValue({
@@ -110,6 +137,37 @@ describe("issue comment encoding routes", () => {
       return comment;
     });
     mockIssueService.listComments.mockImplementation(async () => [...storedComments]);
+    mockDocumentService.upsertIssueDocument.mockImplementation(async (input: {
+      issueId: string;
+      key: string;
+      title?: string | null;
+      format: string;
+      body: string;
+    }) => {
+      const now = new Date();
+      const document = {
+        id: `document-${storedDocuments.size + 1}`,
+        companyId: "company-1",
+        issueId: input.issueId,
+        key: input.key,
+        title: input.title ?? null,
+        format: input.format,
+        body: input.body,
+        latestRevisionId: "revision-1",
+        latestRevisionNumber: 1,
+        createdByAgentId: null,
+        createdByUserId: "local-board",
+        updatedByAgentId: null,
+        updatedByUserId: "local-board",
+        createdAt: now,
+        updatedAt: now,
+      };
+      storedDocuments.set(`${input.issueId}:${input.key}`, document);
+      return { created: true, document };
+    });
+    mockDocumentService.getIssueDocumentByKey.mockImplementation(async (issueId: string, key: string) => (
+      storedDocuments.get(`${issueId}:${key}`) ?? null
+    ));
   });
 
   it("round-trips Cyrillic comment bodies through POST and GET routes", async () => {
@@ -129,5 +187,26 @@ describe("issue comment encoding routes", () => {
     expect(listResponse.status).toBe(200);
     expect(listResponse.body).toHaveLength(1);
     expect(listResponse.body[0]?.body).toBe(body);
+  });
+
+  it("round-trips Russian document bodies through PUT and GET routes", async () => {
+    const body = "# План\n\nРусский текст документа должен сохраняться без потерь.";
+    const title = "План исследования";
+    const app = createApp();
+
+    const createResponse = await request(app)
+      .put("/api/issues/11111111-1111-4111-8111-111111111111/documents/plan")
+      .send({ title, format: "markdown", body });
+
+    expect(createResponse.status).toBe(201);
+    expect(createResponse.body.title).toBe(title);
+    expect(createResponse.body.body).toBe(body);
+
+    const getResponse = await request(app)
+      .get("/api/issues/11111111-1111-4111-8111-111111111111/documents/plan");
+
+    expect(getResponse.status).toBe(200);
+    expect(getResponse.body.title).toBe(title);
+    expect(getResponse.body.body).toBe(body);
   });
 });

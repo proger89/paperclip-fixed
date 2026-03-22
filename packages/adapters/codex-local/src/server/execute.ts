@@ -60,6 +60,43 @@ function hasNonEmptyEnvValue(env: Record<string, string>, key: string): boolean 
   return typeof raw === "string" && raw.trim().length > 0;
 }
 
+function hasExplicitStringConfig(envConfig: Record<string, unknown>, key: string): boolean {
+  const raw = envConfig[key];
+  return typeof raw === "string" && raw.trim().length > 0;
+}
+
+function normalizeCodexWindowsShellEnv(env: Record<string, string>, envConfig: Record<string, unknown>) {
+  if (process.platform !== "win32") return env;
+
+  const next = { ...env };
+  const cmdShell =
+    process.env.ComSpec?.trim()
+    || process.env.COMSPEC?.trim()
+    || env.ComSpec?.trim()
+    || env.COMSPEC?.trim()
+    || "cmd.exe";
+
+  if (!hasExplicitStringConfig(envConfig, "SHELL")) {
+    next.SHELL = cmdShell;
+  }
+  if (!hasExplicitStringConfig(envConfig, "ComSpec") && !hasExplicitStringConfig(envConfig, "COMSPEC")) {
+    next.ComSpec = cmdShell;
+    next.COMSPEC = cmdShell;
+  }
+
+  return next;
+}
+
+function buildWindowsShellPromptNote() {
+  if (process.platform !== "win32") return "";
+  return [
+    "Windows shell note:",
+    "- Prefer UTF-8-safe command patterns for issue comments and documents.",
+    "- Avoid PowerShell heredoc pipelines that feed Unicode scripts into `python -`.",
+    "- Prefer UTF-8 files or direct JSON payloads that do not depend on PowerShell pipeline encoding.",
+  ].join("\n");
+}
+
 function resolveCodexBillingType(env: Record<string, string>): "api" | "subscription" {
   // Codex uses API-key auth when OPENAI_API_KEY is present; otherwise rely on local login/session auth.
   return hasNonEmptyEnvValue(env, "OPENAI_API_KEY") ? "api" : "subscription";
@@ -376,14 +413,21 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   if (!hasExplicitApiKey && authToken) {
     env.PAPERCLIP_API_KEY = authToken;
   }
+  const normalizedRuntimeEnv = normalizeCodexWindowsShellEnv(env, envConfig);
   const effectiveEnv = Object.fromEntries(
-    Object.entries({ ...process.env, ...env }).filter(
+    Object.entries({ ...process.env, ...normalizedRuntimeEnv }).filter(
       (entry): entry is [string, string] => typeof entry[1] === "string",
     ),
   );
   const billingType = resolveCodexBillingType(effectiveEnv);
   const runtimeEnv = ensurePathInEnv(effectiveEnv);
   await ensureCommandResolvable(command, cwd, runtimeEnv);
+  if (process.platform === "win32") {
+    await onLog(
+      "stdout",
+      `[paperclip] Windows Codex shell normalized to ${JSON.stringify(normalizedRuntimeEnv.SHELL ?? "cmd.exe")} unless adapter env overrides SHELL.\n`,
+    );
+  }
 
   const timeoutSec = asNumber(config.timeoutSec, 0);
   const graceSec = asNumber(config.graceSec, 20);
@@ -462,6 +506,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     instructionsPrefix,
     renderedBootstrapPrompt,
     sessionHandoffNote,
+    buildWindowsShellPromptNote(),
     renderedPrompt,
   ]);
   const promptMetrics = {
@@ -496,7 +541,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
           if (idx === args.length - 1 && value !== "-") return `<prompt ${prompt.length} chars>`;
           return value;
         }),
-        env: redactEnvForLogs(env),
+        env: redactEnvForLogs(normalizedRuntimeEnv),
         prompt,
         promptMetrics,
         context,
@@ -505,7 +550,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
     const proc = await runChildProcess(runId, command, args, {
       cwd,
-      env,
+      env: normalizedRuntimeEnv,
       stdin: prompt,
       timeoutSec,
       graceSec,

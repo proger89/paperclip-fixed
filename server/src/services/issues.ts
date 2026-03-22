@@ -30,6 +30,8 @@ import { instanceSettingsService } from "./instance-settings.js";
 import { redactCurrentUserText } from "../log-redaction.js";
 import { resolveIssueGoalId, resolveNextIssueGoalId } from "./issue-goal-fallback.js";
 import { getDefaultCompanyGoal } from "./goals.js";
+import { windowsEncodingRepairService } from "./windows-encoding-repair.js";
+import { isLikelyWindowsEncodingCorruption } from "./windows-encoding-utils.js";
 
 const ALL_ISSUE_STATUSES = ["backlog", "todo", "in_progress", "in_review", "blocked", "done", "cancelled"];
 const MAX_ISSUE_COMMENT_PAGE_LIMIT = 500;
@@ -1268,7 +1270,7 @@ export function issueService(db: Db) {
           return comment ? redactIssueComment(comment, censorUsernameInLogs) : null;
         })),
 
-    addComment: async (issueId: string, body: string, actor: { agentId?: string; userId?: string }) => {
+    addComment: async (issueId: string, body: string, actor: { agentId?: string; userId?: string; runId?: string | null }) => {
       const issue = await db
         .select({ companyId: issues.companyId })
         .from(issues)
@@ -1298,7 +1300,23 @@ export function issueService(db: Db) {
         .set({ updatedAt: new Date() })
         .where(eq(issues.id, issueId));
 
-      return redactIssueComment(comment, currentUserRedactionOptions.enabled);
+      let finalComment = comment;
+      if (actor.agentId && actor.runId && isLikelyWindowsEncodingCorruption(comment.body)) {
+        await windowsEncodingRepairService(db).repair({
+          issueId,
+          runId: actor.runId,
+          commentId: comment.id,
+          dryRun: false,
+        });
+        const repaired = await db
+          .select()
+          .from(issueComments)
+          .where(eq(issueComments.id, comment.id))
+          .then((rows) => rows[0] ?? null);
+        if (repaired) finalComment = repaired;
+      }
+
+      return redactIssueComment(finalComment, currentUserRedactionOptions.enabled);
     },
 
     createAttachment: async (input: {

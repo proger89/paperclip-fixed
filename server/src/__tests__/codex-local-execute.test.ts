@@ -13,6 +13,12 @@ const payload = {
   argv: process.argv.slice(2),
   prompt: fs.readFileSync(0, "utf8"),
   codexHome: process.env.CODEX_HOME || null,
+  shell: process.env.SHELL || null,
+  comSpec: process.env.ComSpec || process.env.COMSPEC || null,
+  pythonIoEncoding: process.env.PYTHONIOENCODING || null,
+  pythonUtf8: process.env.PYTHONUTF8 || null,
+  lang: process.env.LANG || null,
+  lcAll: process.env.LC_ALL || null,
   paperclipEnvKeys: Object.keys(process.env)
     .filter((key) => key.startsWith("PAPERCLIP_"))
     .sort(),
@@ -43,6 +49,12 @@ type CapturePayload = {
   argv: string[];
   prompt: string;
   codexHome: string | null;
+  shell: string | null;
+  comSpec: string | null;
+  pythonIoEncoding: string | null;
+  pythonUtf8: string | null;
+  lang: string | null;
+  lcAll: string | null;
   paperclipEnvKeys: string[];
 };
 
@@ -50,6 +62,8 @@ type LogEntry = {
   stream: "stdout" | "stderr";
   chunk: string;
 };
+
+const itWindows = process.platform === "win32" ? it : it.skip;
 
 async function expectSharedFileReference(target: string, source: string): Promise<void> {
   const [targetStat, sourceStat] = await Promise.all([fs.stat(target), fs.stat(source)]);
@@ -352,6 +366,162 @@ describe("codex execute", () => {
       else process.env.PAPERCLIP_IN_WORKTREE = previousPaperclipInWorktree;
       if (previousCodexHome === undefined) delete process.env.CODEX_HOME;
       else process.env.CODEX_HOME = previousCodexHome;
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  itWindows("normalizes inherited PowerShell shell env to cmd.exe for Codex on Windows", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-codex-execute-win-shell-"));
+    const workspace = path.join(root, "workspace");
+    const commandPath = path.join(root, "codex");
+    const capturePath = path.join(root, "capture.json");
+    const cmdShell = "C:\\Windows\\System32\\cmd.exe";
+    await fs.mkdir(workspace, { recursive: true });
+    await writeFakeCodexCommand(commandPath);
+
+    const previousHome = process.env.HOME;
+    const previousUserProfile = process.env.USERPROFILE;
+    const previousShell = process.env.SHELL;
+    const previousComSpec = process.env.ComSpec;
+    const previousCOMSPEC = process.env.COMSPEC;
+    process.env.HOME = root;
+    process.env.USERPROFILE = root;
+    process.env.SHELL = "C:\\windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
+    process.env.ComSpec = cmdShell;
+    process.env.COMSPEC = cmdShell;
+
+    try {
+      const logs: LogEntry[] = [];
+      const result = await execute({
+        runId: "run-win-shell",
+        agent: {
+          id: "agent-1",
+          companyId: "company-1",
+          name: "Codex Coder",
+          adapterType: "codex_local",
+          adapterConfig: {},
+        },
+        runtime: {
+          sessionId: null,
+          sessionParams: null,
+          sessionDisplayId: null,
+          taskKey: null,
+        },
+        config: {
+          command: commandPath,
+          cwd: workspace,
+          env: {
+            PAPERCLIP_TEST_CAPTURE_PATH: capturePath,
+          },
+          promptTemplate: "Follow the paperclip heartbeat.",
+        },
+        context: {},
+        authToken: "run-jwt-token",
+        onLog: async (stream, chunk) => {
+          logs.push({ stream, chunk });
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.errorMessage).toBeNull();
+
+      const capture = JSON.parse(await fs.readFile(capturePath, "utf8")) as CapturePayload;
+      expect(capture.shell).toBe(cmdShell);
+      expect(capture.comSpec).toBe(cmdShell);
+      expect(capture.pythonIoEncoding).toBe("UTF-8");
+      expect(capture.pythonUtf8).toBe("1");
+      expect(capture.lang).toBe("C.UTF-8");
+      expect(capture.lcAll).toBe("C.UTF-8");
+      expect(capture.prompt).toContain("Windows shell note:");
+      expect(logs).toContainEqual(
+        expect.objectContaining({
+          stream: "stdout",
+          chunk: expect.stringContaining("Windows Codex shell normalized"),
+        }),
+      );
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+      if (previousUserProfile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = previousUserProfile;
+      if (previousShell === undefined) delete process.env.SHELL;
+      else process.env.SHELL = previousShell;
+      if (previousComSpec === undefined) delete process.env.ComSpec;
+      else process.env.ComSpec = previousComSpec;
+      if (previousCOMSPEC === undefined) delete process.env.COMSPEC;
+      else process.env.COMSPEC = previousCOMSPEC;
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  itWindows("preserves an explicit SHELL override for Codex on Windows", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-codex-execute-win-shell-override-"));
+    const workspace = path.join(root, "workspace");
+    const commandPath = path.join(root, "codex");
+    const capturePath = path.join(root, "capture.json");
+    const explicitShell = "C:\\Program Files\\PowerShell\\7\\pwsh.exe";
+    const cmdShell = "C:\\Windows\\System32\\cmd.exe";
+    await fs.mkdir(workspace, { recursive: true });
+    await writeFakeCodexCommand(commandPath);
+
+    const previousHome = process.env.HOME;
+    const previousUserProfile = process.env.USERPROFILE;
+    const previousShell = process.env.SHELL;
+    const previousComSpec = process.env.ComSpec;
+    const previousCOMSPEC = process.env.COMSPEC;
+    process.env.HOME = root;
+    process.env.USERPROFILE = root;
+    process.env.SHELL = "C:\\windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
+    process.env.ComSpec = cmdShell;
+    process.env.COMSPEC = cmdShell;
+
+    try {
+      const result = await execute({
+        runId: "run-win-shell-override",
+        agent: {
+          id: "agent-1",
+          companyId: "company-1",
+          name: "Codex Coder",
+          adapterType: "codex_local",
+          adapterConfig: {},
+        },
+        runtime: {
+          sessionId: null,
+          sessionParams: null,
+          sessionDisplayId: null,
+          taskKey: null,
+        },
+        config: {
+          command: commandPath,
+          cwd: workspace,
+          env: {
+            PAPERCLIP_TEST_CAPTURE_PATH: capturePath,
+            SHELL: explicitShell,
+          },
+          promptTemplate: "Follow the paperclip heartbeat.",
+        },
+        context: {},
+        authToken: "run-jwt-token",
+        onLog: async () => {},
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.errorMessage).toBeNull();
+
+      const capture = JSON.parse(await fs.readFile(capturePath, "utf8")) as CapturePayload;
+      expect(capture.shell).toBe(explicitShell);
+      expect(capture.comSpec).toBe(cmdShell);
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+      if (previousUserProfile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = previousUserProfile;
+      if (previousShell === undefined) delete process.env.SHELL;
+      else process.env.SHELL = previousShell;
+      if (previousComSpec === undefined) delete process.env.ComSpec;
+      else process.env.ComSpec = previousComSpec;
+      if (previousCOMSPEC === undefined) delete process.env.COMSPEC;
+      else process.env.COMSPEC = previousCOMSPEC;
       await fs.rm(root, { recursive: true, force: true });
     }
   });

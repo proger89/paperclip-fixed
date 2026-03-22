@@ -63,6 +63,8 @@ type RepairFilters = {
   issueId?: string | null;
   issueIdentifier?: string | null;
   runId?: string | null;
+  commentId?: string | null;
+  documentId?: string | null;
   dryRun?: boolean;
 };
 
@@ -338,6 +340,8 @@ export function windowsEncodingRepairService(db: Db) {
       const issueIdentifierFilter = readString(filters.issueIdentifier)?.toUpperCase() ?? null;
       const companyFilter = readString(filters.companyId);
       const runFilter = readString(filters.runId);
+      const commentFilter = readString(filters.commentId);
+      const documentFilter = readString(filters.documentId);
 
       const issueRows = await db
         .select({ id: issues.id, identifier: issues.identifier })
@@ -383,6 +387,7 @@ export function windowsEncodingRepairService(db: Db) {
           and(
             ...(companyFilter ? [eq(issueComments.companyId, companyFilter)] : []),
             ...(issueIdsOrAll ? [inArray(issueComments.issueId, issueIdsOrAll)] : []),
+            ...(commentFilter ? [eq(issueComments.id, commentFilter)] : []),
           ),
         );
 
@@ -408,6 +413,7 @@ export function windowsEncodingRepairService(db: Db) {
           and(
             ...(companyFilter ? [eq(documents.companyId, companyFilter)] : []),
             ...(issueIdsOrAll ? [inArray(issueDocuments.issueId, issueIdsOrAll)] : []),
+            ...(documentFilter ? [eq(documents.id, documentFilter)] : []),
           ),
         );
 
@@ -431,6 +437,7 @@ export function windowsEncodingRepairService(db: Db) {
           and(
             ...(companyFilter ? [eq(documentRevisions.companyId, companyFilter)] : []),
             ...(issueIdsOrAll ? [inArray(issueDocuments.issueId, issueIdsOrAll)] : []),
+            ...(documentFilter ? [eq(documentRevisions.documentId, documentFilter)] : []),
           ),
         );
 

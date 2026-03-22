@@ -3,7 +3,8 @@ import type { Db } from "@paperclipai/db";
 import { documentRevisions, documents, issueDocuments, issues } from "@paperclipai/db";
 import { issueDocumentKeySchema } from "@paperclipai/shared";
 import { conflict, notFound, unprocessable } from "../errors.js";
-import { normalizeCorruptedDocumentTitle } from "./windows-encoding-utils.js";
+import { isLikelyWindowsEncodingCorruption, normalizeCorruptedDocumentTitle } from "./windows-encoding-utils.js";
+import { windowsEncodingRepairService } from "./windows-encoding-repair.js";
 
 function normalizeDocumentKey(key: string) {
   const normalized = key.trim().toLowerCase();
@@ -216,6 +217,7 @@ export function documentService(db: Db) {
       baseRevisionId?: string | null;
       createdByAgentId?: string | null;
       createdByUserId?: string | null;
+      runId?: string | null;
     }) => {
       const key = normalizeDocumentKey(input.key);
       const issue = await db
@@ -226,7 +228,7 @@ export function documentService(db: Db) {
       if (!issue) throw notFound("Issue not found");
 
       try {
-        return await db.transaction(async (tx) => {
+        const result = await db.transaction(async (tx) => {
           const now = new Date();
           const existing = await tx
             .select({
@@ -384,6 +386,52 @@ export function documentService(db: Db) {
             },
           };
         });
+
+        const shouldAttemptRepair =
+          Boolean(input.createdByAgentId && input.runId)
+          && (
+            isLikelyWindowsEncodingCorruption(result.document.body)
+            || normalizeCorruptedDocumentTitle(result.document.title) !== result.document.title
+          );
+
+        if (!shouldAttemptRepair) return result;
+
+        await windowsEncodingRepairService(db).repair({
+          issueId: input.issueId,
+          runId: input.runId,
+          documentId: result.document.id,
+          dryRun: false,
+        });
+
+        const repairedRow = await db
+          .select({
+            id: documents.id,
+            companyId: documents.companyId,
+            issueId: issueDocuments.issueId,
+            key: issueDocuments.key,
+            title: documents.title,
+            format: documents.format,
+            latestBody: documents.latestBody,
+            latestRevisionId: documents.latestRevisionId,
+            latestRevisionNumber: documents.latestRevisionNumber,
+            createdByAgentId: documents.createdByAgentId,
+            createdByUserId: documents.createdByUserId,
+            updatedByAgentId: documents.updatedByAgentId,
+            updatedByUserId: documents.updatedByUserId,
+            createdAt: documents.createdAt,
+            updatedAt: documents.updatedAt,
+          })
+          .from(issueDocuments)
+          .innerJoin(documents, eq(issueDocuments.documentId, documents.id))
+          .where(and(eq(issueDocuments.issueId, input.issueId), eq(documents.id, result.document.id)))
+          .then((rows) => rows[0] ?? null);
+
+        return repairedRow
+          ? {
+            ...result,
+            document: mapIssueDocumentRow(repairedRow, true),
+          }
+          : result;
       } catch (error) {
         if (isUniqueViolation(error)) {
           throw conflict("Document key already exists on this issue", { key });

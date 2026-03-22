@@ -2348,7 +2348,7 @@ export function heartbeatService(db: Db) {
               workspace: executionWorkspace,
               runtimeServices,
             }),
-            { agentId: agent.id },
+            { agentId: agent.id, runId: run.id },
           );
         } catch (err) {
           await onLog(
@@ -2438,7 +2438,7 @@ export function heartbeatService(db: Db) {
                 workspace: executionWorkspace,
                 runtimeServices: adapterManagedRuntimeServices,
               }),
-              { agentId: agent.id },
+              { agentId: agent.id, runId: run.id },
             );
           } catch (err) {
             await onLog(

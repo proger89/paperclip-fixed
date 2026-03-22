@@ -25,6 +25,7 @@ import {
   buildWindows1251Utf8Mojibake,
   buildWindowsEncodingPlaceholderSignature,
 } from "../services/windows-encoding-utils.js";
+import { issueService } from "../services/issues.js";
 
 type EmbeddedPostgresInstance = {
   initialise(): Promise<void>;
@@ -752,5 +753,248 @@ describe("windows encoding repair service", () => {
       .where(eq(issueComments.id, inlineCommentId))
       .then((rows) => rows[0]!);
     expect(repairedComment.body).toBe(intendedComment);
+  });
+
+  it("auto-repairs a freshly inserted corrupted agent comment when the run log has one exact source", async () => {
+    const companyId = randomUUID();
+    const agentId = randomUUID();
+    const issueId = randomUUID();
+    const runId = randomUUID();
+    const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "paperclip-live-comment-repair-"));
+    const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+    const intendedComment =
+      "## Что дальше\n\nПо `TEL-2` ближайшие шаги уже понятны.\n\n- быстрый путь: `python scripts/run_board_queue.py`\n- артефакт: `output/board_public_queue.md`";
+    const now = new Date();
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix,
+      requireBoardApprovalForNewAgents: false,
+    });
+    await db.insert(agents).values({
+      id: agentId,
+      companyId,
+      name: "Founding Engineer",
+      role: "engineer",
+      status: "paused",
+      adapterType: "codex_local",
+      adapterConfig: {},
+      runtimeConfig: {},
+      permissions: {},
+    });
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Live comment repair",
+      status: "in_progress",
+      priority: "high",
+      assigneeAgentId: agentId,
+      issueNumber: 2,
+      identifier: `${issuePrefix}-2`,
+    });
+    await db.insert(heartbeatRuns).values({
+      id: runId,
+      companyId,
+      agentId,
+      invocationSource: "automation",
+      triggerDetail: "system",
+      status: "succeeded",
+      contextSnapshot: {
+        issueId,
+        paperclipWorkspace: {
+          cwd: workspaceDir,
+        },
+      },
+      startedAt: new Date(now.getTime() - 60_000),
+      finishedAt: new Date(now.getTime() + 60_000),
+      logStore: "local_file",
+      logRef: path.join(companyId, agentId, `${runId}.ndjson`),
+    });
+    await db.insert(heartbeatRunEvents).values({
+      companyId,
+      runId,
+      agentId,
+      seq: 1,
+      eventType: "adapter.invoke",
+      stream: "system",
+      level: "info",
+      message: "adapter invocation",
+      payload: {
+        env: {
+          PAPERCLIP_WORKSPACE_CWD: workspaceDir,
+        },
+      },
+    });
+
+    fs.mkdirSync(path.join(runLogDir, companyId, agentId), { recursive: true });
+    const inlineCommentCommand = {
+      type: "item.completed",
+      item: {
+        type: "command_execution",
+        command: [
+          `"C:\\\\windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe" -Command "@'`,
+          "import json",
+          "import os",
+          "from urllib import request",
+          "",
+          "api_url = os.environ['PAPERCLIP_API_URL'].rstrip('/')",
+          "issue_id = os.environ['PAPERCLIP_TASK_ID']",
+          "api_key = os.environ['PAPERCLIP_API_KEY']",
+          "run_id = os.environ['PAPERCLIP_RUN_ID']",
+          `comment_body = \\\"\\\"\\\"${intendedComment}\\\"\\\"\\\"`,
+          "payload = json.dumps({'body': comment_body}, ensure_ascii=False).encode('utf-8')",
+          "headers = {",
+          "    'Authorization': f'Bearer {api_key}',",
+          "    'X-Paperclip-Run-Id': run_id,",
+          "    'Content-Type': 'application/json; charset=utf-8',",
+          "}",
+          `req = request.Request(f\\"{api_url}/api/issues/{issue_id}/comments\\", data=payload, headers=headers, method='POST')`,
+          "with request.urlopen(req) as response:",
+          "    result = json.load(response)",
+          "print(result['id'])",
+          `'@ | python -"`,
+        ].join("\n"),
+        aggregated_output: "",
+        exit_code: 0,
+        status: "completed",
+      },
+    };
+    fs.writeFileSync(
+      path.join(runLogDir, companyId, agentId, `${runId}.ndjson`),
+      `${JSON.stringify({ ts: "2026-03-22T12:46:31.127Z", stream: "stdout", chunk: `${JSON.stringify(inlineCommentCommand)}\n` })}\n`,
+      "utf8",
+    );
+
+    const issuesSvc = issueService(db);
+    const created = await issuesSvc.addComment(
+      issueId,
+      buildWindowsEncodingPlaceholderSignature(intendedComment),
+      { agentId, runId },
+    );
+
+    expect(created.body).toBe(intendedComment);
+    const stored = await db
+      .select()
+      .from(issueComments)
+      .where(eq(issueComments.id, created.id))
+      .then((rows) => rows[0]!);
+    expect(stored.body).toBe(intendedComment);
+  });
+
+  it("auto-repairs a freshly inserted corrupted issue document when the run log has one exact source", async () => {
+    const companyId = randomUUID();
+    const agentId = randomUUID();
+    const issueId = randomUUID();
+    const runId = randomUUID();
+    const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "paperclip-live-document-repair-"));
+    const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+    const intendedBody = "# План\n\nРусский текст должен сохраниться из workspace-файла.";
+    const now = new Date();
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix,
+      requireBoardApprovalForNewAgents: false,
+    });
+    await db.insert(agents).values({
+      id: agentId,
+      companyId,
+      name: "Founding Engineer",
+      role: "engineer",
+      status: "paused",
+      adapterType: "codex_local",
+      adapterConfig: {},
+      runtimeConfig: {},
+      permissions: {},
+    });
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Live document repair",
+      status: "in_progress",
+      priority: "high",
+      assigneeAgentId: agentId,
+      issueNumber: 3,
+      identifier: `${issuePrefix}-3`,
+    });
+    await db.insert(heartbeatRuns).values({
+      id: runId,
+      companyId,
+      agentId,
+      invocationSource: "automation",
+      triggerDetail: "system",
+      status: "succeeded",
+      contextSnapshot: {
+        issueId,
+        paperclipWorkspace: {
+          cwd: workspaceDir,
+        },
+      },
+      startedAt: new Date(now.getTime() - 60_000),
+      finishedAt: new Date(now.getTime() + 60_000),
+      logStore: "local_file",
+      logRef: path.join(companyId, agentId, `${runId}.ndjson`),
+    });
+    await db.insert(heartbeatRunEvents).values({
+      companyId,
+      runId,
+      agentId,
+      seq: 1,
+      eventType: "adapter.invoke",
+      stream: "system",
+      level: "info",
+      message: "adapter invocation",
+      payload: {
+        env: {
+          PAPERCLIP_WORKSPACE_CWD: workspaceDir,
+        },
+      },
+    });
+
+    fs.mkdirSync(path.join(runLogDir, companyId, agentId), { recursive: true });
+    fs.mkdirSync(path.join(workspaceDir, "notes"), { recursive: true });
+    fs.writeFileSync(path.join(workspaceDir, "notes", "plan.md"), intendedBody, "utf8");
+
+    const documentCommand = {
+      type: "item.completed",
+      item: {
+        type: "command_execution",
+        command: [
+          `"C:\\\\windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe" -Command "@'`,
+          "import json",
+          "plan_body = (workspace / 'notes' / 'plan.md').read_text(encoding='utf-8')",
+          "payload = json.dumps({'title': 'План', 'body': plan_body}, ensure_ascii=False).encode('utf-8')",
+          `req = request.Request("http://127.0.0.1:3101/api/issues/${issueId}/documents/plan", data=payload)`,
+          "'@ | python -",
+        ].join("\n"),
+        aggregated_output: "",
+        exit_code: 0,
+        status: "completed",
+      },
+    };
+    fs.writeFileSync(
+      path.join(runLogDir, companyId, agentId, `${runId}.ndjson`),
+      `${JSON.stringify({ ts: "2026-03-22T12:48:31.127Z", stream: "stdout", chunk: `${JSON.stringify(documentCommand)}\n` })}\n`,
+      "utf8",
+    );
+
+    const docsSvc = documentService(db);
+    const result = await docsSvc.upsertIssueDocument({
+      issueId,
+      key: "plan",
+      title: "????",
+      format: "markdown",
+      body: buildWindowsEncodingPlaceholderSignature(intendedBody),
+      createdByAgentId: agentId,
+      runId,
+    });
+
+    expect(result.document.title).toBe("План");
+    expect(result.document.body).toBe(intendedBody);
+    const stored = await docsSvc.getIssueDocumentByKey(issueId, "plan");
+    expect(stored?.title).toBe("План");
+    expect(stored?.body).toBe(intendedBody);
   });
 });

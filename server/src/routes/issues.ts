@@ -484,6 +484,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
       baseRevisionId: req.body.baseRevisionId ?? null,
       createdByAgentId: actor.agentId ?? null,
       createdByUserId: actor.actorType === "user" ? actor.actorId : null,
+      runId: actor.runId,
     });
     const doc = result.document;
 
@@ -909,6 +910,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
       comment = await svc.addComment(id, commentBody, {
         agentId: actor.agentId ?? undefined,
         userId: actor.actorType === "user" ? actor.actorId : undefined,
+        runId: actor.runId,
       });
 
       await logActivity(db, {
@@ -1298,6 +1300,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
     const comment = await svc.addComment(id, req.body.body, {
       agentId: actor.agentId ?? undefined,
       userId: actor.actorType === "user" ? actor.actorId : undefined,
+      runId: actor.runId,
     });
 
     if (actor.runId) {
