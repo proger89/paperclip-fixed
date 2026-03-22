@@ -3,6 +3,7 @@ import type { Db } from "@paperclipai/db";
 import { documentRevisions, documents, issueDocuments, issues } from "@paperclipai/db";
 import { issueDocumentKeySchema } from "@paperclipai/shared";
 import { conflict, notFound, unprocessable } from "../errors.js";
+import { normalizeCorruptedDocumentTitle } from "./windows-encoding-utils.js";
 
 function normalizeDocumentKey(key: string) {
   const normalized = key.trim().toLowerCase();
@@ -50,7 +51,7 @@ function mapIssueDocumentRow(
     companyId: row.companyId,
     issueId: row.issueId,
     key: row.key,
-    title: row.title,
+    title: normalizeCorruptedDocumentTitle(row.title),
     format: row.format,
     ...(includeBody ? { body: row.latestBody } : {}),
     latestRevisionId: row.latestRevisionId ?? null,

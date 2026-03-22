@@ -34,6 +34,7 @@
   "scripts": {
     "dev": "tsx src/index.ts",
     "dev:watch": "cross-env PAPERCLIP_MIGRATION_PROMPT=never PAPERCLIP_MIGRATION_AUTO_APPLY=true tsx watch --ignore ../ui/node_modules --ignore ../ui/.vite --ignore ../ui/dist src/index.ts",
+    "repair:windows-encoding": "tsx src/scripts/repair-windows-encoding.ts",
     "prepare:ui-dist": "bash ../scripts/prepare-server-ui-dist.sh",
     "build": "tsc && node ./scripts/copy-onboarding-assets.mjs",
     "prepack": "pnpm run prepare:ui-dist",
