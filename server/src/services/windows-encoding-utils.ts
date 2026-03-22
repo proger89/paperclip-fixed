@@ -80,8 +80,19 @@ export function normalizeWindowsEncodingLineEndings(text: string): string {
   return text.replace(/\r\n?/g, "\n");
 }
 
+function normalizeWindowsEncodingSignaturePunctuation(text: string): string {
+  return text
+    .replace(/[\u2012\u2013\u2014\u2015\u2212]/gu, "-")
+    .replace(/[\u2018\u2019\u201A\u201B]/gu, "'")
+    .replace(/[\u201C\u201D\u201E\u201F]/gu, "\"")
+    .replace(/\u2026/gu, "...");
+}
+
 export function buildWindowsEncodingPlaceholderSignature(text: string): string {
-  return normalizeWindowsEncodingLineEndings(text).replace(/[^\x00-\x7F]/gu, "?");
+  return normalizeWindowsEncodingSignaturePunctuation(normalizeWindowsEncodingLineEndings(text)).replace(
+    /[^\x00-\x7F]/gu,
+    "?",
+  );
 }
 
 export function isLikelyWindowsEncodingCorruption(text: string | null | undefined): boolean {

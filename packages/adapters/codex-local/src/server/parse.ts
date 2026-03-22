@@ -1,4 +1,5 @@
 import { asString, asNumber, parseObject, parseJson } from "@paperclipai/adapter-utils/server-utils";
+import { normalizeHighConfidenceWindowsMojibakeBlock } from "../shared/encoding.js";
 
 export function parseCodexJsonl(stdout: string) {
   let sessionId: string | null = null;
@@ -32,7 +33,7 @@ export function parseCodexJsonl(stdout: string) {
     if (type === "item.completed") {
       const item = parseObject(event.item);
       if (asString(item.type, "") === "agent_message") {
-        const text = asString(item.text, "");
+        const text = normalizeHighConfidenceWindowsMojibakeBlock(asString(item.text, ""));
         if (text) messages.push(text);
       }
       continue;

@@ -35,6 +35,11 @@ import { isLikelyWindowsEncodingCorruption } from "./windows-encoding-utils.js";
 
 const ALL_ISSUE_STATUSES = ["backlog", "todo", "in_progress", "in_review", "blocked", "done", "cancelled"];
 const MAX_ISSUE_COMMENT_PAGE_LIMIT = 500;
+const AGENT_ENCODING_REPAIR_RETRY_MS = [80, 160, 320];
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function assertTransition(from: string, to: string) {
   if (from === to) return;
@@ -1282,7 +1287,20 @@ export function issueService(db: Db) {
       const currentUserRedactionOptions = {
         enabled: (await instanceSettings.getGeneral()).censorUsernameInLogs,
       };
+      const repairSvc = windowsEncodingRepairService(db);
       const redactedBody = redactCurrentUserText(body, currentUserRedactionOptions);
+      let bodyForInsert = redactedBody;
+      if (actor.agentId && actor.runId && isLikelyWindowsEncodingCorruption(redactedBody)) {
+        const recovered = await repairSvc.recoverCommentFromRunLog({
+          issueId,
+          runId: actor.runId,
+          agentId: actor.agentId,
+          corruptedBody: redactedBody,
+        });
+        if (recovered?.body) {
+          bodyForInsert = redactCurrentUserText(recovered.body, currentUserRedactionOptions);
+        }
+      }
       const [comment] = await db
         .insert(issueComments)
         .values({
@@ -1290,7 +1308,7 @@ export function issueService(db: Db) {
           issueId,
           authorAgentId: actor.agentId ?? null,
           authorUserId: actor.userId ?? null,
-          body: redactedBody,
+          body: bodyForInsert,
         })
         .returning();
 
@@ -1302,18 +1320,23 @@ export function issueService(db: Db) {
 
       let finalComment = comment;
       if (actor.agentId && actor.runId && isLikelyWindowsEncodingCorruption(comment.body)) {
-        await windowsEncodingRepairService(db).repair({
-          issueId,
-          runId: actor.runId,
-          commentId: comment.id,
-          dryRun: false,
-        });
-        const repaired = await db
-          .select()
-          .from(issueComments)
-          .where(eq(issueComments.id, comment.id))
-          .then((rows) => rows[0] ?? null);
-        if (repaired) finalComment = repaired;
+        for (const delayMs of [0, ...AGENT_ENCODING_REPAIR_RETRY_MS]) {
+          if (delayMs > 0) await wait(delayMs);
+          await repairSvc.repair({
+            issueId,
+            runId: actor.runId,
+            commentId: comment.id,
+            dryRun: false,
+          });
+          const repaired = await db
+            .select()
+            .from(issueComments)
+            .where(eq(issueComments.id, comment.id))
+            .then((rows) => rows[0] ?? null);
+          if (!repaired) break;
+          finalComment = repaired;
+          if (!isLikelyWindowsEncodingCorruption(repaired.body)) break;
+        }
       }
 
       return redactIssueComment(finalComment, currentUserRedactionOptions.enabled);

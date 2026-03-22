@@ -1,4 +1,5 @@
 import pc from "picocolors";
+import { normalizeHighConfidenceWindowsMojibakeBlock } from "../shared/encoding.js";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
@@ -59,13 +60,13 @@ function printItemCompleted(item: Record<string, unknown>): boolean {
   const itemType = asString(item.type);
 
   if (itemType === "agent_message") {
-    const text = asString(item.text);
+    const text = normalizeHighConfidenceWindowsMojibakeBlock(asString(item.text));
     if (text) console.log(pc.green(`assistant: ${text}`));
     return true;
   }
 
   if (itemType === "reasoning") {
-    const text = asString(item.text);
+    const text = normalizeHighConfidenceWindowsMojibakeBlock(asString(item.text));
     if (text) console.log(pc.gray(`thinking: ${text}`));
     return true;
   }
@@ -87,7 +88,7 @@ function printItemCompleted(item: Record<string, unknown>): boolean {
     const command = asString(item.command);
     const status = asString(item.status);
     const exitCode = typeof item.exit_code === "number" && Number.isFinite(item.exit_code) ? item.exit_code : null;
-    const output = asString(item.aggregated_output).replace(/\s+$/, "");
+    const output = normalizeHighConfidenceWindowsMojibakeBlock(asString(item.aggregated_output)).replace(/\s+$/, "");
     const isError =
       (exitCode !== null && exitCode !== 0) ||
       status === "failed" ||

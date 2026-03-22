@@ -4,7 +4,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import {
   agents,
   applyPendingMigrations,
@@ -604,6 +604,132 @@ describe("windows encoding repair service", () => {
     expect(repairedComment.body).toBe(intendedComment);
   });
 
+  it("repairs quoted PowerShell heredoc comments wrapped in shell artifacts", async () => {
+    const companyId = randomUUID();
+    const agentId = randomUUID();
+    const issueId = randomUUID();
+    const runId = randomUUID();
+    const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "paperclip-quoted-heredoc-comment-"));
+    const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+    const inlineCommentId = randomUUID();
+    const intendedComment =
+      "## Статус\n\nЗакрываю [TEL-2](/TEL/issues/TEL-2) как `done`.\n\n- публичный ingestion по целевым Telegram-каналам работает\n- дедупликация, кластеризация и ранжирование работают на реальном списке источников board\n- медиа-метаданные сохраняются, так что картинки и видео не теряются при переносе";
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix,
+      requireBoardApprovalForNewAgents: false,
+    });
+    await db.insert(agents).values({
+      id: agentId,
+      companyId,
+      name: "CEO",
+      role: "ceo",
+      status: "paused",
+      adapterType: "codex_local",
+      adapterConfig: {},
+      runtimeConfig: {},
+      permissions: {},
+    });
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Quoted heredoc repair",
+      status: "done",
+      priority: "high",
+      assigneeAgentId: agentId,
+      issueNumber: 9,
+      identifier: `${issuePrefix}-9`,
+    });
+    await db.insert(heartbeatRuns).values({
+      id: runId,
+      companyId,
+      agentId,
+      invocationSource: "assignment",
+      triggerDetail: "system",
+      status: "succeeded",
+      contextSnapshot: {
+        issueId,
+        paperclipWorkspace: {
+          cwd: workspaceDir,
+        },
+      },
+      startedAt: new Date("2026-03-22T13:37:00.000Z"),
+      finishedAt: new Date("2026-03-22T13:37:40.000Z"),
+      logStore: "local_file",
+      logRef: path.join(companyId, agentId, `${runId}.ndjson`),
+    });
+    await db.insert(heartbeatRunEvents).values({
+      companyId,
+      runId,
+      agentId,
+      seq: 1,
+      eventType: "adapter.invoke",
+      stream: "system",
+      level: "info",
+      message: "adapter invocation",
+      payload: {
+        env: {
+          PAPERCLIP_WORKSPACE_CWD: workspaceDir,
+        },
+      },
+    });
+    await db.insert(issueComments).values({
+      id: inlineCommentId,
+      companyId,
+      issueId,
+      authorAgentId: agentId,
+      body: buildWindowsEncodingPlaceholderSignature(intendedComment),
+      createdAt: new Date("2026-03-22T13:37:38.918Z"),
+      updatedAt: new Date("2026-03-22T13:37:38.918Z"),
+    });
+
+    fs.mkdirSync(path.join(runLogDir, companyId, agentId), { recursive: true });
+
+    const inlineCommentCommand = {
+      type: "item.completed",
+      item: {
+        id: "item_34",
+        type: "command_execution",
+        command: [
+          `"C:\\\\windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe" -Command '$headers = @{ Authorization = "Bearer token"; '"X-Paperclip-Run-Id'" = "${runId}"; '"Content-Type'" = "application/json; charset=utf-8" }`,
+          `"'$comment = @'"'`,
+          intendedComment,
+          `'"'@`,
+          `"'$body = @{ status = '"done'; comment = "'$comment } | ConvertTo-Json -Depth 5`,
+          `Invoke-RestMethod -Method Patch -Uri "http://127.0.0.1:3101/api/issues/${issueId}" -Headers $headers -Body $body | ConvertTo-Json -Depth 10'`,
+        ].join("\n"),
+        aggregated_output: JSON.stringify({
+          id: issueId,
+          identifier: `${issuePrefix}-9`,
+          comment: {
+            id: inlineCommentId,
+          },
+        }),
+        exit_code: 0,
+        status: "completed",
+      },
+    };
+
+    fs.writeFileSync(
+      path.join(runLogDir, companyId, agentId, `${runId}.ndjson`),
+      `${JSON.stringify({ ts: "2026-03-22T13:37:39.203Z", stream: "stdout", chunk: `${JSON.stringify(inlineCommentCommand)}\n` })}\n`,
+      "utf8",
+    );
+
+    const service = windowsEncodingRepairService(db);
+    const report = await service.repair({ issueId, runId, dryRun: false });
+
+    expect(report.repairedComments).toBe(1);
+    const repairedComment = await db
+      .select()
+      .from(issueComments)
+      .where(eq(issueComments.id, inlineCommentId))
+      .then((rows) => rows[0]!);
+    expect(repairedComment.body).toBe(intendedComment);
+  });
+
   it("repairs inline Python comment bodies posted directly to /comments", async () => {
     const companyId = randomUUID();
     const agentId = randomUUID();
@@ -996,5 +1122,301 @@ describe("windows encoding repair service", () => {
     const stored = await docsSvc.getIssueDocumentByKey(issueId, "plan");
     expect(stored?.title).toBe("План");
     expect(stored?.body).toBe(intendedBody);
+  });
+
+  it("recovers a corrupted inline PATCH comment from PowerShell string-body on item.started before insert", async () => {
+    const companyId = randomUUID();
+    const agentId = randomUUID();
+    const issueId = randomUUID();
+    const runId = randomUUID();
+    const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "paperclip-inline-patch-started-"));
+    const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+    const intendedComment =
+      "## Update\n\nСобрал новый board pipeline и сохранил output/feedback_experiments.md.";
+    const sourceComment =
+      "## Update\n\nСобрал новый board pipeline и сохранил `output/feedback_experiments.md`.";
+    const powerShellLiteral = sourceComment
+      .replace(/\n/g, "`n")
+      .replace("`output/feedback_experiments.md`", "\"'`output/feedback_experiments.md`");
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix,
+      requireBoardApprovalForNewAgents: false,
+    });
+    await db.insert(agents).values({
+      id: agentId,
+      companyId,
+      name: "CEO",
+      role: "ceo",
+      status: "paused",
+      adapterType: "codex_local",
+      adapterConfig: {},
+      runtimeConfig: {},
+      permissions: {},
+    });
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Started event repair",
+      status: "todo",
+      priority: "high",
+      assigneeAgentId: agentId,
+      issueNumber: 5,
+      identifier: `${issuePrefix}-5`,
+    });
+    await db.insert(heartbeatRuns).values({
+      id: runId,
+      companyId,
+      agentId,
+      invocationSource: "assignment",
+      triggerDetail: "system",
+      status: "running",
+      contextSnapshot: {
+        issueId,
+        paperclipWorkspace: {
+          cwd: workspaceDir,
+        },
+      },
+      startedAt: new Date("2026-03-22T14:08:32.000Z"),
+      finishedAt: new Date("2026-03-22T14:18:32.000Z"),
+      logStore: "local_file",
+      logRef: path.join(companyId, agentId, `${runId}.ndjson`),
+    });
+    await db.insert(heartbeatRunEvents).values({
+      companyId,
+      runId,
+      agentId,
+      seq: 1,
+      eventType: "adapter.invoke",
+      stream: "system",
+      level: "info",
+      message: "adapter invocation",
+      payload: {
+        env: {
+          PAPERCLIP_WORKSPACE_CWD: workspaceDir,
+        },
+      },
+    });
+
+    fs.mkdirSync(path.join(runLogDir, companyId, agentId), { recursive: true });
+    const startedCommand = {
+      type: "item.started",
+      item: {
+        id: "item_started_patch",
+        type: "command_execution",
+        command:
+          `"C:\\\\windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe" -Command ` +
+          `'$headers=@{ Authorization = "Bearer token"; "X-Paperclip-Run-Id" = "${runId}"; "Content-Type"="application/json; charset=utf-8" }; ` +
+          `$payload=@{ status='todo'; comment = \\\"${powerShellLiteral}\\\" } | ConvertTo-Json -Depth 4; ` +
+          `Invoke-RestMethod -Method Patch -Uri "http://127.0.0.1:3101/api/issues/${issueId}" -Headers $headers -Body $payload | ConvertTo-Json -Depth 10'`,
+      },
+    };
+    fs.writeFileSync(
+      path.join(runLogDir, companyId, agentId, `${runId}.ndjson`),
+      `${JSON.stringify({ ts: "2026-03-22T14:08:32.960Z", stream: "stdout", chunk: `${JSON.stringify(startedCommand)}\n` })}\n`,
+      "utf8",
+    );
+
+    const issuesSvc = issueService(db);
+    const created = await issuesSvc.addComment(
+      issueId,
+      buildWindowsEncodingPlaceholderSignature(intendedComment),
+      { agentId, runId },
+    );
+
+    expect(created.body).toBe(intendedComment);
+    const storedComment = await db
+      .select()
+      .from(issueComments)
+      .where(eq(issueComments.id, created.id))
+      .then((rows) => rows[0]!);
+    expect(storedComment.body).toBe(intendedComment);
+  });
+
+  it("matches quoted PowerShell heredoc comments even when stored corruption folds em dash to hyphen", async () => {
+    const intendedComment = [
+      "## Статус",
+      "",
+      "Закрываю [TEL-2](/TEL/issues/TEL-2) как `done`.",
+      "",
+      "Следующая очередь:",
+      "- [TEL-3](/TEL/issues/TEL-3) — редакторский workflow",
+      "- [TEL-4](/TEL/issues/TEL-4) — feedback loop",
+    ].join("\n");
+    const foldedCorruption = [
+      "## ??????",
+      "",
+      "???????? [TEL-2](/TEL/issues/TEL-2) ??? `done`.",
+      "",
+      "????????? ???????:",
+      "- [TEL-3](/TEL/issues/TEL-3) - ???????????? workflow",
+      "- [TEL-4](/TEL/issues/TEL-4) - feedback loop",
+    ].join("\n");
+
+    expect(buildWindowsEncodingPlaceholderSignature(intendedComment)).toBe(foldedCorruption);
+  });
+
+  it("retries exact-only repair after insert when item.completed arrives later", async () => {
+    const companyId = randomUUID();
+    const agentId = randomUUID();
+    const issueId = randomUUID();
+    const runId = randomUUID();
+    const workspaceDir = fs.mkdtempSync(path.join(os.tmpdir(), "paperclip-deferred-comment-repair-"));
+    const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+    const intendedComment = "Привет";
+    const decoyComment = "Покааа";
+    const corruptedBody = buildWindowsEncodingPlaceholderSignature(intendedComment);
+    const now = Date.now();
+
+    expect(corruptedBody).toBe(buildWindowsEncodingPlaceholderSignature(decoyComment));
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix,
+      requireBoardApprovalForNewAgents: false,
+    });
+    await db.insert(agents).values({
+      id: agentId,
+      companyId,
+      name: "Founding Engineer",
+      role: "engineer",
+      status: "paused",
+      adapterType: "codex_local",
+      adapterConfig: {},
+      runtimeConfig: {},
+      permissions: {},
+    });
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Deferred comment repair",
+      status: "in_progress",
+      priority: "high",
+      assigneeAgentId: agentId,
+      issueNumber: 6,
+      identifier: `${issuePrefix}-6`,
+    });
+    await db.insert(heartbeatRuns).values({
+      id: runId,
+      companyId,
+      agentId,
+      invocationSource: "automation",
+      triggerDetail: "system",
+      status: "running",
+      contextSnapshot: {
+        issueId,
+        paperclipWorkspace: {
+          cwd: workspaceDir,
+        },
+      },
+      startedAt: new Date(now - 5 * 60 * 1000),
+      finishedAt: new Date(now + 5 * 60 * 1000),
+      logStore: "local_file",
+      logRef: path.join(companyId, agentId, `${runId}.ndjson`),
+    });
+    await db.insert(heartbeatRunEvents).values({
+      companyId,
+      runId,
+      agentId,
+      seq: 1,
+      eventType: "adapter.invoke",
+      stream: "system",
+      level: "info",
+      message: "adapter invocation",
+      payload: {
+        env: {
+          PAPERCLIP_WORKSPACE_CWD: workspaceDir,
+        },
+      },
+    });
+
+    fs.mkdirSync(path.join(runLogDir, companyId, agentId), { recursive: true });
+    const logPath = path.join(runLogDir, companyId, agentId, `${runId}.ndjson`);
+    const startedCommandA = {
+      type: "item.started",
+      item: {
+        id: "item_comment_a",
+        type: "command_execution",
+        command: [
+          `"C:\\\\windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe" -Command '$headers=@{ Authorization = "Bearer token"; "X-Paperclip-Run-Id" = "${runId}"; "Content-Type"="application/json" }; $comment = @'`,
+          intendedComment,
+          "'@;",
+          `$payload=@{ status='todo'; comment=$comment } | ConvertTo-Json; Invoke-RestMethod -Method Patch -Uri "http://127.0.0.1:3101/api/issues/${issueId}" -Headers $headers -Body $payload | ConvertTo-Json -Depth 10'`,
+        ].join("\n"),
+      },
+    };
+    const startedCommandB = {
+      type: "item.started",
+      item: {
+        id: "item_comment_b",
+        type: "command_execution",
+        command: [
+          `"C:\\\\windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe" -Command '$headers=@{ Authorization = "Bearer token"; "X-Paperclip-Run-Id" = "${runId}"; "Content-Type"="application/json" }; $comment = @'`,
+          decoyComment,
+          "'@;",
+          `$payload=@{ status='todo'; comment=$comment } | ConvertTo-Json; Invoke-RestMethod -Method Patch -Uri "http://127.0.0.1:3101/api/issues/${issueId}" -Headers $headers -Body $payload | ConvertTo-Json -Depth 10'`,
+        ].join("\n"),
+      },
+    };
+    fs.writeFileSync(
+      logPath,
+      [
+        JSON.stringify({ ts: "2026-03-22T14:20:05.000Z", stream: "stdout", chunk: `${JSON.stringify(startedCommandA)}\n` }),
+        JSON.stringify({ ts: "2026-03-22T14:20:06.000Z", stream: "stdout", chunk: `${JSON.stringify(startedCommandB)}\n` }),
+      ].join("\n") + "\n",
+      "utf8",
+    );
+
+    const issuesSvc = issueService(db);
+    const appendCompleted = setTimeout(async () => {
+      const inserted = await db
+        .select()
+        .from(issueComments)
+        .where(eq(issueComments.issueId, issueId))
+        .orderBy(desc(issueComments.createdAt), desc(issueComments.id))
+        .limit(1)
+        .then((rows) => rows[0] ?? null);
+      if (!inserted) return;
+
+      const completedCommand = {
+        type: "item.completed",
+        item: {
+          id: "item_comment_a",
+          type: "command_execution",
+          command: startedCommandA.item.command,
+          aggregated_output: JSON.stringify({
+            id: issueId,
+            comment: {
+              id: inserted.id,
+            },
+          }),
+          exit_code: 0,
+          status: "completed",
+        },
+      };
+      fs.appendFileSync(
+        logPath,
+        `${JSON.stringify({ ts: "2026-03-22T14:20:06.180Z", stream: "stdout", chunk: `${JSON.stringify(completedCommand)}\n` })}\n`,
+        "utf8",
+      );
+    }, 120);
+
+    const created = await issuesSvc.addComment(
+      issueId,
+      corruptedBody,
+      { agentId, runId },
+    );
+    clearTimeout(appendCompleted);
+
+    expect(created.body).toBe(intendedComment);
+    const storedComment = await db
+      .select()
+      .from(issueComments)
+      .where(eq(issueComments.id, created.id))
+      .then((rows) => rows[0]!);
+    expect(storedComment.body).toBe(intendedComment);
   });
 });

@@ -24,6 +24,7 @@ import {
 import { parseCodexJsonl, isCodexUnknownSessionError } from "./parse.js";
 import { pathExists, prepareManagedCodexHome, resolveManagedCodexHomeDir } from "./codex-home.js";
 import { resolveCodexDesiredSkillNames } from "./skills.js";
+import { buildWindowsUtf8JsonHelperNote } from "../shared/encoding.js";
 
 const __moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const CODEX_ROLLOUT_NOISE_RE =
@@ -89,12 +90,7 @@ function normalizeCodexWindowsShellEnv(env: Record<string, string>, envConfig: R
 
 function buildWindowsShellPromptNote() {
   if (process.platform !== "win32") return "";
-  return [
-    "Windows shell note:",
-    "- Prefer UTF-8-safe command patterns for issue comments and documents.",
-    "- Avoid PowerShell heredoc pipelines that feed Unicode scripts into `python -`.",
-    "- Prefer UTF-8 files or direct JSON payloads that do not depend on PowerShell pipeline encoding.",
-  ].join("\n");
+  return buildWindowsUtf8JsonHelperNote();
 }
 
 function resolveCodexBillingType(env: Record<string, string>): "api" | "subscription" {
@@ -425,7 +421,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   if (process.platform === "win32") {
     await onLog(
       "stdout",
-      `[paperclip] Windows Codex shell normalized to ${JSON.stringify(normalizedRuntimeEnv.SHELL ?? "cmd.exe")} unless adapter env overrides SHELL.\n`,
+      `[paperclip] Windows Codex shell env best-effort normalized to ${JSON.stringify(normalizedRuntimeEnv.SHELL ?? "cmd.exe")} unless adapter env overrides SHELL; Codex may still choose its own shell runtime.\n`,
     );
   }
 

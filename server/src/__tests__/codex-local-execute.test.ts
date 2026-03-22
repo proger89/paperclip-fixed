@@ -370,7 +370,7 @@ describe("codex execute", () => {
     }
   });
 
-  itWindows("normalizes inherited PowerShell shell env to cmd.exe for Codex on Windows", async () => {
+  itWindows("best-effort normalizes inherited PowerShell shell env and injects UTF-8 JSON guidance on Windows", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-codex-execute-win-shell-"));
     const workspace = path.join(root, "workspace");
     const commandPath = path.join(root, "codex");
@@ -432,11 +432,12 @@ describe("codex execute", () => {
       expect(capture.pythonUtf8).toBe("1");
       expect(capture.lang).toBe("C.UTF-8");
       expect(capture.lcAll).toBe("C.UTF-8");
-      expect(capture.prompt).toContain("Windows shell note:");
+      expect(capture.prompt).toContain("Windows PowerShell 5.1 JSON write rule:");
+      expect(capture.prompt).toContain("Invoke-Utf8Json");
       expect(logs).toContainEqual(
         expect.objectContaining({
           stream: "stdout",
-          chunk: expect.stringContaining("Windows Codex shell normalized"),
+          chunk: expect.stringContaining("Windows Codex shell env best-effort normalized"),
         }),
       );
     } finally {

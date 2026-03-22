@@ -59,7 +59,7 @@ pnpm paperclipai allowed-hostname dotta-macbook-pro
 
 Paperclip normalizes UTF-8 for its own managed subprocesses on Windows, including local adapter commands, workspace provision commands, and runtime service shells.
 
-For `codex_local`, Paperclip also normalizes the child shell environment on Windows instead of inheriting the host `SHELL` blindly. By default it pins Codex to `cmd.exe` unless the agent explicitly overrides `adapterConfig.env.SHELL`.
+For `codex_local`, Paperclip also best-effort normalizes the child shell environment on Windows instead of inheriting the host `SHELL` blindly. Do not treat that as a guarantee that Codex itself will avoid PowerShell internally. The reliable protection is UTF-8-safe byte-oriented writes for issue, comment, and document mutations.
 
 Manual PowerShell 5.1 inspection commands are different: do not rely on the shell default encoding. When reading UTF-8 files manually in Windows PowerShell 5.1, use explicit encoding flags such as:
 

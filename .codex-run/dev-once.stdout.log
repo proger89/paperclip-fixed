@@ -1,0 +1,6 @@
+
+> paperclip@ dev:once D:\new-projects\paperclip
+> node scripts/dev-runner.mjs dev
+
+[paperclip] dev mode: local_trusted (default)
+ ELIFECYCLE  Command failed with exit code 4294967295.

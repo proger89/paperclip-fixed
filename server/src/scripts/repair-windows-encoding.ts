@@ -23,6 +23,7 @@ function parseArgs(argv: string[]) {
         parsed.issue = argv[index + 1];
         index += 1;
         break;
+      case "--run":
       case "--run-id":
         parsed.runId = argv[index + 1];
         index += 1;
@@ -39,7 +40,8 @@ function parseArgs(argv: string[]) {
             "Options:",
             "  --company-id <id>   Limit to one company",
             "  --issue <id|key>    Limit to one issue UUID or identifier (e.g. TEL-2)",
-            "  --run-id <id>       Limit to one heartbeat run",
+            "  --run <id>          Limit to one heartbeat run",
+            "  --run-id <id>       Alias for --run",
             "  --dry-run           Report only; do not write changes",
           ].join("\n"),
         );

@@ -6,6 +6,12 @@ import { conflict, notFound, unprocessable } from "../errors.js";
 import { isLikelyWindowsEncodingCorruption, normalizeCorruptedDocumentTitle } from "./windows-encoding-utils.js";
 import { windowsEncodingRepairService } from "./windows-encoding-repair.js";
 
+const AGENT_ENCODING_REPAIR_RETRY_MS = [80, 160, 320];
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function normalizeDocumentKey(key: string) {
   const normalized = key.trim().toLowerCase();
   const parsed = issueDocumentKeySchema.safeParse(normalized);
@@ -227,6 +233,22 @@ export function documentService(db: Db) {
         .then((rows) => rows[0] ?? null);
       if (!issue) throw notFound("Issue not found");
 
+      const repairSvc = windowsEncodingRepairService(db);
+      let nextTitleInput = input.title ?? null;
+      let nextBodyInput = input.body;
+      if (input.createdByAgentId && input.runId) {
+        const recovered = await repairSvc.recoverDocumentFromRunLog({
+          issueId: input.issueId,
+          runId: input.runId,
+          agentId: input.createdByAgentId,
+          key,
+          corruptedBody: input.body,
+          corruptedTitle: input.title ?? null,
+        });
+        if (typeof recovered?.body === "string") nextBodyInput = recovered.body;
+        if ("title" in (recovered ?? {}) && recovered?.title !== undefined) nextTitleInput = recovered.title ?? null;
+      }
+
       try {
         const result = await db.transaction(async (tx) => {
           const now = new Date();
@@ -272,7 +294,7 @@ export function documentService(db: Db) {
                 companyId: issue.companyId,
                 documentId: existing.id,
                 revisionNumber: nextRevisionNumber,
-                body: input.body,
+                body: nextBodyInput,
                 changeSummary: input.changeSummary ?? null,
                 createdByAgentId: input.createdByAgentId ?? null,
                 createdByUserId: input.createdByUserId ?? null,
@@ -283,9 +305,9 @@ export function documentService(db: Db) {
             await tx
               .update(documents)
               .set({
-                title: input.title ?? null,
+                title: nextTitleInput,
                 format: input.format,
-                latestBody: input.body,
+                latestBody: nextBodyInput,
                 latestRevisionId: revision.id,
                 latestRevisionNumber: nextRevisionNumber,
                 updatedByAgentId: input.createdByAgentId ?? null,
@@ -303,9 +325,9 @@ export function documentService(db: Db) {
               created: false as const,
               document: {
                 ...existing,
-                title: input.title ?? null,
+                title: nextTitleInput,
                 format: input.format,
-                body: input.body,
+                body: nextBodyInput,
                 latestRevisionId: revision.id,
                 latestRevisionNumber: nextRevisionNumber,
                 updatedByAgentId: input.createdByAgentId ?? null,
@@ -323,9 +345,9 @@ export function documentService(db: Db) {
             .insert(documents)
             .values({
               companyId: issue.companyId,
-              title: input.title ?? null,
+              title: nextTitleInput,
               format: input.format,
-              latestBody: input.body,
+              latestBody: nextBodyInput,
               latestRevisionId: null,
               latestRevisionNumber: 1,
               createdByAgentId: input.createdByAgentId ?? null,
@@ -343,7 +365,7 @@ export function documentService(db: Db) {
               companyId: issue.companyId,
               documentId: document.id,
               revisionNumber: 1,
-              body: input.body,
+              body: nextBodyInput,
               changeSummary: input.changeSummary ?? null,
               createdByAgentId: input.createdByAgentId ?? null,
               createdByUserId: input.createdByUserId ?? null,
@@ -396,35 +418,66 @@ export function documentService(db: Db) {
 
         if (!shouldAttemptRepair) return result;
 
-        await windowsEncodingRepairService(db).repair({
-          issueId: input.issueId,
-          runId: input.runId,
-          documentId: result.document.id,
-          dryRun: false,
-        });
+        let repairedRow:
+          | {
+            id: string;
+            companyId: string;
+            issueId: string;
+            key: string;
+            title: string | null;
+            format: string;
+            latestBody: string;
+            latestRevisionId: string | null;
+            latestRevisionNumber: number;
+            createdByAgentId: string | null;
+            createdByUserId: string | null;
+            updatedByAgentId: string | null;
+            updatedByUserId: string | null;
+            createdAt: Date;
+            updatedAt: Date;
+          }
+          | null = null;
 
-        const repairedRow = await db
-          .select({
-            id: documents.id,
-            companyId: documents.companyId,
-            issueId: issueDocuments.issueId,
-            key: issueDocuments.key,
-            title: documents.title,
-            format: documents.format,
-            latestBody: documents.latestBody,
-            latestRevisionId: documents.latestRevisionId,
-            latestRevisionNumber: documents.latestRevisionNumber,
-            createdByAgentId: documents.createdByAgentId,
-            createdByUserId: documents.createdByUserId,
-            updatedByAgentId: documents.updatedByAgentId,
-            updatedByUserId: documents.updatedByUserId,
-            createdAt: documents.createdAt,
-            updatedAt: documents.updatedAt,
-          })
-          .from(issueDocuments)
-          .innerJoin(documents, eq(issueDocuments.documentId, documents.id))
-          .where(and(eq(issueDocuments.issueId, input.issueId), eq(documents.id, result.document.id)))
-          .then((rows) => rows[0] ?? null);
+        for (const delayMs of [0, ...AGENT_ENCODING_REPAIR_RETRY_MS]) {
+          if (delayMs > 0) await wait(delayMs);
+          await repairSvc.repair({
+            issueId: input.issueId,
+            runId: input.runId,
+            documentId: result.document.id,
+            dryRun: false,
+          });
+
+          repairedRow = await db
+            .select({
+              id: documents.id,
+              companyId: documents.companyId,
+              issueId: issueDocuments.issueId,
+              key: issueDocuments.key,
+              title: documents.title,
+              format: documents.format,
+              latestBody: documents.latestBody,
+              latestRevisionId: documents.latestRevisionId,
+              latestRevisionNumber: documents.latestRevisionNumber,
+              createdByAgentId: documents.createdByAgentId,
+              createdByUserId: documents.createdByUserId,
+              updatedByAgentId: documents.updatedByAgentId,
+              updatedByUserId: documents.updatedByUserId,
+              createdAt: documents.createdAt,
+              updatedAt: documents.updatedAt,
+            })
+            .from(issueDocuments)
+            .innerJoin(documents, eq(issueDocuments.documentId, documents.id))
+            .where(and(eq(issueDocuments.issueId, input.issueId), eq(documents.id, result.document.id)))
+            .then((rows) => rows[0] ?? null);
+
+          if (
+            repairedRow
+            && !isLikelyWindowsEncodingCorruption(repairedRow.latestBody)
+            && normalizeCorruptedDocumentTitle(repairedRow.title) === repairedRow.title
+          ) {
+            break;
+          }
+        }
 
         return repairedRow
           ? {

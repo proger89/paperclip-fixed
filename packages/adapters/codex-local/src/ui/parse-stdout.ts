@@ -1,4 +1,5 @@
 import { type TranscriptEntry } from "@paperclipai/adapter-utils";
+import { normalizeHighConfidenceWindowsMojibakeBlock } from "../shared/encoding.js";
 
 function safeJsonParse(text: string): unknown {
   try {
@@ -58,7 +59,7 @@ function parseCommandExecutionItem(
   const status = asString(item.status);
   const exitCode = typeof item.exit_code === "number" && Number.isFinite(item.exit_code) ? item.exit_code : null;
   const safeCommand = command;
-  const output = asString(item.aggregated_output).replace(/\s+$/, "");
+  const output = normalizeHighConfidenceWindowsMojibakeBlock(asString(item.aggregated_output)).replace(/\s+$/, "");
 
   if (phase === "started") {
     return [{
@@ -126,13 +127,13 @@ function parseCodexItem(
   const itemType = asString(item.type);
 
   if (itemType === "agent_message") {
-    const text = asString(item.text);
+    const text = normalizeHighConfidenceWindowsMojibakeBlock(asString(item.text));
     if (text) return [{ kind: "assistant", ts, text }];
     return [];
   }
 
   if (itemType === "reasoning") {
-    const text = asString(item.text);
+    const text = normalizeHighConfidenceWindowsMojibakeBlock(asString(item.text));
     if (text) return [{ kind: "thinking", ts, text }];
     return [{ kind: "system", ts, text: phase === "started" ? "reasoning started" : "reasoning completed" }];
   }

@@ -121,6 +121,8 @@ type RunRow = {
 
 type ParsedCommandExecution = {
   ts: Date | null;
+  phase: "started" | "completed";
+  itemId: string | null;
   command: string;
   aggregatedOutput: string;
 };
@@ -134,6 +136,18 @@ type ParsedRunRecovery = {
 type InlineDocumentTitleSource = {
   title: string;
   runId: string;
+};
+
+type InlineCommentSource = {
+  body: string;
+  runId: string;
+  source: "run_log_inline_comment" | "run_log_workspace_file";
+};
+
+type InlineDocumentBodySource = {
+  body: string;
+  runId: string;
+  source: "run_log_workspace_file";
 };
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -185,11 +199,13 @@ function extractCommandExecutions(logContent: string): ParsedCommandExecution[] 
       } catch {
         continue;
       }
-      if (event?.type !== "item.completed") continue;
+      if (event?.type !== "item.started" && event?.type !== "item.completed") continue;
       const item = asRecord(event.item);
       if (readString(item?.type) !== "command_execution") continue;
       parsed.push({
         ts: outer.ts ? new Date(outer.ts) : null,
+        phase: event.type === "item.started" ? "started" : "completed",
+        itemId: readString(item?.id),
         command: typeof item?.command === "string" ? item.command : "",
         aggregatedOutput: typeof item?.aggregated_output === "string" ? item.aggregated_output : "",
       });
@@ -226,7 +242,8 @@ function extractCommentIdFromOutput(output: string): string | null {
 
 function extractInlineTitleFromCommand(command: string): string | null {
   const match = /['"]title['"]\s*:\s*['"]([^'"]+)['"]/su.exec(command);
-  return match?.[1] ?? null;
+  if (match?.[1]) return match[1];
+  return extractPowerShellQuotedAssignment(command, "title");
 }
 
 function extractCommentIdFromIssueMutationOutput(output: string): string | null {
@@ -259,7 +276,7 @@ function extractInlineCommentFromCommand(command: string): string | null {
     if (bodyStart < 0) return null;
 
     const remainder = normalized.slice(bodyStart + 1);
-    const terminator = /\n(?:['"\\]){0,4}@(?:;|\s+\|)/u.exec(remainder);
+    const terminator = /\n(?:['"\\]){0,4}@(?:['"\\]){0,4}(?:;|\s+\||\s*\n|$)/u.exec(remainder);
     if (!terminator) return null;
 
     const inline = remainder.slice(0, terminator.index);
@@ -272,11 +289,230 @@ function extractInlineCommentFromCommand(command: string): string | null {
   const pythonTripleSingle = /\bcomment_body\s*=\s*(?:(?:\\'){3}|''')([\s\S]*?)(?:(?:\\'){3}|''')/u.exec(normalized);
   if (pythonTripleSingle?.[1]) return pythonTripleSingle[1];
 
+  const powerShellComment = extractPowerShellQuotedAssignment(normalized, "comment");
+  if (powerShellComment) return powerShellComment;
+
+  const powerShellBody = extractPowerShellQuotedAssignment(normalized, "body");
+  if (powerShellBody) return powerShellBody;
+
   return null;
 }
 
 function sanitizePowerShellInlineText(text: string): string {
   return text.replace(/"'+(?=`)/g, "").replace(/'+(?=`)/g, "");
+}
+
+function decodePowerShellEscapeChar(char: string | undefined): string | null {
+  switch (char) {
+    case "0":
+      return "\0";
+    case "a":
+      return "\u0007";
+    case "b":
+      return "\b";
+    case "f":
+      return "\f";
+    case "n":
+      return "\n";
+    case "r":
+      return "\r";
+    case "t":
+      return "\t";
+    case "v":
+      return "\v";
+    case "\"":
+      return "\"";
+    case "`":
+      return "`";
+    default:
+      return null;
+  }
+}
+
+function decodePowerShellDoubleQuotedText(text: string): string {
+  let decoded = "";
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index]!;
+    if (char !== "`" || index + 1 >= text.length) {
+      decoded += char;
+      continue;
+    }
+
+    const next = text[index + 1]!;
+    if (next === "`") {
+      decoded += "`";
+      index += 1;
+      continue;
+    }
+
+    const escaped = decodePowerShellEscapeChar(next);
+    if (escaped != null) {
+      decoded += escaped;
+      index += 1;
+      continue;
+    }
+
+    decoded += next;
+    index += 1;
+  }
+
+  return decoded.replace(/\\"/g, "\"");
+}
+
+function extractPowerShellQuotedAssignment(command: string, fieldName: string): string | null {
+  const normalized = normalizeWindowsEncodingLineEndings(command);
+  const assignmentMatch = new RegExp(`\\b${escapeRegExp(fieldName)}\\s*=\\s*`, "u").exec(normalized);
+  if (!assignmentMatch) return null;
+
+  const valueStart = assignmentMatch.index + assignmentMatch[0].length;
+  for (const openingQuoteToken of ["\\\"", "\""] as const) {
+    if (!normalized.startsWith(openingQuoteToken, valueStart)) continue;
+    const rawValue = normalized.slice(valueStart + openingQuoteToken.length);
+    const closingQuoteTokens = openingQuoteToken === "\\\"" ? ["\\\"", "\""] as const : ["\""] as const;
+    for (let index = 0; index < rawValue.length; index += 1) {
+      for (const closingQuoteToken of closingQuoteTokens) {
+        if (!rawValue.startsWith(closingQuoteToken, index)) continue;
+        let cursor = index + closingQuoteToken.length;
+        while (cursor < rawValue.length && /\s/u.test(rawValue[cursor]!)) cursor += 1;
+        if (rawValue[cursor] !== "}") continue;
+        return decodePowerShellDoubleQuotedText(sanitizePowerShellInlineText(rawValue.slice(0, index)));
+      }
+    }
+  }
+
+  return null;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function dedupeSources<T>(sources: T[], getKey: (source: T) => string): T[] {
+  const deduped = new Map<string, T>();
+  for (const source of sources) {
+    const key = getKey(source);
+    if (!deduped.has(key)) deduped.set(key, source);
+  }
+  return Array.from(deduped.values());
+}
+
+function isIssueCommentCommand(command: string): boolean {
+  return /\/api\/issues\/.+\/comments\b/.test(command);
+}
+
+function isIssuePatchCommand(command: string): boolean {
+  return /\/api\/issues\/[^/\s"'`]+\b/.test(command) && !/\/comments\b|\/documents\b/.test(command);
+}
+
+function isIssueDocumentCommand(command: string, key: string): boolean {
+  return new RegExp(`/api/issues/.+/documents/${escapeRegExp(key)}\\b`).test(command);
+}
+
+async function collectRunLogCommentSources(input: {
+  run: RunRow;
+  parsed: ParsedRunRecovery;
+  corruptedBody: string;
+  commentId?: string | null;
+  fileCache: Map<string, string | null>;
+}): Promise<InlineCommentSource[]> {
+  const matches: InlineCommentSource[] = [];
+  const corruptedSignature = normalizeWindowsEncodingLineEndings(input.corruptedBody);
+  const completedCommentIdsByItemId = new Map<string, string>();
+  const matchedItemIds = new Set<string>();
+
+  for (const command of input.parsed.commands) {
+    if (command.phase !== "completed" || !command.itemId) continue;
+    const commentId = extractCommentIdFromIssueMutationOutput(command.aggregatedOutput);
+    if (!commentId) continue;
+    completedCommentIdsByItemId.set(command.itemId, commentId);
+    if (input.commentId && commentId === input.commentId) matchedItemIds.add(command.itemId);
+  }
+
+  for (const command of input.parsed.commands) {
+    if (input.commentId && matchedItemIds.size > 0 && (!command.itemId || !matchedItemIds.has(command.itemId))) {
+      continue;
+    }
+    const outputCommentId =
+      (command.phase === "completed"
+        ? extractCommentIdFromIssueMutationOutput(command.aggregatedOutput)
+        : null)
+      ?? (command.itemId ? completedCommentIdsByItemId.get(command.itemId) ?? null : null);
+    if (input.commentId && outputCommentId && outputCommentId !== input.commentId) continue;
+
+    if (isIssueCommentCommand(command.command)) {
+      if (input.parsed.workspaceCwd) {
+        const relativePath = extractPythonWorkspaceRelativePath(command.command);
+        if (relativePath) {
+          const absolutePath = path.resolve(input.parsed.workspaceCwd, relativePath);
+          const fileText = await readFileSource(absolutePath, input.fileCache);
+          if (fileText && normalizeSignature(fileText) === corruptedSignature) {
+            matches.push({ body: fileText, runId: input.run.id, source: "run_log_workspace_file" });
+          }
+        }
+      }
+    }
+
+    if (!isIssueCommentCommand(command.command) && !isIssuePatchCommand(command.command)) continue;
+
+    const inlineComment = extractInlineCommentFromCommand(command.command);
+    if (!inlineComment) continue;
+    const recoveredInlineComment = sanitizePowerShellInlineText(
+      recoverWindows1251Utf8Mojibake(inlineComment) ?? inlineComment,
+    );
+    if (normalizeSignature(recoveredInlineComment) !== corruptedSignature) continue;
+    matches.push({ body: recoveredInlineComment, runId: input.run.id, source: "run_log_inline_comment" });
+  }
+
+  return dedupeSources(matches, (source) => `${source.runId}:${source.source}:${source.body}`);
+}
+
+async function collectRunLogDocumentBodySources(input: {
+  run: RunRow;
+  parsed: ParsedRunRecovery;
+  key: string;
+  corruptedBody: string;
+  fileCache: Map<string, string | null>;
+}): Promise<InlineDocumentBodySource[]> {
+  const matches: InlineDocumentBodySource[] = [];
+  const corruptedSignature = normalizeWindowsEncodingLineEndings(input.corruptedBody);
+
+  if (!input.parsed.workspaceCwd) return matches;
+
+  for (const command of input.parsed.commands) {
+    if (!isIssueDocumentCommand(command.command, input.key)) continue;
+    const relativePath = extractPythonWorkspaceRelativePath(command.command);
+    if (!relativePath) continue;
+    const absolutePath = path.resolve(input.parsed.workspaceCwd, relativePath);
+    const fileText = await readFileSource(absolutePath, input.fileCache);
+    if (!fileText) continue;
+    if (normalizeSignature(fileText) !== corruptedSignature) continue;
+    matches.push({ body: fileText, runId: input.run.id, source: "run_log_workspace_file" });
+  }
+
+  return dedupeSources(matches, (source) => `${source.runId}:${source.source}:${source.body}`);
+}
+
+function collectRunLogDocumentTitleSources(input: {
+  run: RunRow;
+  parsed: ParsedRunRecovery;
+  key: string;
+  corruptedTitle: string | null;
+}): InlineDocumentTitleSource[] {
+  const matches: InlineDocumentTitleSource[] = [];
+  const corruptedSignature = normalizeWindowsEncodingLineEndings(input.corruptedTitle ?? "");
+
+  for (const command of input.parsed.commands) {
+    if (!isIssueDocumentCommand(command.command, input.key)) continue;
+    const inlineTitle = extractInlineTitleFromCommand(command.command);
+    if (!inlineTitle) continue;
+    const recoveredInlineTitle = sanitizePowerShellInlineText(
+      recoverWindows1251Utf8Mojibake(inlineTitle) ?? inlineTitle,
+    );
+    if (normalizeSignature(recoveredInlineTitle) !== corruptedSignature) continue;
+    matches.push({ title: recoveredInlineTitle, runId: input.run.id });
+  }
+
+  return dedupeSources(matches, (source) => `${source.runId}:${source.title}`);
 }
 
 async function readFileSource(filePath: string, cache: Map<string, string | null>): Promise<string | null> {
@@ -323,6 +559,26 @@ async function loadRunRecoveryData(db: Db, runs: RunRow[]): Promise<Map<string, 
   return parsed;
 }
 
+async function loadRunRecoveryDataById(db: Db, runId: string): Promise<ParsedRunRecovery | null> {
+  const run = await db
+    .select({
+      id: heartbeatRuns.id,
+      companyId: heartbeatRuns.companyId,
+      agentId: heartbeatRuns.agentId,
+      startedAt: heartbeatRuns.startedAt,
+      finishedAt: heartbeatRuns.finishedAt,
+      createdAt: heartbeatRuns.createdAt,
+      contextSnapshot: heartbeatRuns.contextSnapshot,
+      logStore: heartbeatRuns.logStore,
+      logRef: heartbeatRuns.logRef,
+    })
+    .from(heartbeatRuns)
+    .where(eq(heartbeatRuns.id, runId))
+    .then((rows) => rows[0] ?? null);
+  if (!run) return null;
+  return (await loadRunRecoveryData(db, [run])).get(run.id) ?? null;
+}
+
 function pickSingleExactSource<T>(sources: T[]): T | null {
   return sources.length === 1 ? sources[0] : null;
 }
@@ -333,6 +589,84 @@ function compareByCreatedAtDesc<T extends { createdAt: Date }>(left: T, right: T
 
 export function windowsEncodingRepairService(db: Db) {
   return {
+    recoverCommentFromRunLog: async (input: {
+      issueId: string;
+      runId: string;
+      agentId: string;
+      corruptedBody: string;
+      commentId?: string | null;
+    }) => {
+      if (!isLikelyWindowsEncodingCorruption(input.corruptedBody)) return null;
+      const parsed = await loadRunRecoveryDataById(db, input.runId);
+      if (!parsed) return null;
+      if (parsed.run.agentId !== input.agentId) return null;
+      const runIssueId = readIssueIdFromRunContext(parsed.run.contextSnapshot);
+      if (runIssueId && runIssueId !== input.issueId) return null;
+
+      const matches = await collectRunLogCommentSources({
+        run: parsed.run,
+        parsed,
+        corruptedBody: input.corruptedBody,
+        commentId: input.commentId ?? null,
+        fileCache: new Map<string, string | null>(),
+      });
+      let match = pickSingleExactSource(matches);
+      if (!match && input.commentId) {
+        match = pickSingleExactSource(await collectRunLogCommentSources({
+          run: parsed.run,
+          parsed,
+          corruptedBody: input.corruptedBody,
+          commentId: null,
+          fileCache: new Map<string, string | null>(),
+        }));
+      }
+      return match ? { body: match.body, source: match.source, runId: match.runId } : null;
+    },
+
+    recoverDocumentFromRunLog: async (input: {
+      issueId: string;
+      runId: string;
+      agentId: string;
+      key: string;
+      corruptedBody?: string | null;
+      corruptedTitle?: string | null;
+    }) => {
+      const needsBody = typeof input.corruptedBody === "string" && isLikelyWindowsEncodingCorruption(input.corruptedBody);
+      const needsTitle = normalizeCorruptedDocumentTitle(input.corruptedTitle) !== input.corruptedTitle;
+      if (!needsBody && !needsTitle) return null;
+
+      const parsed = await loadRunRecoveryDataById(db, input.runId);
+      if (!parsed) return null;
+      if (parsed.run.agentId !== input.agentId) return null;
+      const runIssueId = readIssueIdFromRunContext(parsed.run.contextSnapshot);
+      if (runIssueId && runIssueId !== input.issueId) return null;
+
+      const fileCache = new Map<string, string | null>();
+      const bodyMatch = needsBody
+        ? pickSingleExactSource(await collectRunLogDocumentBodySources({
+          run: parsed.run,
+          parsed,
+          key: input.key,
+          corruptedBody: input.corruptedBody!,
+          fileCache,
+        }))
+        : null;
+      const titleMatch = needsTitle
+        ? pickSingleExactSource(collectRunLogDocumentTitleSources({
+          run: parsed.run,
+          parsed,
+          key: input.key,
+          corruptedTitle: input.corruptedTitle ?? null,
+        }))
+        : null;
+
+      if (!bodyMatch && !titleMatch) return null;
+      return {
+        ...(bodyMatch ? { body: bodyMatch.body, bodySource: bodyMatch.source, bodyRunId: bodyMatch.runId } : {}),
+        ...(titleMatch ? { title: titleMatch.title, titleSource: "run_log_inline_title" as const, titleRunId: titleMatch.runId } : {}),
+      };
+    },
+
     repair: async (filters: RepairFilters = {}): Promise<WindowsEncodingRepairReport> => {
       const dryRun = filters.dryRun !== false;
       const details: WindowsEncodingRepairDetail[] = [];
@@ -551,62 +885,42 @@ export function windowsEncodingRepairService(db: Db) {
             candidateRuns.find((run) => couldBelongToRun(run, repostSource.issueId, repostSource.authorAgentId, repostSource.createdAt))
               ?.id ?? null;
         } else {
-          const runPayloadMatches: Array<{ body: string; runId: string }> = [];
-          const runInlineMatches: Array<{ body: string; runId: string }> = [];
+          const runLogMatches: InlineCommentSource[] = [];
           for (const run of candidateRuns) {
             const parsed = parsedRuns.get(run.id);
             if (!parsed) continue;
-            for (const command of parsed.commands) {
-              const commentId = extractCommentIdFromIssueMutationOutput(command.aggregatedOutput);
-              if (commentId && commentId !== comment.id) continue;
-
-              if (/\/api\/issues\/.+\/comments\b/.test(command.command)) {
-                if (parsed.workspaceCwd) {
-                  const relativePath = extractPythonWorkspaceRelativePath(command.command);
-                  if (relativePath) {
-                    const absolutePath = path.resolve(parsed.workspaceCwd, relativePath);
-                    const fileText = await readFileSource(absolutePath, fileCache);
-                    if (fileText && normalizeSignature(fileText) === normalizeWindowsEncodingLineEndings(comment.body)) {
-                      runPayloadMatches.push({ body: fileText, runId: run.id });
-                      continue;
-                    }
-                  }
-                }
-
-                const inlineComment = extractInlineCommentFromCommand(command.command);
-                if (!inlineComment) continue;
-                const recoveredInlineComment = sanitizePowerShellInlineText(
-                  recoverWindows1251Utf8Mojibake(inlineComment) ?? inlineComment,
-                );
-                if (normalizeSignature(recoveredInlineComment) !== normalizeWindowsEncodingLineEndings(comment.body)) continue;
-                runInlineMatches.push({ body: recoveredInlineComment, runId: run.id });
-                continue;
-              }
-
-              if (!/\/api\/issues\/[^/\s"'`]+\b/.test(command.command)) continue;
-              if (/\/comments\b|\/documents\b/.test(command.command)) continue;
-
-              const inlineComment = extractInlineCommentFromCommand(command.command);
-              if (!inlineComment) continue;
-              const recoveredInlineComment = sanitizePowerShellInlineText(
-                recoverWindows1251Utf8Mojibake(inlineComment) ?? inlineComment,
-              );
-              if (normalizeSignature(recoveredInlineComment) !== normalizeWindowsEncodingLineEndings(comment.body)) continue;
-              runInlineMatches.push({ body: recoveredInlineComment, runId: run.id });
-            }
+            runLogMatches.push(...await collectRunLogCommentSources({
+              run,
+              parsed,
+              corruptedBody: comment.body,
+              commentId: comment.id,
+              fileCache,
+            }));
           }
-          const exactLogSource = pickSingleExactSource(runPayloadMatches);
-          if (exactLogSource) {
-            nextBody = exactLogSource.body;
-            source = "run_log_workspace_file";
-            matchedRunId = exactLogSource.runId;
-          } else {
-            const inlineLogSource = pickSingleExactSource(runInlineMatches);
-            if (inlineLogSource) {
-              nextBody = inlineLogSource.body;
-              source = "run_log_inline_comment";
-              matchedRunId = inlineLogSource.runId;
-            }
+          const exactLogSource = pickSingleExactSource(
+            dedupeSources(runLogMatches, (match) => `${match.runId}:${match.source}:${match.body}`),
+          );
+          const fallbackLogSource =
+            exactLogSource || !comment.id
+              ? exactLogSource
+              : pickSingleExactSource(dedupeSources(
+                await Promise.all(candidateRuns.map(async (run) => {
+                  const parsed = parsedRuns.get(run.id);
+                  if (!parsed) return [] as InlineCommentSource[];
+                  return await collectRunLogCommentSources({
+                    run,
+                    parsed,
+                    corruptedBody: comment.body,
+                    commentId: null,
+                    fileCache,
+                  });
+                })).then((matches) => matches.flat()),
+                (match) => `${match.runId}:${match.source}:${match.body}`,
+              ));
+          if (fallbackLogSource) {
+            nextBody = fallbackLogSource.body;
+            source = fallbackLogSource.source;
+            matchedRunId = fallbackLogSource.runId;
           }
         }
 
@@ -654,16 +968,14 @@ export function windowsEncodingRepairService(db: Db) {
           for (const run of candidateRuns) {
             const parsed = parsedRuns.get(run.id);
             if (!parsed) continue;
-            for (const command of parsed.commands) {
-              if (!new RegExp(`/api/issues/.+/documents/${doc.key}\\b`).test(command.command)) continue;
-              const inlineTitle = extractInlineTitleFromCommand(command.command);
-              if (!inlineTitle) continue;
-              const recoveredInlineTitle = sanitizePowerShellInlineText(
-                recoverWindows1251Utf8Mojibake(inlineTitle) ?? inlineTitle,
-              );
-              if (normalizeSignature(recoveredInlineTitle) !== normalizeWindowsEncodingLineEndings(doc.title ?? "")) continue;
-              inlineTitleMatches.push({ title: recoveredInlineTitle, runId: run.id });
-            }
+            inlineTitleMatches.push(
+              ...collectRunLogDocumentTitleSources({
+                run,
+                parsed,
+                key: doc.key,
+                corruptedTitle: doc.title ?? null,
+              }),
+            );
           }
           const inlineTitleSource = pickSingleExactSource(inlineTitleMatches);
           if (inlineTitleSource) {
@@ -696,23 +1008,25 @@ export function windowsEncodingRepairService(db: Db) {
         let source: RepairSource | undefined;
         let matchedRunId: string | null = null;
 
+        const runBodyMatches: InlineDocumentBodySource[] = [];
         for (const run of candidateRuns) {
           const parsed = parsedRuns.get(run.id);
-          if (!parsed?.workspaceCwd) continue;
-          for (const command of parsed.commands) {
-            if (!new RegExp(`/api/issues/.+/documents/${doc.key}\\b`).test(command.command)) continue;
-            const relativePath = extractPythonWorkspaceRelativePath(command.command);
-            if (!relativePath) continue;
-            const absolutePath = path.resolve(parsed.workspaceCwd, relativePath);
-            const fileText = await readFileSource(absolutePath, fileCache);
-            if (!fileText) continue;
-            if (normalizeSignature(fileText) !== normalizeWindowsEncodingLineEndings(doc.latestBody)) continue;
-            nextBody = fileText;
-            source = "run_log_workspace_file";
-            matchedRunId = run.id;
-            break;
-          }
-          if (nextBody) break;
+          if (!parsed) continue;
+          runBodyMatches.push(...await collectRunLogDocumentBodySources({
+            run,
+            parsed,
+            key: doc.key,
+            corruptedBody: doc.latestBody,
+            fileCache,
+          }));
+        }
+        const bodyLogSource = pickSingleExactSource(
+          dedupeSources(runBodyMatches, (match) => `${match.runId}:${match.source}:${match.body}`),
+        );
+        if (bodyLogSource) {
+          nextBody = bodyLogSource.body;
+          source = bodyLogSource.source;
+          matchedRunId = bodyLogSource.runId;
         }
 
         if (!nextBody) {
@@ -773,23 +1087,25 @@ export function windowsEncodingRepairService(db: Db) {
         let source: RepairSource | undefined;
         let matchedRunId: string | null = null;
 
+        const runBodyMatches: InlineDocumentBodySource[] = [];
         for (const run of candidateRuns) {
           const parsed = parsedRuns.get(run.id);
-          if (!parsed?.workspaceCwd) continue;
-          for (const command of parsed.commands) {
-            if (!new RegExp(`/api/issues/.+/documents/${revision.key}\\b`).test(command.command)) continue;
-            const relativePath = extractPythonWorkspaceRelativePath(command.command);
-            if (!relativePath) continue;
-            const absolutePath = path.resolve(parsed.workspaceCwd, relativePath);
-            const fileText = await readFileSource(absolutePath, fileCache);
-            if (!fileText) continue;
-            if (normalizeSignature(fileText) !== normalizeWindowsEncodingLineEndings(revision.body)) continue;
-            nextBody = fileText;
-            source = "run_log_workspace_file";
-            matchedRunId = run.id;
-            break;
-          }
-          if (nextBody) break;
+          if (!parsed) continue;
+          runBodyMatches.push(...await collectRunLogDocumentBodySources({
+            run,
+            parsed,
+            key: revision.key,
+            corruptedBody: revision.body,
+            fileCache,
+          }));
+        }
+        const bodyLogSource = pickSingleExactSource(
+          dedupeSources(runBodyMatches, (match) => `${match.runId}:${match.source}:${match.body}`),
+        );
+        if (bodyLogSource) {
+          nextBody = bodyLogSource.body;
+          source = bodyLogSource.source;
+          matchedRunId = bodyLogSource.runId;
         }
 
         if (!nextBody) {

@@ -22,6 +22,16 @@ describe("codex_local parser", () => {
     });
     expect(parsed.errorMessage).toBe("model access denied");
   });
+
+  it("normalizes high-confidence Windows mojibake in agent summaries", () => {
+    const stdout = [
+      JSON.stringify({ type: "thread.started", thread_id: "thread-utf8" }),
+      JSON.stringify({ type: "item.completed", item: { type: "agent_message", text: "РџСЂРёРІРµС‚, РјРёСЂ" } }),
+    ].join("\n");
+
+    const parsed = parseCodexJsonl(stdout);
+    expect(parsed.summary).toBe("Привет, мир");
+  });
 });
 
 describe("codex_local stale session detection", () => {
@@ -169,6 +179,82 @@ describe("codex_local ui stdout parser", () => {
       },
     ]);
   });
+
+  it("normalizes reversible mojibake in transcript messages and command output", () => {
+    const ts = "2026-02-20T00:00:00.000Z";
+
+    expect(
+      parseCodexStdoutLine(
+        JSON.stringify({
+          type: "item.completed",
+          item: { id: "item_utf8_1", type: "agent_message", text: "РџР»Р°РЅ РіРѕС‚РѕРІ" },
+        }),
+        ts,
+      ),
+    ).toEqual([
+      { kind: "assistant", ts, text: "План готов" },
+    ]);
+
+    expect(
+      parseCodexStdoutLine(
+        JSON.stringify({
+          type: "item.completed",
+          item: { id: "item_utf8_2", type: "reasoning", text: "РџСЂРѕРІРµСЂСЏСЋ Р»РѕРіРё" },
+        }),
+        ts,
+      ),
+    ).toEqual([
+      { kind: "thinking", ts, text: "Проверяю логи" },
+    ]);
+
+    expect(
+      parseCodexStdoutLine(
+        JSON.stringify({
+          type: "item.completed",
+          item: {
+            id: "item_utf8_3",
+            type: "command_execution",
+            command: "python script.py",
+            aggregated_output: "Р РµР·СѓР»СЊС‚Р°С‚ СЃРѕС…СЂР°РЅРµРЅ",
+            exit_code: 0,
+            status: "completed",
+          },
+        }),
+        ts,
+      ),
+    ).toEqual([
+      {
+        kind: "tool_result",
+        ts,
+        toolUseId: "item_utf8_3",
+        content: "command: python script.py\nstatus: completed\nexit_code: 0\n\nРезультат сохранен",
+        isError: false,
+      },
+    ]);
+  });
+
+  it("does not require Buffer in browser-like runtimes", () => {
+    const ts = "2026-02-20T00:00:00.000Z";
+    const originalBuffer = globalThis.Buffer;
+
+    try {
+      Object.assign(globalThis, { Buffer: undefined });
+
+      expect(
+        parseCodexStdoutLine(
+          JSON.stringify({
+            type: "item.completed",
+            item: { id: "item_utf8_browser", type: "agent_message", text: "Р вЂњР С•РЎвЂљР С•Р Р†Р С•" },
+          }),
+          ts,
+        ),
+      ).toEqual([
+        { kind: "assistant", ts, text: "Р“РѕС‚РѕРІРѕ" },
+      ]);
+    } finally {
+      Object.assign(globalThis, { Buffer: originalBuffer });
+    }
+  });
 });
 
 function stripAnsi(value: string): string {
@@ -244,6 +330,46 @@ describe("codex_local cli formatter", () => {
         "turn failed: model access denied",
         "tokens: in=10 out=4 cached=2",
         "error: resume model mismatch",
+      ]));
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("prints normalized mojibake text for assistant and command output", () => {
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      printCodexStreamEvent(
+        JSON.stringify({
+          type: "item.completed",
+          item: { type: "agent_message", text: "Р“РѕС‚РѕРІРѕ" },
+        }),
+        false,
+      );
+      printCodexStreamEvent(
+        JSON.stringify({
+          type: "item.completed",
+          item: {
+            id: "item_utf8_4",
+            type: "command_execution",
+            command: "python script.py",
+            aggregated_output: "РЎРѕС…СЂР°РЅРµРЅРѕ РІ README.md",
+            exit_code: 0,
+            status: "completed",
+          },
+        }),
+        false,
+      );
+
+      const lines = spy.mock.calls
+        .map((call) => call.map((v) => String(v)).join(" "))
+        .map(stripAnsi);
+
+      expect(lines).toEqual(expect.arrayContaining([
+        "assistant: Готово",
+        "tool_result: command_execution command=\"python script.py\" status=completed exit_code=0",
+        "Сохранено в README.md",
       ]));
     } finally {
       spy.mockRestore();

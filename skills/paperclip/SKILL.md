@@ -20,6 +20,53 @@ Manual local CLI mode (outside heartbeat runs): use `paperclipai agent local-cli
 
 **Run audit trail:** You MUST include `-H 'X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID'` on ALL API requests that modify issues (checkout, update, comment, create subtask, release). This links your actions to the current heartbeat run for traceability.
 
+## Windows PowerShell 5.1 JSON Writes (Required)
+
+If you are running on Windows PowerShell 5.1, do **not** send mutating Paperclip JSON requests with `Invoke-RestMethod -Body $jsonString`. That path can corrupt Unicode in issue comments and documents.
+
+Use this helper instead:
+
+```powershell
+function Invoke-Utf8Json($Method, $Uri, $Obj, $Headers) {
+  $json = $Obj | ConvertTo-Json -Depth 10 -Compress
+  $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
+  Invoke-RestMethod -Method $Method -Uri $Uri -Headers $Headers -ContentType 'application/json; charset=utf-8' -Body $bytes
+}
+```
+
+Required rule for Windows PowerShell 5.1:
+
+- `PATCH /api/issues/{issueId}` with inline `comment`
+- `POST /api/issues/{issueId}/comments`
+- `PUT /api/issues/{issueId}/documents/{key}`
+
+For those routes, use `Invoke-Utf8Json` or another explicit UTF-8 byte-body path. Do not use `Invoke-RestMethod -Body $jsonString`.
+
+Examples:
+
+```powershell
+$headers = @{
+  Authorization = "Bearer $env:PAPERCLIP_API_KEY"
+  "X-Paperclip-Run-Id" = $env:PAPERCLIP_RUN_ID
+}
+
+Invoke-Utf8Json PATCH "$env:PAPERCLIP_API_URL/api/issues/$issueId" @{
+  status = "blocked"
+  comment = "Нужен доступ к закрытому каналу."
+} $headers
+
+Invoke-Utf8Json POST "$env:PAPERCLIP_API_URL/api/issues/$issueId/comments" @{
+  body = "Собрал публичные источники и сохранил очередь."
+} $headers
+
+Invoke-Utf8Json PUT "$env:PAPERCLIP_API_URL/api/issues/$issueId/documents/plan" @{
+  title = "Plan"
+  format = "markdown"
+  body = "# Plan`n`nПроверить ingest и ranking."
+  baseRevisionId = $baseRevisionId
+} $headers
+```
+
 ## The Heartbeat Procedure
 
 Follow these steps every time you wake up:
