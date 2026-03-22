@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
@@ -14,6 +14,7 @@ const gracefulShutdownTimeoutMs = 10_000;
 const changedPathSampleLimit = 5;
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const devServerStatusFilePath = path.join(repoRoot, ".paperclip", "dev-server-status.json");
+const repoLocalEnvFilePath = path.join(repoRoot, ".paperclip", ".env");
 
 const watchedDirectories = [
   ".paperclip",
@@ -66,17 +67,57 @@ for (const arg of cliArgs) {
   forwardedArgs.push(arg);
 }
 
+function parseEnvFile(contents) {
+  const parsed = {};
+  for (const rawLine of contents.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+
+    const match = rawLine.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
+    if (!match) continue;
+
+    const [, key, rawValue] = match;
+    const value = rawValue.trim();
+    if (!value) {
+      parsed[key] = "";
+      continue;
+    }
+    if (
+      (value.startsWith("\"") && value.endsWith("\"")) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      parsed[key] = value.slice(1, -1);
+      continue;
+    }
+    parsed[key] = value.replace(/\s+#.*$/, "").trim();
+  }
+  return parsed;
+}
+
+function buildRuntimeEnv() {
+  const merged = { ...process.env };
+  if (existsSync(repoLocalEnvFilePath)) {
+    const repoLocalEnv = parseEnvFile(readFileSync(repoLocalEnvFilePath, "utf8"));
+    for (const [key, value] of Object.entries(repoLocalEnv)) {
+      if (!(key in merged)) {
+        merged[key] = value;
+      }
+    }
+  }
+  return merged;
+}
+
+const env = {
+  ...buildRuntimeEnv(),
+  PAPERCLIP_UI_DEV_MIDDLEWARE: "true",
+};
+
 if (process.env.npm_config_tailscale_auth === "true") {
   tailscaleAuth = true;
 }
 if (process.env.npm_config_authenticated_private === "true") {
   tailscaleAuth = true;
 }
-
-const env = {
-  ...process.env,
-  PAPERCLIP_UI_DEV_MIDDLEWARE: "true",
-};
 
 if (mode === "dev") {
   env.PAPERCLIP_DEV_SERVER_STATUS_FILE = devServerStatusFilePath;
@@ -111,6 +152,7 @@ let child = null;
 let childExitPromise = null;
 let scanTimer = null;
 let autoRestartTimer = null;
+let childLaunchId = 0;
 
 function toError(error, context = "Dev runner command failed") {
   if (error instanceof Error) return error;
@@ -242,6 +284,24 @@ function writeDevServerStatus() {
 function clearDevServerStatus() {
   if (mode !== "dev") return;
   rmSync(devServerStatusFilePath, { force: true });
+}
+
+function resolveConfiguredServerPort() {
+  const directPort = Number(env.PORT ?? process.env.PORT ?? "");
+  if (Number.isInteger(directPort) && directPort > 0) {
+    return directPort;
+  }
+
+  const configPath = process.env.PAPERCLIP_CONFIG?.trim() || path.join(repoRoot, ".paperclip", "config.json");
+  if (!existsSync(configPath)) return 3100;
+
+  try {
+    const raw = JSON.parse(readFileSync(configPath, "utf8"));
+    const configuredPort = Number(raw?.server?.port);
+    return Number.isInteger(configuredPort) && configuredPort > 0 ? configuredPort : 3100;
+  } catch {
+    return 3100;
+  }
 }
 
 async function runPnpm(args, options = {}) {
@@ -420,12 +480,23 @@ async function scanForBackendChanges() {
 }
 
 async function getDevHealthPayload() {
-  const serverPort = env.PORT ?? process.env.PORT ?? "3100";
+  const serverPort = resolveConfiguredServerPort();
   const response = await fetch(`http://127.0.0.1:${serverPort}/api/health`);
   if (!response.ok) {
     throw new Error(`Health request failed (${response.status})`);
   }
   return await response.json();
+}
+
+async function refreshPendingMigrationsAfterStartup(launchId) {
+  if (mode !== "dev") return;
+
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    if (launchId !== childLaunchId || !child || shuttingDown) return;
+    await refreshPendingMigrations();
+    if (pendingMigrations.length === 0) return;
+  }
 }
 
 async function waitForChildExit() {
@@ -455,6 +526,7 @@ async function startServerChild() {
   await buildPluginSdk();
 
   const serverScript = mode === "watch" ? "dev:watch" : "dev";
+  const launchId = ++childLaunchId;
   child = spawn(
     pnpmBin,
     ["--filter", "@paperclipai/server", serverScript, ...forwardedArgs],
@@ -482,6 +554,7 @@ async function startServerChild() {
   });
 
   await markChildAsCurrent();
+  void refreshPendingMigrationsAfterStartup(launchId);
 }
 
 async function maybeAutoRestartChild() {

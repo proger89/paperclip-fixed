@@ -42,26 +42,75 @@ async function ensureParentDir(target: string): Promise<void> {
   await fs.mkdir(path.dirname(target), { recursive: true });
 }
 
-async function ensureSymlink(target: string, source: string): Promise<void> {
+function getErrorCode(error: unknown): string | null {
+  return typeof error === "object" && error !== null && "code" in error && typeof error.code === "string"
+    ? error.code
+    : null;
+}
+
+function isSymlinkPermissionError(error: unknown): boolean {
+  const code = getErrorCode(error);
+  return code === "EPERM" || code === "EACCES";
+}
+
+function canFallBackFromHardLink(error: unknown): boolean {
+  const code = getErrorCode(error);
+  return code === "EPERM" || code === "EACCES" || code === "EXDEV" || code === "UNKNOWN";
+}
+
+async function createSharedFileReference(target: string, source: string): Promise<"symlink" | "hardlink" | "copy"> {
+  try {
+    await fs.symlink(source, target);
+    return "symlink";
+  } catch (error) {
+    if (!isSymlinkPermissionError(error)) throw error;
+  }
+
+  try {
+    await fs.link(source, target);
+    return "hardlink";
+  } catch (error) {
+    if (!canFallBackFromHardLink(error)) throw error;
+  }
+
+  await fs.copyFile(source, target);
+  return "copy";
+}
+
+async function areSameFile(source: string, target: string): Promise<boolean> {
+  try {
+    const [sourceStat, targetStat] = await Promise.all([fs.stat(source), fs.stat(target)]);
+    return sourceStat.dev === targetStat.dev && sourceStat.ino === targetStat.ino;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureSharedFile(target: string, source: string): Promise<"symlink" | "hardlink" | "copy" | "unchanged"> {
   const existing = await fs.lstat(target).catch(() => null);
   if (!existing) {
     await ensureParentDir(target);
-    await fs.symlink(source, target);
-    return;
+    return await createSharedFileReference(target, source);
   }
 
-  if (!existing.isSymbolicLink()) {
-    return;
+  if (existing.isSymbolicLink()) {
+    const linkedPath = await fs.readlink(target).catch(() => null);
+    if (!linkedPath) return "unchanged";
+
+    const resolvedLinkedPath = path.resolve(path.dirname(target), linkedPath);
+    if (resolvedLinkedPath === source) return "unchanged";
+
+    await fs.unlink(target);
+    return await createSharedFileReference(target, source);
   }
 
-  const linkedPath = await fs.readlink(target).catch(() => null);
-  if (!linkedPath) return;
+  if (existing.isFile()) {
+    if (await areSameFile(source, target)) return "unchanged";
+    await fs.unlink(target);
+    return await createSharedFileReference(target, source);
+  }
 
-  const resolvedLinkedPath = path.resolve(path.dirname(target), linkedPath);
-  if (resolvedLinkedPath === source) return;
-
-  await fs.unlink(target);
-  await fs.symlink(source, target);
+  return "unchanged";
 }
 
 async function ensureCopiedFile(target: string, source: string): Promise<void> {
@@ -86,7 +135,18 @@ export async function prepareManagedCodexHome(
   for (const name of SYMLINKED_SHARED_FILES) {
     const source = path.join(sourceHome, name);
     if (!(await pathExists(source))) continue;
-    await ensureSymlink(path.join(targetHome, name), source);
+    const result = await ensureSharedFile(path.join(targetHome, name), source);
+    if (result === "hardlink") {
+      await onLog(
+        "stdout",
+        `[paperclip] Mirroring Codex auth via hard link because symbolic links are unavailable for "${name}".\n`,
+      );
+    } else if (result === "copy") {
+      await onLog(
+        "stdout",
+        `[paperclip] Copied Codex auth into managed home because this machine cannot create a shared link for "${name}".\n`,
+      );
+    }
   }
 
   for (const name of COPIED_SHARED_FILES) {
