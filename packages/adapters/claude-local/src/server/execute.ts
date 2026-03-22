@@ -17,6 +17,7 @@ import {
   redactEnvForLogs,
   ensureAbsoluteDirectory,
   ensureCommandResolvable,
+  createPaperclipSkillLink,
   ensurePathInEnv,
   renderTemplate,
   runChildProcess,
@@ -50,7 +51,7 @@ async function buildSkillsDir(config: Record<string, unknown>): Promise<string> 
   );
   for (const entry of availableEntries) {
     if (!desiredNames.has(entry.key)) continue;
-    await fs.symlink(
+    await createPaperclipSkillLink(
       entry.source,
       path.join(target, entry.runtimeName),
     );

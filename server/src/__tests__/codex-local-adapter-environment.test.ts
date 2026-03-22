@@ -40,10 +40,11 @@ describe("codex_local environment diagnostics", () => {
     const binDir = path.join(root, "bin");
     const cwd = path.join(root, "workspace");
     const fakeCodex = path.join(binDir, "codex.cmd");
+    const cyrillicGreeting = "привет";
     const script = [
       "@echo off",
       "echo {\"type\":\"thread.started\",\"thread_id\":\"test-thread\"}",
-      "echo {\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"hello\"}}",
+      `echo {"type":"item.completed","item":{"type":"agent_message","text":"${cyrillicGreeting} hello"}}`,
       "echo {\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1,\"cached_input_tokens\":0,\"output_tokens\":1}}",
       "exit /b 0",
       "",
@@ -68,6 +69,7 @@ describe("codex_local environment diagnostics", () => {
 
       expect(result.status).toBe("pass");
       expect(result.checks.some((check) => check.code === "codex_hello_probe_passed")).toBe(true);
+      expect(result.checks.find((check) => check.code === "codex_hello_probe_passed")?.detail).toContain(cyrillicGreeting);
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }

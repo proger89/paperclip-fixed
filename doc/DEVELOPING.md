@@ -55,6 +55,18 @@ Allow additional private hostnames (for example custom Tailscale hostnames):
 pnpm paperclipai allowed-hostname dotta-macbook-pro
 ```
 
+## Windows UTF-8 Notes
+
+Paperclip normalizes UTF-8 for its own managed subprocesses on Windows, including local adapter commands, workspace provision commands, and runtime service shells.
+
+Manual PowerShell 5.1 inspection commands are different: do not rely on the shell default encoding. When reading UTF-8 files manually in Windows PowerShell 5.1, use explicit encoding flags such as:
+
+```powershell
+Get-Content -Raw -Encoding utf8 .\doc\DEVELOPING.md
+```
+
+Likewise, avoid writing repo files from PowerShell 5.1 without explicitly selecting UTF-8.
+
 ## One-Command Local Run
 
 For a first-time local install, you can bootstrap and run in one command:

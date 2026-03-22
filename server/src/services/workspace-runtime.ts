@@ -5,6 +5,11 @@ import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import type { AdapterRuntimeServiceReport } from "@paperclipai/adapter-utils";
+import {
+  defaultShellForPlatform,
+  resolveShellCommandTarget,
+  withWindowsUtf8EnvDefaults,
+} from "@paperclipai/adapter-utils/server-utils";
 import type { Db } from "@paperclipai/db";
 import { workspaceRuntimeServices } from "@paperclipai/db";
 import { and, desc, eq, inArray } from "drizzle-orm";
@@ -235,18 +240,21 @@ async function executeProcess(input: {
   env?: NodeJS.ProcessEnv;
 }): Promise<{ stdout: string; stderr: string; code: number | null }> {
   const proc = await new Promise<{ stdout: string; stderr: string; code: number | null }>((resolve, reject) => {
+    const env = withWindowsUtf8EnvDefaults(input.env ?? process.env);
     const child = spawn(input.command, input.args, {
       cwd: input.cwd,
       stdio: ["ignore", "pipe", "pipe"],
-      env: input.env ?? process.env,
+      env,
     });
+    child.stdout?.setEncoding("utf8");
+    child.stderr?.setEncoding("utf8");
     let stdout = "";
     let stderr = "";
     child.stdout?.on("data", (chunk) => {
-      stdout += String(chunk);
+      stdout += chunk;
     });
     child.stderr?.on("data", (chunk) => {
-      stderr += String(chunk);
+      stderr += chunk;
     });
     child.on("error", reject);
     child.on("close", (code) => resolve({ stdout, stderr, code }));
@@ -327,10 +335,13 @@ async function runWorkspaceCommand(input: {
   env: NodeJS.ProcessEnv;
   label: string;
 }) {
-  const shell = process.env.SHELL?.trim() || "/bin/sh";
+  const shellTarget = resolveShellCommandTarget(input.command, {
+    env: input.env,
+    shell: defaultShellForPlatform(input.env),
+  });
   const proc = await executeProcess({
-    command: shell,
-    args: ["-c", input.command],
+    command: shellTarget.command,
+    args: shellTarget.args,
     cwd: input.cwd,
     env: input.env,
   });
@@ -423,10 +434,13 @@ async function recordWorkspaceCommandOperation(
     cwd: input.cwd,
     metadata: input.metadata ?? null,
     run: async () => {
-      const shell = process.env.SHELL?.trim() || "/bin/sh";
+      const shellTarget = resolveShellCommandTarget(input.command, {
+        env: input.env,
+        shell: defaultShellForPlatform(input.env),
+      });
       const result = await executeProcess({
-        command: shell,
-        args: ["-c", input.command],
+        command: shellTarget.command,
+        args: shellTarget.args,
         cwd: input.cwd,
         env: input.env,
       });
@@ -1122,22 +1136,27 @@ async function startLocalRuntimeService(input: {
     const portEnvKey = asString(portConfig.envKey, "PORT");
     env[portEnvKey] = String(port);
   }
-  const shell = process.env.SHELL?.trim() || "/bin/sh";
-  const child = spawn(shell, ["-lc", command], {
-    cwd: serviceCwd,
+  const shellTarget = resolveShellCommandTarget(command, {
     env,
+    shell: defaultShellForPlatform(env),
+  });
+  const child = spawn(shellTarget.command, shellTarget.args, {
+    cwd: serviceCwd,
+    env: withWindowsUtf8EnvDefaults(env),
     detached: process.platform !== "win32",
     stdio: ["ignore", "pipe", "pipe"],
   });
+  child.stdout?.setEncoding("utf8");
+  child.stderr?.setEncoding("utf8");
   let stderrExcerpt = "";
   let stdoutExcerpt = "";
   child.stdout?.on("data", async (chunk) => {
-    const text = String(chunk);
+    const text = chunk;
     stdoutExcerpt = (stdoutExcerpt + text).slice(-4096);
     if (input.onLog) await input.onLog("stdout", `[service:${serviceName}] ${text}`);
   });
   child.stderr?.on("data", async (chunk) => {
-    const text = String(chunk);
+    const text = chunk;
     stderrExcerpt = (stderrExcerpt + text).slice(-4096);
     if (input.onLog) await input.onLog("stderr", `[service:${serviceName}] ${text}`);
   });

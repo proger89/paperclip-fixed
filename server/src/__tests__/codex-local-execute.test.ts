@@ -28,6 +28,17 @@ console.log(JSON.stringify({ type: "turn.completed", usage: { input_tokens: 1, c
   await fs.chmod(commandPath, 0o755);
 }
 
+async function writeFakeCodexCommandWithShellSnapshotWarning(commandPath: string): Promise<void> {
+  const script = `#!/usr/bin/env node
+console.error("2026-03-22T11:34:03.680167Z WARN codex_core::shell_snapshot: Failed to create shell snapshot for powershell: Shell snapshot not supported yet for PowerShell");
+console.log(JSON.stringify({ type: "thread.started", thread_id: "codex-session-warning" }));
+console.log(JSON.stringify({ type: "item.completed", item: { type: "agent_message", text: "hello" } }));
+console.log(JSON.stringify({ type: "turn.completed", usage: { input_tokens: 1, cached_input_tokens: 0, output_tokens: 1 } }));
+`;
+  await fs.writeFile(commandPath, script, "utf8");
+  await fs.chmod(commandPath, 0o755);
+}
+
 type CapturePayload = {
   argv: string[];
   prompt: string;
@@ -39,6 +50,21 @@ type LogEntry = {
   stream: "stdout" | "stderr";
   chunk: string;
 };
+
+async function expectSharedFileReference(target: string, source: string): Promise<void> {
+  const [targetStat, sourceStat] = await Promise.all([fs.stat(target), fs.stat(source)]);
+  if (targetStat.dev === sourceStat.dev && targetStat.ino === sourceStat.ino) {
+    return;
+  }
+
+  const targetLstat = await fs.lstat(target);
+  if (targetLstat.isSymbolicLink()) {
+    expect(await fs.realpath(target)).toBe(await fs.realpath(source));
+    return;
+  }
+
+  expect(await fs.readFile(target, "utf8")).toBe(await fs.readFile(source, "utf8"));
+}
 
 describe("codex execute", () => {
   it("uses a Paperclip-managed CODEX_HOME outside worktree mode while preserving shared auth and config", async () => {
@@ -113,8 +139,7 @@ describe("codex execute", () => {
 
       const managedAuth = path.join(managedCodexHome, "auth.json");
       const managedConfig = path.join(managedCodexHome, "config.toml");
-      expect((await fs.lstat(managedAuth)).isSymbolicLink()).toBe(true);
-      expect(await fs.realpath(managedAuth)).toBe(await fs.realpath(path.join(sharedCodexHome, "auth.json")));
+      await expectSharedFileReference(managedAuth, path.join(sharedCodexHome, "auth.json"));
       expect((await fs.lstat(managedConfig)).isFile()).toBe(true);
       expect(await fs.readFile(managedConfig, "utf8")).toBe('model = "codex-mini-latest"\n');
       await expect(fs.lstat(path.join(sharedCodexHome, "companies", "company-1"))).rejects.toThrow();
@@ -224,8 +249,7 @@ describe("codex execute", () => {
       const isolatedAuth = path.join(isolatedCodexHome, "auth.json");
       const isolatedConfig = path.join(isolatedCodexHome, "config.toml");
 
-      expect((await fs.lstat(isolatedAuth)).isSymbolicLink()).toBe(true);
-      expect(await fs.realpath(isolatedAuth)).toBe(await fs.realpath(path.join(sharedCodexHome, "auth.json")));
+      await expectSharedFileReference(isolatedAuth, path.join(sharedCodexHome, "auth.json"));
       expect((await fs.lstat(isolatedConfig)).isFile()).toBe(true);
       expect(await fs.readFile(isolatedConfig, "utf8")).toBe('model = "codex-mini-latest"\n');
       expect((await fs.lstat(workspaceSkill)).isSymbolicLink()).toBe(true);
@@ -328,6 +352,60 @@ describe("codex execute", () => {
       else process.env.PAPERCLIP_IN_WORKTREE = previousPaperclipInWorktree;
       if (previousCodexHome === undefined) delete process.env.CODEX_HOME;
       else process.env.CODEX_HOME = previousCodexHome;
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("filters the known PowerShell shell snapshot warning from Codex stderr logs", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-codex-execute-shell-warning-"));
+    const workspace = path.join(root, "workspace");
+    const commandPath = path.join(root, "codex");
+    await fs.mkdir(workspace, { recursive: true });
+    await writeFakeCodexCommandWithShellSnapshotWarning(commandPath);
+
+    const previousHome = process.env.HOME;
+    const previousUserProfile = process.env.USERPROFILE;
+    process.env.HOME = root;
+    process.env.USERPROFILE = root;
+
+    try {
+      const logs: LogEntry[] = [];
+      const result = await execute({
+        runId: "run-shell-warning",
+        agent: {
+          id: "agent-1",
+          companyId: "company-1",
+          name: "Codex Coder",
+          adapterType: "codex_local",
+          adapterConfig: {},
+        },
+        runtime: {
+          sessionId: null,
+          sessionParams: null,
+          sessionDisplayId: null,
+          taskKey: null,
+        },
+        config: {
+          command: commandPath,
+          cwd: workspace,
+          promptTemplate: "Follow the paperclip heartbeat.",
+        },
+        context: {},
+        authToken: "run-jwt-token",
+        onLog: async (stream, chunk) => {
+          logs.push({ stream, chunk });
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.errorMessage).toBeNull();
+      expect(result.resultJson?.stderr).toBe("");
+      expect(logs.some((entry) => entry.chunk.includes("shell_snapshot"))).toBe(false);
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+      if (previousUserProfile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = previousUserProfile;
       await fs.rm(root, { recursive: true, force: true });
     }
   });

@@ -63,7 +63,9 @@ describe("cursor execute", () => {
     await writeFakeCursorCommand(commandPath);
 
     const previousHome = process.env.HOME;
+    const previousUserProfile = process.env.USERPROFILE;
     process.env.HOME = root;
+    process.env.USERPROFILE = root;
 
     let invocationPrompt = "";
     try {
@@ -125,6 +127,11 @@ describe("cursor execute", () => {
       } else {
         process.env.HOME = previousHome;
       }
+      if (previousUserProfile === undefined) {
+        delete process.env.USERPROFILE;
+      } else {
+        process.env.USERPROFILE = previousUserProfile;
+      }
       await fs.rm(root, { recursive: true, force: true });
     }
   });
@@ -138,7 +145,9 @@ describe("cursor execute", () => {
     await writeFakeCursorCommand(commandPath);
 
     const previousHome = process.env.HOME;
+    const previousUserProfile = process.env.USERPROFILE;
     process.env.HOME = root;
+    process.env.USERPROFILE = root;
 
     try {
       const result = await execute({
@@ -183,6 +192,11 @@ describe("cursor execute", () => {
       } else {
         process.env.HOME = previousHome;
       }
+      if (previousUserProfile === undefined) {
+        delete process.env.USERPROFILE;
+      } else {
+        process.env.USERPROFILE = previousUserProfile;
+      }
       await fs.rm(root, { recursive: true, force: true });
     }
   });
@@ -199,7 +213,9 @@ describe("cursor execute", () => {
     const asciiHeartDir = await createSkillDir(runtimeSkillsRoot, "ascii-heart");
 
     const previousHome = process.env.HOME;
+    const previousUserProfile = process.env.USERPROFILE;
     process.env.HOME = root;
+    process.env.USERPROFILE = root;
 
     try {
       const result = await execute({
@@ -255,6 +271,11 @@ describe("cursor execute", () => {
         delete process.env.HOME;
       } else {
         process.env.HOME = previousHome;
+      }
+      if (previousUserProfile === undefined) {
+        delete process.env.USERPROFILE;
+      } else {
+        process.env.USERPROFILE = previousUserProfile;
       }
       await fs.rm(root, { recursive: true, force: true });
     }

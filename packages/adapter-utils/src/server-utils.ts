@@ -26,6 +26,8 @@ interface SpawnTarget {
   args: string[];
 }
 
+export interface ShellCommandTarget extends SpawnTarget {}
+
 type ChildProcessWithEvents = ChildProcess & {
   on(event: "error", listener: (err: Error) => void): ChildProcess;
   on(
@@ -232,37 +234,48 @@ function windowsPathExts(env: NodeJS.ProcessEnv): string[] {
   return (env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM").split(";").filter(Boolean);
 }
 
-async function pathExists(candidate: string) {
+function isWindowsDirectlyExecutable(filePath: string, env: NodeJS.ProcessEnv): boolean {
+  const ext = path.extname(filePath);
+  if (!ext) return false;
+  return windowsPathExts(env).some((candidate) => candidate.toLowerCase() === ext.toLowerCase());
+}
+
+async function pathExists(candidate: string, platform = process.platform) {
   try {
-    await fs.access(candidate, process.platform === "win32" ? fsConstants.F_OK : fsConstants.X_OK);
+    await fs.access(candidate, platform === "win32" ? fsConstants.F_OK : fsConstants.X_OK);
     return true;
   } catch {
     return false;
   }
 }
 
-async function resolveCommandPath(command: string, cwd: string, env: NodeJS.ProcessEnv): Promise<string | null> {
+async function resolveCommandPath(
+  command: string,
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  platform = process.platform,
+): Promise<string | null> {
   const hasPathSeparator = command.includes("/") || command.includes("\\");
   if (hasPathSeparator) {
     const absolute = path.isAbsolute(command) ? command : path.resolve(cwd, command);
-    return (await pathExists(absolute)) ? absolute : null;
+    return (await pathExists(absolute, platform)) ? absolute : null;
   }
 
   const pathValue = env.PATH ?? env.Path ?? "";
-  const delimiter = process.platform === "win32" ? ";" : ":";
+  const delimiter = platform === "win32" ? ";" : ":";
   const dirs = pathValue.split(delimiter).filter(Boolean);
-  const exts = process.platform === "win32" ? windowsPathExts(env) : [""];
-  const hasExtension = process.platform === "win32" && path.extname(command).length > 0;
+  const exts = platform === "win32" ? windowsPathExts(env) : [""];
+  const hasExtension = platform === "win32" && path.extname(command).length > 0;
 
   for (const dir of dirs) {
     const candidates =
-      process.platform === "win32"
+      platform === "win32"
         ? hasExtension
           ? [path.join(dir, command)]
-          : exts.map((ext) => path.join(dir, `${command}${ext}`))
+          : [...exts.map((ext) => path.join(dir, `${command}${ext}`)), path.join(dir, command)]
         : [path.join(dir, command)];
     for (const candidate of candidates) {
-      if (await pathExists(candidate)) return candidate;
+      if (await pathExists(candidate, platform)) return candidate;
     }
   }
 
@@ -275,16 +288,69 @@ function quoteForCmd(arg: string) {
   return /[\s"&<>|^()]/.test(escaped) ? `"${escaped}"` : escaped;
 }
 
-async function resolveSpawnTarget(
+function parseShebangCommand(rawLine: string): { command: string; args: string[] } | null {
+  const match = rawLine.match(/^#!\s*(.+)$/);
+  if (!match) return null;
+
+  const tokens = match[1]
+    .trim()
+    .match(/"[^"]*"|'[^']*'|[^\s]+/g)
+    ?.map((token) => token.replace(/^['"]|['"]$/g, ""));
+  if (!tokens || tokens.length === 0) return null;
+
+  let [command, ...args] = tokens;
+  const base = path.posix.basename(command).toLowerCase();
+  if (base === "env") {
+    if (args.length === 0) return null;
+    [command, ...args] = args;
+  }
+
+  return { command, args };
+}
+
+async function readShebangSpawnTarget(
+  executable: string,
+  args: string[],
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
+): Promise<SpawnTarget | null> {
+  const scriptPath = path.isAbsolute(executable) ? executable : path.resolve(cwd, executable);
+  const firstLine = (await fs.readFile(scriptPath, "utf8").catch(() => null))
+    ?.split(/\r?\n/, 1)[0]
+    ?.trim();
+  if (!firstLine) return null;
+
+  const shebang = parseShebangCommand(firstLine);
+  if (!shebang) return null;
+
+  const interpreterBase = path.posix.basename(shebang.command).toLowerCase();
+  const interpreterCommand =
+    interpreterBase === "node" || interpreterBase === "node.exe"
+      ? process.execPath
+      : (await resolveCommandPath(shebang.command, cwd, env, platform)) ?? shebang.command;
+
+  return resolveSpawnTarget(
+    interpreterCommand,
+    [...shebang.args, executable, ...args],
+    cwd,
+    env,
+    { platform },
+  );
+}
+
+export async function resolveSpawnTarget(
   command: string,
   args: string[],
   cwd: string,
   env: NodeJS.ProcessEnv,
+  opts: { platform?: NodeJS.Platform } = {},
 ): Promise<SpawnTarget> {
-  const resolved = await resolveCommandPath(command, cwd, env);
+  const platform = opts.platform ?? process.platform;
+  const resolved = await resolveCommandPath(command, cwd, env, platform);
   const executable = resolved ?? command;
 
-  if (process.platform !== "win32") {
+  if (platform !== "win32") {
     return { command: executable, args };
   }
 
@@ -293,11 +359,129 @@ async function resolveSpawnTarget(
     const commandLine = [quoteForCmd(executable), ...args.map(quoteForCmd)].join(" ");
     return {
       command: shell,
-      args: ["/d", "/s", "/c", commandLine],
+      args: ["/d", "/s", "/c", `chcp 65001>nul && ${commandLine}`],
     };
   }
 
+  if (!isWindowsDirectlyExecutable(executable, env)) {
+    const shebangTarget = await readShebangSpawnTarget(executable, args, cwd, env, platform);
+    if (shebangTarget) return shebangTarget;
+  }
+
   return { command: executable, args };
+}
+
+export function defaultShellForPlatform(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  const configuredShell = env.SHELL?.trim();
+  if (configuredShell) return configuredShell;
+  if (platform === "win32") {
+    return env.ComSpec || process.env.ComSpec || "cmd.exe";
+  }
+  return "/bin/sh";
+}
+
+function isWindowsCmdShell(shell: string, platform: NodeJS.Platform): boolean {
+  if (platform !== "win32") return false;
+  const base = path.win32.basename(shell).toLowerCase();
+  return base === "cmd" || base === "cmd.exe";
+}
+
+function isPowerShellShell(shell: string, platform: NodeJS.Platform): boolean {
+  if (platform !== "win32") return false;
+  const base = path.win32.basename(shell).toLowerCase();
+  return base === "powershell" || base === "powershell.exe" || base === "pwsh" || base === "pwsh.exe";
+}
+
+function isPosixLikeShell(shell: string): boolean {
+  const base = path.win32.basename(shell).toLowerCase();
+  return base === "bash" || base === "bash.exe" || base === "sh" || base === "sh.exe";
+}
+
+function buildPowerShellUtf8Command(command: string): string {
+  const prelude = [
+    "[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)",
+    "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)",
+    "$OutputEncoding = [System.Text.UTF8Encoding]::new($false)",
+  ].join("; ");
+  return command.trim().length > 0 ? `${prelude}; ${command}` : prelude;
+}
+
+export function resolveShellCommandTarget(
+  command: string,
+  opts: {
+    env?: NodeJS.ProcessEnv;
+    shell?: string | null;
+    platform?: NodeJS.Platform;
+  } = {},
+): ShellCommandTarget {
+  const platform = opts.platform ?? process.platform;
+  const env = opts.env ?? process.env;
+  const shell = opts.shell?.trim() || defaultShellForPlatform(env, platform);
+
+  if (platform !== "win32") {
+    return { command: shell, args: ["-lc", command] };
+  }
+
+  if (isPowerShellShell(shell, platform)) {
+    return {
+      command: shell,
+      args: [
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        buildPowerShellUtf8Command(command),
+      ],
+    };
+  }
+
+  if (isWindowsCmdShell(shell, platform)) {
+    return {
+      command: shell,
+      args: ["/d", "/s", "/c", `chcp 65001>nul && ${command}`],
+    };
+  }
+
+  if (isPosixLikeShell(shell)) {
+    return {
+      command: shell,
+      args: ["-lc", command],
+    };
+  }
+
+  return {
+    command: shell,
+    args: [
+      "-NoLogo",
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      buildPowerShellUtf8Command(command),
+    ],
+  };
+}
+
+export function withWindowsUtf8EnvDefaults(
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform = process.platform,
+): NodeJS.ProcessEnv {
+  if (platform !== "win32") return env;
+
+  const next = { ...env };
+  if (!next.PYTHONIOENCODING) next.PYTHONIOENCODING = "UTF-8";
+  if (!next.PYTHONUTF8) next.PYTHONUTF8 = "1";
+  if (!next.LANG) next.LANG = "C.UTF-8";
+  if (!next.LC_ALL) next.LC_ALL = "C.UTF-8";
+  return next;
+}
+
+function coerceUtf8Text(chunk: unknown): string {
+  if (typeof chunk === "string") return chunk;
+  if (Buffer.isBuffer(chunk)) return chunk.toString("utf8");
+  return String(chunk);
 }
 
 export function ensurePathInEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
@@ -636,8 +820,7 @@ export function writePaperclipSkillSyncPreference(
 export async function ensurePaperclipSkillSymlink(
   source: string,
   target: string,
-  linkSkill: (source: string, target: string) => Promise<void> = (linkSource, linkTarget) =>
-    fs.symlink(linkSource, linkTarget),
+  linkSkill: (source: string, target: string) => Promise<void> = createPaperclipSkillLink,
 ): Promise<"created" | "repaired" | "skipped"> {
   const existing = await fs.lstat(target).catch(() => null);
   if (!existing) {
@@ -665,6 +848,26 @@ export async function ensurePaperclipSkillSymlink(
   await fs.unlink(target);
   await linkSkill(source, target);
   return "repaired";
+}
+
+function getErrnoCode(error: unknown): string | null {
+  return typeof error === "object" && error !== null && "code" in error && typeof error.code === "string"
+    ? error.code
+    : null;
+}
+
+function isSkillLinkPermissionError(error: unknown): boolean {
+  const code = getErrnoCode(error);
+  return code === "EPERM" || code === "EACCES";
+}
+
+export async function createPaperclipSkillLink(source: string, target: string): Promise<void> {
+  try {
+    await fs.symlink(source, target);
+  } catch (error) {
+    if (process.platform !== "win32" || !isSkillLinkPermissionError(error)) throw error;
+    await fs.symlink(path.resolve(source), target, "junction");
+  }
 }
 
 export async function removeMaintainerOnlySkillSymlinks(
@@ -750,7 +953,7 @@ export async function runChildProcess(
       delete rawMerged[key];
     }
 
-    const mergedEnv = ensurePathInEnv(rawMerged);
+    const mergedEnv = withWindowsUtf8EnvDefaults(ensurePathInEnv(rawMerged));
     void resolveSpawnTarget(command, args, opts.cwd, mergedEnv)
       .then((target) => {
         const child = spawn(target.command, target.args, {
@@ -762,9 +965,13 @@ export async function runChildProcess(
         const startedAt = new Date().toISOString();
 
         if (opts.stdin != null && child.stdin) {
-          child.stdin.write(opts.stdin);
+          child.stdin.setDefaultEncoding("utf8");
+          child.stdin.write(opts.stdin, "utf8");
           child.stdin.end();
         }
+
+        child.stdout?.setEncoding("utf8");
+        child.stderr?.setEncoding("utf8");
 
         if (typeof child.pid === "number" && child.pid > 0 && opts.onSpawn) {
           void opts.onSpawn({ pid: child.pid, startedAt }).catch((err) => {
@@ -793,7 +1000,7 @@ export async function runChildProcess(
             : null;
 
         child.stdout?.on("data", (chunk: unknown) => {
-          const text = String(chunk);
+          const text = coerceUtf8Text(chunk);
           stdout = appendWithCap(stdout, text);
           logChain = logChain
             .then(() => opts.onLog("stdout", text))
@@ -801,7 +1008,7 @@ export async function runChildProcess(
         });
 
         child.stderr?.on("data", (chunk: unknown) => {
-          const text = String(chunk);
+          const text = coerceUtf8Text(chunk);
           stderr = appendWithCap(stderr, text);
           logChain = logChain
             .then(() => opts.onLog("stderr", text))

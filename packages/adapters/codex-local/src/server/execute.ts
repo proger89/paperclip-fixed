@@ -12,6 +12,7 @@ import {
   redactEnvForLogs,
   ensureAbsoluteDirectory,
   ensureCommandResolvable,
+  createPaperclipSkillLink,
   ensurePaperclipSkillSymlink,
   ensurePathInEnv,
   readPaperclipRuntimeSkillEntries,
@@ -27,8 +28,10 @@ import { resolveCodexDesiredSkillNames } from "./skills.js";
 const __moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const CODEX_ROLLOUT_NOISE_RE =
   /^\d{4}-\d{2}-\d{2}T[^\s]+\s+ERROR\s+codex_core::rollout::list:\s+state db missing rollout path for thread\s+[a-z0-9-]+$/i;
+const CODEX_SHELL_SNAPSHOT_WARNING_RE =
+  /^\d{4}-\d{2}-\d{2}T[^\s]+\s+WARN\s+codex_core::shell_snapshot:\s+Failed to create shell snapshot for powershell:\s+Shell snapshot not supported yet for PowerShell$/i;
 
-function stripCodexRolloutNoise(text: string): string {
+function stripCodexStderrNoise(text: string): string {
   const parts = text.split(/\r?\n/);
   const kept: string[] = [];
   for (const part of parts) {
@@ -37,7 +40,7 @@ function stripCodexRolloutNoise(text: string): string {
       kept.push(part);
       continue;
     }
-    if (CODEX_ROLLOUT_NOISE_RE.test(trimmed)) continue;
+    if (CODEX_ROLLOUT_NOISE_RE.test(trimmed) || CODEX_SHELL_SNAPSHOT_WARNING_RE.test(trimmed)) continue;
     kept.push(part);
   }
   return kept.join("\n");
@@ -179,7 +182,7 @@ export async function ensureCodexSkillsInjected(
           if (linkSkill) {
             await linkSkill(entry.source, target);
           } else {
-            await fs.symlink(entry.source, target);
+            await createPaperclipSkillLink(entry.source, target);
           }
           await onLog(
             "stdout",
@@ -512,12 +515,12 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
           await onLog(stream, chunk);
           return;
         }
-        const cleaned = stripCodexRolloutNoise(chunk);
+        const cleaned = stripCodexStderrNoise(chunk);
         if (!cleaned.trim()) return;
         await onLog(stream, cleaned);
       },
     });
-    const cleanedStderr = stripCodexRolloutNoise(proc.stderr);
+    const cleanedStderr = stripCodexStderrNoise(proc.stderr);
     return {
       proc: {
         ...proc,
