@@ -67,12 +67,17 @@ describe("host-runtime serve", () => {
   });
 
   it("does not forward bridge or server secrets into host-executed child env", async () => {
+    const containerRoot = "/paperclip-test";
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-host-runtime-env-"));
     const workspace = path.join(root, "workspace");
     const commandPath = path.join(root, "codex");
     const capturePath = path.join(root, "capture.json");
     const instructionsDir = path.join(workspace, "instructions");
     const instructionsPath = path.join(instructionsDir, "AGENTS.md");
+    const containerWorkspace = `${containerRoot}/workspace`;
+    const containerCommandPath = `${containerRoot}/codex`;
+    const containerCapturePath = `${containerRoot}/capture.json`;
+    const containerInstructionsPath = `${containerWorkspace}/instructions/AGENTS.md`;
     await fs.mkdir(workspace, { recursive: true });
     await fs.mkdir(instructionsDir, { recursive: true });
     await fs.writeFile(instructionsPath, "Read the sibling files.\n", "utf8");
@@ -117,6 +122,7 @@ describe("host-runtime serve", () => {
       listen: `127.0.0.1:${port}`,
       token: "bridge-token",
       capability: ["codex"],
+      pathMap: [`${containerRoot}=${root}`],
     });
 
     try {
@@ -145,12 +151,12 @@ describe("host-runtime serve", () => {
               taskKey: null,
             },
             config: {
-              command: commandPath,
-              cwd: workspace,
+              command: containerCommandPath,
+              cwd: containerWorkspace,
               promptTemplate: "Continue your Paperclip work.",
-              instructionsFilePath: instructionsPath,
+              instructionsFilePath: containerInstructionsPath,
               env: {
-                PAPERCLIP_TEST_CAPTURE_PATH: capturePath,
+                PAPERCLIP_TEST_CAPTURE_PATH: containerCapturePath,
               },
             },
             context: {},
