@@ -172,7 +172,7 @@ async function statIfExists(targetPath: string) {
 }
 
 function normalizeBundleFileContent(content: string) {
-  return content.replace(/\r\n/g, "\n");
+  return content.replace(/\r\n/g, "\n").replace(/\n+$/u, "\n");
 }
 
 async function readManagedDefaultBundleMarker(rootPath: string): Promise<ManagedDefaultAgentBundleMarker | null> {

@@ -191,7 +191,8 @@ describe("agent instructions service", () => {
       .replace(
         "\nYour workspace and memory root remain `$AGENT_HOME`. Use `$PAPERCLIP_INSTRUCTIONS_FILE` and `$PAPERCLIP_INSTRUCTIONS_DIR` when you need the location of the managed instruction bundle.\n",
         "\n",
-      );
+      )
+      .replace(/\n+$/u, "\n");
     await fs.writeFile(path.join(managedRoot, "AGENTS.md"), legacyAgentsMd, "utf8");
     await fs.writeFile(path.join(managedRoot, "HEARTBEAT.md"), currentBundle["HEARTBEAT.md"], "utf8");
     await fs.writeFile(path.join(managedRoot, "SOUL.md"), currentBundle["SOUL.md"], "utf8");

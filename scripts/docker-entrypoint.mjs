@@ -75,6 +75,7 @@ console.log(
     defaultExecutionLocation: result.defaultExecutionLocation,
   }),
 );
+process.exit(0);
 `;
   const result = spawnSync(
     "node",
@@ -111,6 +112,7 @@ console.log(
     markedCurrent: result.markedCurrent,
   }),
 );
+process.exit(0);
 `;
   const result = spawnSync(
     "node",
