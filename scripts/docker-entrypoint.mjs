@@ -10,7 +10,7 @@ function sleep(ms) {
 function normalizePublicBaseUrl() {
   const raw = process.env.PAPERCLIP_PUBLIC_URL?.trim();
   if (raw) return raw.replace(/\/+$/, "");
-  return `http://127.0.0.1:${INTERNAL_PORT}`;
+  return `http://localhost:${INTERNAL_PORT}`;
 }
 
 function maybeAutoLoginCodex() {

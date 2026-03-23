@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import fsPromises from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -100,17 +101,40 @@ async function startTempDatabase() {
   return { connectionString, dataDir, instance };
 }
 
-function createAuthenticatedApp(db: Db) {
+async function removeDirWithRetries(dir: string, attempts = 10): Promise<void> {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      await fsPromises.rm(dir, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException | undefined)?.code;
+      if ((code !== "EBUSY" && code !== "EPERM") || attempt === attempts - 1) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+}
+
+function createAuthenticatedApp(
+  db: Db,
+  options: {
+    authPublicBaseUrl?: string;
+    allowedHostnames?: string[];
+  } = {},
+) {
+  const authPublicBaseUrl = options.authPublicBaseUrl ?? TRUSTED_ORIGIN;
+  const allowedHostnames = options.allowedHostnames ?? ["localhost"];
   const config = {
     ...loadConfig(),
     deploymentMode: "authenticated" as const,
     deploymentExposure: "private" as const,
     authDisableSignUp: false,
     authBaseUrlMode: "explicit" as const,
-    authPublicBaseUrl: "http://localhost",
-    allowedHostnames: ["localhost"],
+    authPublicBaseUrl,
+    allowedHostnames,
   };
-  const auth = createBetterAuthInstance(db, config, ["http://localhost"]);
+  const auth = createBetterAuthInstance(db, config);
   const betterAuthHandler = createBetterAuthHandler(auth);
   const resolveSession = (req: express.Request) => resolveBetterAuthSession(auth, req);
 
@@ -157,7 +181,7 @@ function createAuthenticatedApp(db: Db) {
     deploymentMode: "authenticated",
     deploymentExposure: "private",
     bindHost: "127.0.0.1",
-    allowedHostnames: ["localhost"],
+    allowedHostnames,
   }));
   app.use("/api", api);
   app.use(errorHandler);
@@ -237,7 +261,7 @@ describe("authenticated self-signup", () => {
     }
     await instance?.stop();
     if (dataDir) {
-      fs.rmSync(dataDir, { recursive: true, force: true });
+      await removeDirWithRetries(dataDir);
     }
   });
 
@@ -327,5 +351,19 @@ describe("authenticated self-signup", () => {
     expect(joinedCompaniesRes.status).toBe(200);
     const joinedIds = joinedCompaniesRes.body.map((company: { id: string }) => company.id).sort();
     expect(joinedIds).toEqual([ownerCompany.id, teammateCompany.id].sort());
+  });
+
+  it("allows signup from localhost when the configured public URL uses 127.0.0.1", async () => {
+    const loopbackApp = createAuthenticatedApp(db, {
+      authPublicBaseUrl: "http://127.0.0.1:3100",
+      allowedHostnames: ["127.0.0.1"],
+    });
+    const agent = request.agent(loopbackApp);
+
+    await signUp(agent, "Loopback User", "loopback-user@paperclip.local");
+    await createCompany(agent, "Loopback Company");
+
+    const sessionRes = await agent.get("/api/auth/get-session");
+    expect(sessionRes.status).toBe(200);
   });
 });

@@ -1026,7 +1026,7 @@ function buildInviteOnboardingManifest(
     allowedHostnames: opts.allowedHostnames
   });
 
-  const examplePaperclipApiUrl = agentFacingBaseUrl || requestUrl || "http://127.0.0.1:3100";
+  const examplePaperclipApiUrl = agentFacingBaseUrl || requestUrl || "http://localhost:3100";
 
   return {
     invite: toInviteSummaryResponse(req, token, invite),
@@ -1114,7 +1114,7 @@ export function buildInviteOnboardingTextDocument(
     : [];
   const requestUrl = requestBaseUrl(req);
   const examplePaperclipApiUrl =
-    resolveAgentFacingApiUrl() || requestUrl || "http://127.0.0.1:3100";
+    resolveAgentFacingApiUrl() || requestUrl || "http://localhost:3100";
 
   const lines: string[] = [];
   const appendBlock = (block: string) => {

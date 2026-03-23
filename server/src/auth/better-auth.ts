@@ -26,6 +26,7 @@ export type BetterAuthSessionResult = {
 };
 
 type BetterAuthInstance = ReturnType<typeof betterAuth>;
+const LOOPBACK_HOSTNAMES = ["localhost", "127.0.0.1", "::1"] as const;
 
 function headersFromNodeHeaders(rawHeaders: IncomingHttpHeaders): Headers {
   const headers = new Headers();
@@ -44,23 +45,67 @@ function headersFromExpressRequest(req: Request): Headers {
   return headersFromNodeHeaders(req.headers);
 }
 
+function isLoopbackHostname(hostname: string): boolean {
+  const normalized = hostname.trim().toLowerCase();
+  return LOOPBACK_HOSTNAMES.includes(normalized as (typeof LOOPBACK_HOSTNAMES)[number]);
+}
+
+function expandTrustedHostnames(hostname: string): string[] {
+  const normalized = hostname.trim().toLowerCase();
+  if (!normalized) return [];
+  return isLoopbackHostname(normalized) ? [...LOOPBACK_HOSTNAMES] : [normalized];
+}
+
+function addTrustedOrigin(
+  trustedOrigins: Set<string>,
+  protocol: string,
+  hostname: string,
+  port?: string | undefined,
+) {
+  const normalizedProtocol = protocol.endsWith(":") ? protocol.toLowerCase() : `${protocol.toLowerCase()}:`;
+  const normalizedHostname = hostname.trim().toLowerCase();
+  if (!normalizedHostname) return;
+  const formattedHostname =
+    normalizedHostname.includes(":") && !normalizedHostname.startsWith("[")
+      ? `[${normalizedHostname}]`
+      : normalizedHostname;
+  const origin = `${normalizedProtocol}//${formattedHostname}${port ? `:${port}` : ""}`;
+  trustedOrigins.add(origin);
+}
+
+function addTrustedOriginVariants(
+  trustedOrigins: Set<string>,
+  protocol: string,
+  hostname: string,
+  port?: string | undefined,
+) {
+  for (const candidate of expandTrustedHostnames(hostname)) {
+    addTrustedOrigin(trustedOrigins, protocol, candidate);
+    if (port) addTrustedOrigin(trustedOrigins, protocol, candidate, port);
+  }
+}
+
 export function deriveAuthTrustedOrigins(config: Config): string[] {
   const baseUrl = config.authBaseUrlMode === "explicit" ? config.authPublicBaseUrl : undefined;
   const trustedOrigins = new Set<string>();
+  let configuredPort: string | undefined;
 
   if (baseUrl) {
     try {
-      trustedOrigins.add(new URL(baseUrl).origin);
+      const parsed = new URL(baseUrl);
+      configuredPort = parsed.port || undefined;
+      addTrustedOriginVariants(trustedOrigins, parsed.protocol, parsed.hostname, configuredPort);
     } catch {
       // Better Auth will surface invalid base URL separately.
     }
   }
   if (config.deploymentMode === "authenticated") {
+    const fallbackPort = configuredPort ?? String(config.port);
     for (const hostname of config.allowedHostnames) {
       const trimmed = hostname.trim().toLowerCase();
       if (!trimmed) continue;
-      trustedOrigins.add(`https://${trimmed}`);
-      trustedOrigins.add(`http://${trimmed}`);
+      addTrustedOriginVariants(trustedOrigins, "https:", trimmed, fallbackPort);
+      addTrustedOriginVariants(trustedOrigins, "http:", trimmed, fallbackPort);
     }
   }
 

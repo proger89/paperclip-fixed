@@ -16,7 +16,7 @@ docker run --name paperclip \
   paperclip-local
 ```
 
-Open: `http://127.0.0.1:3100`
+Open: `http://localhost:3100`
 
 Data persistence:
 
@@ -37,7 +37,7 @@ Defaults:
 - host port: `3100`
 - persistent data dir: `./data/docker-paperclip`
 - persistent postgres dir: `./data/docker-paperclip/postgres`
-- public URL default: `http://127.0.0.1:3100`
+- public URL default: `http://localhost:3100`
 - Better Auth secret default: `paperclip-docker-dev-secret`
 - sign-up mode default: `PAPERCLIP_AUTH_DISABLE_SIGN_UP=false`
 
