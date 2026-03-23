@@ -893,6 +893,7 @@ export async function ensurePaperclipSkillSymlink(
   target: string,
   linkSkill: (source: string, target: string) => Promise<void> = createPaperclipSkillLink,
 ): Promise<"created" | "repaired" | "skipped"> {
+  const resolvedSource = path.resolve(source);
   const existing = await fs.lstat(target).catch(() => null);
   if (!existing) {
     await linkSkill(source, target);
@@ -907,7 +908,8 @@ export async function ensurePaperclipSkillSymlink(
   if (!linkedPath) return "skipped";
 
   const resolvedLinkedPath = path.resolve(path.dirname(target), linkedPath);
-  if (resolvedLinkedPath === source) {
+  const existingRealPath = await fs.realpath(target).catch(() => null);
+  if (resolvedLinkedPath === resolvedSource || (existingRealPath && path.resolve(existingRealPath) === resolvedSource)) {
     return "skipped";
   }
 
@@ -932,12 +934,40 @@ function isSkillLinkPermissionError(error: unknown): boolean {
   return code === "EPERM" || code === "EACCES";
 }
 
+async function resolveExistingSkillTargetRealPath(target: string): Promise<string | null> {
+  const existing = await fs.lstat(target).catch(() => null);
+  if (!existing?.isSymbolicLink()) return null;
+  const resolved = await fs.realpath(target).catch(() => null);
+  return resolved ? path.resolve(resolved) : null;
+}
+
 export async function createPaperclipSkillLink(source: string, target: string): Promise<void> {
+  const resolvedSource = path.resolve(source);
   try {
     await fs.symlink(source, target);
   } catch (error) {
+    const code = getErrnoCode(error);
+    if (code === "EEXIST") {
+      const existingTarget = await resolveExistingSkillTargetRealPath(target);
+      if (existingTarget && existingTarget === resolvedSource) {
+        return;
+      }
+      throw error;
+    }
     if (process.platform !== "win32" || !isSkillLinkPermissionError(error)) throw error;
-    await fs.symlink(path.resolve(source), target, "junction");
+    try {
+      await fs.symlink(resolvedSource, target, "junction");
+      return;
+    } catch (nestedError) {
+      const nestedCode = getErrnoCode(nestedError);
+      if (nestedCode === "EEXIST") {
+        const existingTarget = await resolveExistingSkillTargetRealPath(target);
+        if (existingTarget && existingTarget === resolvedSource) {
+          return;
+        }
+      }
+      throw nestedError;
+    }
   }
 }
 

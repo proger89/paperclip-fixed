@@ -218,6 +218,7 @@ export type {
   Goal,
   Approval,
   ApprovalComment,
+  PublishContentApprovalPayload,
   BudgetPolicy,
   BudgetPolicySummary,
   BudgetIncident,

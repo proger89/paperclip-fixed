@@ -11,6 +11,10 @@ import {
 import { buildPaperclipEnv } from "@paperclipai/adapter-utils/server-utils";
 
 const activeExecutions = new Map<string, AbortController>();
+const HOST_BRIDGE_LOG_QUEUE_MAX = 64;
+const HOST_BRIDGE_COALESCED_LOG_MAX_CHARS = 256 * 1024;
+const HOST_BRIDGE_COALESCED_WARNING =
+  "[paperclip] Host bridge log consumer lagged; some live log chunks were coalesced.\n";
 
 type BridgeErrorCode =
   | "host_bridge_unavailable"
@@ -105,6 +109,11 @@ function buildHostModeFailureResult(error: HostRuntimeBridgeError): AdapterExecu
   };
 }
 
+function appendWithCap(current: string, chunk: string, cap: number) {
+  const combined = current + chunk;
+  return combined.length > cap ? combined.slice(combined.length - cap) : combined;
+}
+
 async function readNdjsonStream(
   response: Response,
   handlers: {
@@ -124,6 +133,85 @@ async function readNdjsonStream(
   const decoder = new TextDecoder();
   let buffer = "";
   let result: AdapterExecutionResult | null = null;
+  let readerDone = false;
+  let queueLagged = false;
+  let fatalBridgeError: HostRuntimeBridgeError | null = null;
+  let notifyConsumer: (() => void) | null = null;
+  const queuedEvents: Array<
+    | { type: "log"; stream: "stdout" | "stderr"; chunk: string }
+    | { type: "meta"; meta: AdapterInvocationMeta }
+    | { type: "spawn"; meta: { pid: number; startedAt: string } }
+  > = [];
+  let coalescedStdout = "";
+  let coalescedStderr = "";
+
+  const wakeConsumer = () => {
+    const resolver = notifyConsumer;
+    notifyConsumer = null;
+    resolver?.();
+  };
+
+  const waitForConsumer = () => new Promise<void>((resolve) => {
+    notifyConsumer = resolve;
+  });
+
+  const enqueueLog = (stream: "stdout" | "stderr", chunk: string) => {
+    if (queuedEvents.length >= HOST_BRIDGE_LOG_QUEUE_MAX) {
+      queueLagged = true;
+      if (stream === "stdout") {
+        coalescedStdout = appendWithCap(coalescedStdout, chunk, HOST_BRIDGE_COALESCED_LOG_MAX_CHARS);
+      } else {
+        coalescedStderr = appendWithCap(coalescedStderr, chunk, HOST_BRIDGE_COALESCED_LOG_MAX_CHARS);
+      }
+      return;
+    }
+    queuedEvents.push({ type: "log", stream, chunk });
+    wakeConsumer();
+  };
+
+  const enqueueMeta = (meta: AdapterInvocationMeta) => {
+    queuedEvents.push({ type: "meta", meta });
+    wakeConsumer();
+  };
+
+  const enqueueSpawn = (meta: { pid: number; startedAt: string }) => {
+    queuedEvents.push({ type: "spawn", meta });
+    wakeConsumer();
+  };
+
+  const flushCoalescedLogs = async () => {
+    if (!queueLagged) return;
+    queueLagged = false;
+    await handlers.onLog("stderr", HOST_BRIDGE_COALESCED_WARNING);
+    if (coalescedStdout) {
+      await handlers.onLog("stdout", coalescedStdout);
+      coalescedStdout = "";
+    }
+    if (coalescedStderr) {
+      await handlers.onLog("stderr", coalescedStderr);
+      coalescedStderr = "";
+    }
+  };
+
+  const consumer = (async () => {
+    while (true) {
+      if (queuedEvents.length === 0) {
+        if (readerDone) break;
+        await waitForConsumer();
+        continue;
+      }
+      const next = queuedEvents.shift();
+      if (!next) continue;
+      if (next.type === "log") {
+        await handlers.onLog(next.stream, next.chunk);
+      } else if (next.type === "meta") {
+        await handlers.onMeta?.(next.meta);
+      } else {
+        await handlers.onSpawn?.(next.meta);
+      }
+    }
+    await flushCoalescedLogs();
+  })();
 
   while (true) {
     const { done, value } = await reader.read();
@@ -137,32 +225,46 @@ async function readNdjsonStream(
         try {
           event = JSON.parse(line) as HostRuntimeExecuteEvent;
         } catch {
+          readerDone = true;
+          wakeConsumer();
           throw new HostRuntimeBridgeError(
             "host_bridge_bad_response",
             "Host runtime bridge returned invalid NDJSON.",
           );
         }
         if (event.type === "log") {
-          await handlers.onLog(event.stream, event.chunk);
+          enqueueLog(event.stream, event.chunk);
         } else if (event.type === "meta") {
-          await handlers.onMeta?.(event.meta as AdapterInvocationMeta);
+          enqueueMeta(event.meta as AdapterInvocationMeta);
         } else if (event.type === "spawn") {
-          await handlers.onSpawn?.(event.meta);
+          enqueueSpawn(event.meta);
         } else if (event.type === "error") {
-          throw new HostRuntimeBridgeError(
+          fatalBridgeError = new HostRuntimeBridgeError(
             event.errorCode === "host_browser_unavailable"
               ? "host_browser_unavailable"
               : "host_bridge_bad_response",
             event.message,
           );
+          readerDone = true;
+          wakeConsumer();
+          break;
         } else if (event.type === "result") {
           result = event.result;
         }
       }
+      if (fatalBridgeError) break;
       newlineIndex = buffer.indexOf("\n");
     }
 
     if (done) break;
+    if (fatalBridgeError) break;
+  }
+  readerDone = true;
+  wakeConsumer();
+  await consumer;
+
+  if (fatalBridgeError) {
+    throw fatalBridgeError;
   }
 
   if (!result) {

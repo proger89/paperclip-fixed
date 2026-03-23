@@ -58,6 +58,7 @@ import { DEFAULT_CURSOR_LOCAL_MODEL } from "@paperclipai/adapter-cursor-local";
 import { DEFAULT_GEMINI_LOCAL_MODEL } from "@paperclipai/adapter-gemini-local";
 import { ensureOpenCodeModelConfiguredAndAvailable } from "@paperclipai/adapter-opencode-local/server";
 import {
+  createManagedDefaultAgentBundleMarker,
   loadDefaultAgentInstructionsBundle,
   resolveDefaultAgentInstructionsBundleRole,
 } from "../services/default-agent-instructions.js";
@@ -444,13 +445,21 @@ export function agentRoutes(db: Db) {
     const promptTemplate = typeof adapterConfig.promptTemplate === "string"
       ? adapterConfig.promptTemplate
       : "";
-    const files = promptTemplate.trim().length === 0
-      ? await loadDefaultAgentInstructionsBundle(resolveDefaultAgentInstructionsBundleRole(agent.role))
+    const defaultBundleRole = resolveDefaultAgentInstructionsBundleRole(agent.role);
+    const useDefaultBundle = promptTemplate.trim().length === 0;
+    const files = useDefaultBundle
+      ? await loadDefaultAgentInstructionsBundle(defaultBundleRole)
       : { "AGENTS.md": promptTemplate };
     const materialized = await instructions.materializeManagedBundle(
       agent,
       files,
-      { entryFile: "AGENTS.md", replaceExisting: false },
+      {
+        entryFile: "AGENTS.md",
+        replaceExisting: false,
+        managedDefaultBundleMarker: useDefaultBundle
+          ? createManagedDefaultAgentBundleMarker(defaultBundleRole)
+          : null,
+      },
     );
     const nextAdapterConfig = { ...materialized.adapterConfig };
     delete nextAdapterConfig.promptTemplate;

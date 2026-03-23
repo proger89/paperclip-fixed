@@ -53,6 +53,19 @@ console.log(JSON.stringify({ type: "turn.completed", usage: { input_tokens: 1, c
   await fs.chmod(commandPath, 0o755);
 }
 
+async function writeFakeCodexCommandWithQueueLagWarnings(commandPath: string): Promise<void> {
+  const script = `#!/usr/bin/env node
+for (let i = 0; i < 25; i += 1) {
+  console.error("2026-03-23T17:44:54.532753Z WARN codex_app_server_client: dropping in-process app-server event because consumer queue is full");
+}
+console.log(JSON.stringify({ type: "thread.started", thread_id: "codex-session-queue-lag" }));
+console.log(JSON.stringify({ type: "item.completed", item: { type: "agent_message", text: "hello" } }));
+console.log(JSON.stringify({ type: "turn.completed", usage: { input_tokens: 1, cached_input_tokens: 0, output_tokens: 1 } }));
+`;
+  await fs.writeFile(commandPath, script, "utf8");
+  await fs.chmod(commandPath, 0o755);
+}
+
 async function writeFakeCodexAuthFailureCommand(commandPath: string): Promise<void> {
   const script = `#!/usr/bin/env node
 console.log(JSON.stringify({
@@ -612,6 +625,61 @@ describe("codex execute", () => {
       expect(result.errorMessage).toBeNull();
       expect(result.resultJson?.stderr).toBe("");
       expect(logs.some((entry) => entry.chunk.includes("shell_snapshot"))).toBe(false);
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+      if (previousUserProfile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = previousUserProfile;
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("filters repeated Codex app-server queue lag warnings and emits one diagnostic line", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-codex-execute-queue-lag-"));
+    const workspace = path.join(root, "workspace");
+    const commandPath = path.join(root, "codex");
+    await fs.mkdir(workspace, { recursive: true });
+    await writeFakeCodexCommandWithQueueLagWarnings(commandPath);
+
+    const previousHome = process.env.HOME;
+    const previousUserProfile = process.env.USERPROFILE;
+    process.env.HOME = root;
+    process.env.USERPROFILE = root;
+
+    try {
+      const logs: LogEntry[] = [];
+      const result = await execute({
+        runId: "run-queue-lag",
+        agent: {
+          id: "agent-1",
+          companyId: "company-1",
+          name: "Codex Coder",
+          adapterType: "codex_local",
+          adapterConfig: {},
+        },
+        runtime: {
+          sessionId: null,
+          sessionParams: null,
+          sessionDisplayId: null,
+          taskKey: null,
+        },
+        config: {
+          command: commandPath,
+          cwd: workspace,
+          promptTemplate: "Follow the paperclip heartbeat.",
+        },
+        context: {},
+        authToken: "run-jwt-token",
+        onLog: async (stream, chunk) => {
+          logs.push({ stream, chunk });
+        },
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.errorMessage).toBeNull();
+      expect(result.resultJson?.stderr).toBe("");
+      expect(logs.some((entry) => entry.chunk.includes("consumer queue is full"))).toBe(false);
+      expect(logs.filter((entry) => entry.chunk.includes("Codex app-server client dropped 25 internal event(s)")).length).toBe(1);
     } finally {
       if (previousHome === undefined) delete process.env.HOME;
       else process.env.HOME = previousHome;

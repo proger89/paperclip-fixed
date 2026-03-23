@@ -125,8 +125,29 @@ function requireAuth(req: IncomingMessage, token: string) {
   return auth === `Bearer ${token}`;
 }
 
-function sendNdjsonEvent(res: ServerResponse, event: HostRuntimeExecuteEvent) {
-  res.write(`${JSON.stringify(event)}\n`);
+async function sendNdjsonEvent(res: ServerResponse, event: HostRuntimeExecuteEvent) {
+  if (res.destroyed || res.writableEnded) return;
+  const payload = `${JSON.stringify(event)}\n`;
+  const wrote = res.write(payload);
+  if (wrote || res.destroyed || res.writableEnded) return;
+  await new Promise<void>((resolve) => {
+    const cleanup = () => {
+      res.off("drain", handleDrain);
+      res.off("close", handleClose);
+      res.off("error", handleClose);
+    };
+    const handleDrain = () => {
+      cleanup();
+      resolve();
+    };
+    const handleClose = () => {
+      cleanup();
+      resolve();
+    };
+    res.on("drain", handleDrain);
+    res.on("close", handleClose);
+    res.on("error", handleClose);
+  });
 }
 
 async function cancelHostedRun(runId: string) {
@@ -231,19 +252,19 @@ async function executeOnHost(
     const result = await codexExecute({
       ...translatedCtx,
       onLog: async (stream, chunk) => {
-        sendNdjsonEvent(res, { type: "log", stream, chunk });
+        await sendNdjsonEvent(res, { type: "log", stream, chunk });
       },
       onMeta: async (meta) => {
-        sendNdjsonEvent(res, {
+        await sendNdjsonEvent(res, {
           type: "meta",
           meta: translateInvocationMeta(meta as unknown as Record<string, unknown>, maps) as unknown as AdapterInvocationMeta,
         });
       },
       onSpawn: async (meta) => {
-        sendNdjsonEvent(res, { type: "spawn", meta });
+        await sendNdjsonEvent(res, { type: "spawn", meta });
       },
     });
-    sendNdjsonEvent(res, { type: "result", result: translateExecutionResult(result, maps) });
+    await sendNdjsonEvent(res, { type: "result", result: translateExecutionResult(result, maps) });
     return;
   }
 
@@ -252,23 +273,23 @@ async function executeOnHost(
     const result = await claudeExecute({
       ...translatedCtx,
       onLog: async (stream, chunk) => {
-        sendNdjsonEvent(res, { type: "log", stream, chunk });
+        await sendNdjsonEvent(res, { type: "log", stream, chunk });
       },
       onMeta: async (meta) => {
-        sendNdjsonEvent(res, {
+        await sendNdjsonEvent(res, {
           type: "meta",
           meta: translateInvocationMeta(meta as unknown as Record<string, unknown>, maps) as unknown as AdapterInvocationMeta,
         });
       },
       onSpawn: async (meta) => {
-        sendNdjsonEvent(res, { type: "spawn", meta });
+        await sendNdjsonEvent(res, { type: "spawn", meta });
       },
     });
-    sendNdjsonEvent(res, { type: "result", result: translateExecutionResult(result, maps) });
+    await sendNdjsonEvent(res, { type: "result", result: translateExecutionResult(result, maps) });
     return;
   }
 
-  sendNdjsonEvent(res, {
+  await sendNdjsonEvent(res, {
     type: "error",
     errorCode: "host_runtime_adapter_unsupported",
     message: `Adapter ${payload.adapterType} is not supported by the host runtime bridge.`,
@@ -411,7 +432,7 @@ export async function hostRuntimeServe(opts: HostRuntimeServeOptions): Promise<S
         try {
           await executeOnHost(payload, pathMaps, capabilities, res);
         } catch (err) {
-          sendNdjsonEvent(res, {
+          await sendNdjsonEvent(res, {
             type: "error",
             errorCode: "host_runtime_execute_failed",
             message: err instanceof Error ? err.message : String(err),

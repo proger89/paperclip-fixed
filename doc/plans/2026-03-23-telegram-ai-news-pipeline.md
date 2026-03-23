@@ -144,9 +144,9 @@ The server does not need to hard-enforce this entire shape in the first iteratio
 
 ### Now
 
-- [ ] Add `publish_content` approval contract
-- [ ] Add approval UI rendering for content publication review
-- [ ] Document the payload contract and workflow
+- [x] Add `publish_content` approval contract
+- [x] Add approval UI rendering for content publication review
+- [x] Document the payload contract and workflow
 
 ### Next
 
@@ -173,3 +173,16 @@ Telegram ingestion and Telegram publication adapters are not implemented in this
 ### Safety blocker
 
 There is no server-side enforcement yet that blocks an agent from publishing unless a linked approval is approved. That should be addressed in a follow-up iteration before enabling unattended publication.
+
+## Iteration 1 Status
+
+Completed on 2026-03-23:
+
+- `publish_content` added to shared approval types
+- board approval UI renders publication payloads explicitly
+- payload contract documented in plan/spec/CLI docs
+
+Still blocked before unattended publishing:
+
+- server-side publisher guardrail is not enforced yet
+- Telegram ingestion/publication adapters are still assumed to enter via routine webhooks and agent actions

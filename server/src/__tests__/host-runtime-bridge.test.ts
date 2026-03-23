@@ -154,4 +154,61 @@ describe("host runtime bridge client", () => {
 
     expect(result.errorCode).toBe("host_bridge_unavailable");
   });
+
+  it("coalesces log chunks when the host bridge consumer lags", async () => {
+    const { server, baseUrl } = await startBridgeServer((req, res) => {
+      if (req.url !== "/v1/execute") {
+        res.writeHead(404).end();
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/x-ndjson" });
+      for (let idx = 0; idx < 240; idx += 1) {
+        res.write(`${JSON.stringify({ type: "log", stream: "stdout", chunk: `burst-${idx}\n` })}\n`);
+      }
+      res.end(`${JSON.stringify({
+        type: "result",
+        result: {
+          exitCode: 0,
+          signal: null,
+          timedOut: false,
+          summary: "done",
+        },
+      })}\n`);
+    });
+
+    process.env.PAPERCLIP_HOST_BRIDGE_URL = baseUrl;
+    process.env.PAPERCLIP_HOST_BRIDGE_TOKEN = "bridge-token";
+
+    const logs: string[] = [];
+    const result = await executeViaHostRuntimeBridge("codex_local", {
+      runId: "run-lagged",
+      agent: {
+        id: "agent-1",
+        companyId: "company-1",
+        name: "Host Codex",
+        adapterType: "codex_local",
+        adapterConfig: {},
+      },
+      runtime: {
+        sessionId: null,
+        sessionParams: null,
+        sessionDisplayId: null,
+        taskKey: null,
+      },
+      config: {
+        executionLocation: "host",
+      },
+      context: {},
+      onLog: async (_stream, chunk) => {
+        logs.push(chunk);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      },
+    });
+
+    await stopServer(server);
+
+    expect(result).toMatchObject({ exitCode: 0, summary: "done" });
+    expect(logs.some((chunk) => chunk.includes("Host bridge log consumer lagged"))).toBe(true);
+    expect(logs.some((chunk) => chunk.includes("burst-239"))).toBe(true);
+  });
 });

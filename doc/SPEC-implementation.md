@@ -63,7 +63,7 @@ V1 implementation extends this baseline into a company-centric, governance-aware
 - Agent lifecycle with org structure and adapter configuration
 - Task lifecycle with parent/child hierarchy and comments
 - Atomic task checkout and explicit task status transitions
-- Board approvals for hires and CEO strategy proposal
+- Board approvals for hires, CEO strategy, and governed external publication
 - Heartbeat invocation, status tracking, and cancellation
 - Cost event ingestion and rollups (agent/task/project/company)
 - Budget settings and hard-stop enforcement
@@ -257,14 +257,28 @@ Invariant: each event must attach to agent and company; rollups are aggregation,
 
 - `id` uuid pk
 - `company_id` uuid fk not null
-- `type` enum: `hire_agent | approve_ceo_strategy`
+- `type` enum: `hire_agent | approve_ceo_strategy | budget_override_required | publish_content`
 - `requested_by_agent_id` uuid fk `agents.id` null
 - `requested_by_user_id` uuid fk `users.id` null
-- `status` enum: `pending | approved | rejected | cancelled`
+- `status` enum: `pending | revision_requested | approved | rejected | cancelled`
 - `payload` jsonb not null
 - `decision_note` text null
 - `decided_by_user_id` uuid fk `users.id` null
 - `decided_at` timestamptz null
+
+For `publish_content`, the payload should reference editorial documents rather than embedding the full source of truth. Recommended fields:
+
+- `channel`
+- `destinationLabel`
+- `publishAt`
+- `authorVoice`
+- `sourceSummary`
+- `draftExcerpt`
+- `sourceDocumentId`
+- `draftDocumentId`
+- `finalDocumentId`
+- `riskFlags[]`
+- `safetyChecks[]`
 
 ## 7.11 `activity_log`
 
@@ -424,10 +438,11 @@ Side effects:
 |---|---|---|
 | Create company | yes | no |
 | Hire/create agent | yes (direct) | request via approval |
+| Publish external content | yes (approve/override) | request via approval |
 | Pause/resume agent | yes | no |
 | Create/update task | yes | yes |
 | Force reassign task | yes | limited |
-| Approve strategy/hire requests | yes | no |
+| Approve strategy/hire/publish requests | yes | no |
 | Report cost | yes | yes |
 | Set company budget | yes | no |
 | Set subordinate budget | yes | yes (manager subtree only) |
@@ -640,7 +655,16 @@ Board can bypass request flow and create agents directly via UI; direct create i
 
 Before first strategy approval, CEO may only draft tasks, not transition them to active execution states.
 
-## 12.3 Board Override
+## 12.3 Content Publication Approval
+
+1. An agent or board user creates `approval(type=publish_content, status=pending)` linked to the issue that owns the story.
+2. The payload points to the editorial artifacts: source notes, rewrite draft, final copy, risk flags, and checklist state.
+3. Board reviews what is being claimed, where it came from, what changed during rewrite, and where it will be published.
+4. Only after approval may a publishing agent execute the outbound publish and write the resulting URL or external artifact back as an `issue_work_product`.
+
+V1 treats `publish_content` as the canonical governance gate for Telegram-style editorial workflows. Server-side enforcement that blocks all outbound publication without an approved linked approval remains a follow-up requirement, not a completed V1 invariant.
+
+## 12.4 Board Override
 
 Board can at any time:
 
@@ -827,7 +851,7 @@ V1 is complete only when all criteria are true:
 2. A company can run at least one active heartbeat-enabled agent.
 3. Task checkout is conflict-safe with `409` on concurrent claims.
 4. Agents can update tasks/comments and report costs with API keys only.
-5. Board can approve/reject hire and CEO strategy requests in UI.
+5. Board can approve/reject hire, CEO strategy, and content publication requests in UI.
 6. Budget hard limit auto-pauses an agent and prevents new invocations.
 7. Repeated heartbeat failures auto-pause the affected agent and cancel queued work.
 8. Dashboard shows accurate counts/spend from live DB data.

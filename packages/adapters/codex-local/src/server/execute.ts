@@ -36,10 +36,13 @@ const CODEX_ROLLOUT_NOISE_RE =
   /^\d{4}-\d{2}-\d{2}T[^\s]+\s+ERROR\s+codex_core::rollout::list:\s+state db missing rollout path for thread\s+[a-z0-9-]+$/i;
 const CODEX_SHELL_SNAPSHOT_WARNING_RE =
   /^\d{4}-\d{2}-\d{2}T[^\s]+\s+WARN\s+codex_core::shell_snapshot:\s+Failed to create shell snapshot for powershell:\s+Shell snapshot not supported yet for PowerShell$/i;
+const CODEX_APP_SERVER_QUEUE_FULL_RE =
+  /^\d{4}-\d{2}-\d{2}T[^\s]+\s+WARN\s+codex_app_server_client:\s+dropping in-process app-server event because consumer queue is full$/i;
 
-function stripCodexStderrNoise(text: string): string {
+function stripCodexStderrNoise(text: string): { cleaned: string; appServerQueueFullWarnings: number } {
   const parts = text.split(/\r?\n/);
   const kept: string[] = [];
+  let appServerQueueFullWarnings = 0;
   for (const part of parts) {
     const trimmed = part.trim();
     if (!trimmed) {
@@ -47,9 +50,16 @@ function stripCodexStderrNoise(text: string): string {
       continue;
     }
     if (CODEX_ROLLOUT_NOISE_RE.test(trimmed) || CODEX_SHELL_SNAPSHOT_WARNING_RE.test(trimmed)) continue;
+    if (CODEX_APP_SERVER_QUEUE_FULL_RE.test(trimmed)) {
+      appServerQueueFullWarnings += 1;
+      continue;
+    }
     kept.push(part);
   }
-  return kept.join("\n");
+  return {
+    cleaned: kept.join("\n"),
+    appServerQueueFullWarnings,
+  };
 }
 
 function firstNonEmptyLine(text: string): string {
@@ -575,6 +585,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       });
     }
 
+    let appServerQueueFullWarnings = 0;
     const proc = await runChildProcess(runId, command, args, {
       cwd,
       env: runtimeEnv,
@@ -587,13 +598,20 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
           await onLog(stream, chunk);
           return;
         }
-        const cleaned = stripCodexStderrNoise(chunk);
+        const { cleaned, appServerQueueFullWarnings: nextQueueWarnings } = stripCodexStderrNoise(chunk);
+        appServerQueueFullWarnings += nextQueueWarnings;
         if (!cleaned.trim()) return;
         await onLog(stream, cleaned);
       },
       inheritParentEnv: false,
     });
-    const cleanedStderr = stripCodexStderrNoise(proc.stderr);
+    if (appServerQueueFullWarnings > 0) {
+      await onLog(
+        "stderr",
+        `[paperclip] Codex app-server client dropped ${appServerQueueFullWarnings} internal event(s) because the consumer lagged; live logs may be coalesced.\n`,
+      );
+    }
+    const cleanedStderr = stripCodexStderrNoise(proc.stderr).cleaned;
     return {
       proc: {
         ...proc,

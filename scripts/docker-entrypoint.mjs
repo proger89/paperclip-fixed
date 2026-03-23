@@ -95,6 +95,42 @@ console.log(
   }
 }
 
+function maybeRepairManagedInstructionBundles() {
+  const inlineRepairScript = `
+import { createDb } from "./packages/db/src/index.ts";
+import { repairManagedInstructionBundles } from "./server/src/services/managed-instruction-bundles.ts";
+
+const db = createDb(process.env.DATABASE_URL);
+const result = await repairManagedInstructionBundles(db);
+console.log(
+  "Managed instruction bundle repair",
+  JSON.stringify({
+    checked: result.checked,
+    updated: result.updated,
+    repairedLegacy: result.repairedLegacy,
+    markedCurrent: result.markedCurrent,
+  }),
+);
+`;
+  const result = spawnSync(
+    "node",
+    [
+      "--import",
+      "./server/node_modules/tsx/dist/loader.mjs",
+      "--input-type=module",
+      "-e",
+      inlineRepairScript,
+    ],
+    {
+      stdio: "inherit",
+      env: process.env,
+    },
+  );
+  if (result.status !== 0) {
+    console.error("Managed instruction bundle repair failed inside docker entrypoint.");
+  }
+}
+
 async function waitForHealth(serverProcess, timeoutMs = 120_000) {
   const startedAt = Date.now();
   while (!serverProcess.killed && serverProcess.exitCode === null) {
@@ -186,6 +222,7 @@ void (async () => {
   try {
     const health = await waitForHealth(serverProcess);
     maybeRepairHybridLocalAgents();
+    maybeRepairManagedInstructionBundles();
     maybeCreateBootstrapInvite(health);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

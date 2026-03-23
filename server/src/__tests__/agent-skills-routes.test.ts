@@ -332,7 +332,7 @@ describe("agent skill routes", () => {
         adapterType: "claude_local",
       }),
       { "AGENTS.md": "You are QA." },
-      { entryFile: "AGENTS.md", replaceExisting: false },
+      { entryFile: "AGENTS.md", replaceExisting: false, managedDefaultBundleMarker: null },
     );
     expect(mockAgentService.update).toHaveBeenCalledWith(
       "11111111-1111-4111-8111-111111111111",
@@ -374,7 +374,14 @@ describe("agent skill routes", () => {
         "SOUL.md": expect.stringContaining("CEO Persona"),
         "TOOLS.md": expect.stringContaining("# Tools"),
       }),
-      { entryFile: "AGENTS.md", replaceExisting: false },
+      expect.objectContaining({
+        entryFile: "AGENTS.md",
+        replaceExisting: false,
+        managedDefaultBundleMarker: expect.objectContaining({
+          source: "paperclip_default_agent_bundle",
+          role: "ceo",
+        }),
+      }),
     );
   });
 
@@ -398,7 +405,14 @@ describe("agent skill routes", () => {
       expect.objectContaining({
         "AGENTS.md": expect.stringContaining("Keep the work moving until it's done."),
       }),
-      { entryFile: "AGENTS.md", replaceExisting: false },
+      expect.objectContaining({
+        entryFile: "AGENTS.md",
+        replaceExisting: false,
+        managedDefaultBundleMarker: expect.objectContaining({
+          source: "paperclip_default_agent_bundle",
+          role: "default",
+        }),
+      }),
     );
   });
 

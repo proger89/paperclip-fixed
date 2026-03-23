@@ -3,6 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { agentInstructionsService } from "../services/agent-instructions.js";
+import {
+  MANAGED_DEFAULT_AGENT_BUNDLE_MARKER_FILE,
+  loadDefaultAgentInstructionsBundle,
+} from "../services/default-agent-instructions.js";
 
 type TestAgent = {
   id: string;
@@ -160,5 +164,157 @@ describe("agent instructions service", () => {
       "AGENTS.md",
       "docs/TOOLS.md",
     ]);
+  });
+
+  it("repairs a legacy CEO managed bundle to the current instruction contract", async () => {
+    const paperclipHome = await makeTempDir("paperclip-agent-instructions-legacy-ceo-");
+    cleanupDirs.add(paperclipHome);
+    process.env.PAPERCLIP_HOME = paperclipHome;
+    process.env.PAPERCLIP_INSTANCE_ID = "test-instance";
+
+    const managedRoot = path.join(
+      paperclipHome,
+      "instances",
+      "test-instance",
+      "companies",
+      "company-1",
+      "agents",
+      "agent-1",
+      "instructions",
+    );
+    await fs.mkdir(managedRoot, { recursive: true });
+    const currentBundle = await loadDefaultAgentInstructionsBundle("ceo");
+    const legacyAgentsMd = currentBundle["AGENTS.md"]
+      .replaceAll("$PAPERCLIP_INSTRUCTIONS_DIR/HEARTBEAT.md", "$AGENT_HOME/HEARTBEAT.md")
+      .replaceAll("$PAPERCLIP_INSTRUCTIONS_DIR/SOUL.md", "$AGENT_HOME/SOUL.md")
+      .replaceAll("$PAPERCLIP_INSTRUCTIONS_DIR/TOOLS.md", "$AGENT_HOME/TOOLS.md")
+      .replace(
+        "\nYour workspace and memory root remain `$AGENT_HOME`. Use `$PAPERCLIP_INSTRUCTIONS_FILE` and `$PAPERCLIP_INSTRUCTIONS_DIR` when you need the location of the managed instruction bundle.\n",
+        "\n",
+      );
+    await fs.writeFile(path.join(managedRoot, "AGENTS.md"), legacyAgentsMd, "utf8");
+    await fs.writeFile(path.join(managedRoot, "HEARTBEAT.md"), currentBundle["HEARTBEAT.md"], "utf8");
+    await fs.writeFile(path.join(managedRoot, "SOUL.md"), currentBundle["SOUL.md"], "utf8");
+    await fs.writeFile(path.join(managedRoot, "TOOLS.md"), currentBundle["TOOLS.md"], "utf8");
+
+    const svc = agentInstructionsService();
+    const result = await svc.repairManagedDefaultBundle({
+      ...makeAgent({
+        instructionsBundleMode: "managed",
+        instructionsRootPath: managedRoot,
+        instructionsEntryFile: "AGENTS.md",
+        instructionsFilePath: path.join(managedRoot, "AGENTS.md"),
+      }),
+      role: "ceo",
+    });
+
+    expect(result.updated).toBe(true);
+    expect(result.reason).toBe("repaired_legacy");
+    await expect(fs.readFile(path.join(managedRoot, "AGENTS.md"), "utf8")).resolves.toContain("$PAPERCLIP_INSTRUCTIONS_DIR/HEARTBEAT.md");
+    await expect(fs.readFile(path.join(managedRoot, "AGENTS.md"), "utf8")).resolves.not.toContain("$AGENT_HOME/HEARTBEAT.md");
+    const marker = JSON.parse(await fs.readFile(path.join(managedRoot, MANAGED_DEFAULT_AGENT_BUNDLE_MARKER_FILE), "utf8")) as Record<string, unknown>;
+    expect(marker).toMatchObject({
+      source: "paperclip_default_agent_bundle",
+      role: "ceo",
+    });
+  });
+
+  it("marks an unmodified current CEO managed bundle as system-owned without changing visible files", async () => {
+    const paperclipHome = await makeTempDir("paperclip-agent-instructions-current-ceo-");
+    cleanupDirs.add(paperclipHome);
+    process.env.PAPERCLIP_HOME = paperclipHome;
+    process.env.PAPERCLIP_INSTANCE_ID = "test-instance";
+
+    const svc = agentInstructionsService();
+    const currentBundle = await loadDefaultAgentInstructionsBundle("ceo");
+    const agent = {
+      ...makeAgent({}),
+      role: "ceo",
+    };
+    await svc.materializeManagedBundle(agent, currentBundle, {
+      entryFile: "AGENTS.md",
+      replaceExisting: true,
+      managedDefaultBundleMarker: null,
+    });
+
+    const repaired = await svc.repairManagedDefaultBundle({
+      ...agent,
+      adapterConfig: {
+        instructionsBundleMode: "managed",
+        instructionsRootPath: path.join(
+          paperclipHome,
+          "instances",
+          "test-instance",
+          "companies",
+          "company-1",
+          "agents",
+          "agent-1",
+          "instructions",
+        ),
+        instructionsEntryFile: "AGENTS.md",
+        instructionsFilePath: path.join(
+          paperclipHome,
+          "instances",
+          "test-instance",
+          "companies",
+          "company-1",
+          "agents",
+          "agent-1",
+          "instructions",
+          "AGENTS.md",
+        ),
+      },
+    });
+
+    expect(repaired.updated).toBe(true);
+    expect(repaired.reason).toBe("marked_current");
+    const bundle = await svc.getBundle({
+      ...agent,
+      adapterConfig: repaired.adapterConfig,
+    });
+    expect(bundle.files.map((file) => file.path)).toEqual(["AGENTS.md", "HEARTBEAT.md", "SOUL.md", "TOOLS.md"]);
+  });
+
+  it("does not overwrite a manually edited managed CEO bundle", async () => {
+    const paperclipHome = await makeTempDir("paperclip-agent-instructions-custom-ceo-");
+    cleanupDirs.add(paperclipHome);
+    process.env.PAPERCLIP_HOME = paperclipHome;
+    process.env.PAPERCLIP_INSTANCE_ID = "test-instance";
+
+    const managedRoot = path.join(
+      paperclipHome,
+      "instances",
+      "test-instance",
+      "companies",
+      "company-1",
+      "agents",
+      "agent-1",
+      "instructions",
+    );
+    await fs.mkdir(managedRoot, { recursive: true });
+    const currentBundle = await loadDefaultAgentInstructionsBundle("ceo");
+    await fs.writeFile(
+      path.join(managedRoot, "AGENTS.md"),
+      `${currentBundle["AGENTS.md"]}\nCustom operator note.\n`,
+      "utf8",
+    );
+    await fs.writeFile(path.join(managedRoot, "HEARTBEAT.md"), currentBundle["HEARTBEAT.md"], "utf8");
+    await fs.writeFile(path.join(managedRoot, "SOUL.md"), currentBundle["SOUL.md"], "utf8");
+    await fs.writeFile(path.join(managedRoot, "TOOLS.md"), currentBundle["TOOLS.md"], "utf8");
+
+    const svc = agentInstructionsService();
+    const result = await svc.repairManagedDefaultBundle({
+      ...makeAgent({
+        instructionsBundleMode: "managed",
+        instructionsRootPath: managedRoot,
+        instructionsEntryFile: "AGENTS.md",
+        instructionsFilePath: path.join(managedRoot, "AGENTS.md"),
+      }),
+      role: "ceo",
+    });
+
+    expect(result.updated).toBe(false);
+    await expect(fs.readFile(path.join(managedRoot, "AGENTS.md"), "utf8")).resolves.toContain("Custom operator note.");
+    await expect(fs.readFile(path.join(managedRoot, MANAGED_DEFAULT_AGENT_BUNDLE_MARKER_FILE), "utf8")).rejects.toThrow();
   });
 });

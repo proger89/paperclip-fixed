@@ -2,6 +2,15 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { notFound, unprocessable } from "../errors.js";
 import { resolveHomeAwarePath, resolvePaperclipInstanceRoot } from "../home-paths.js";
+import {
+  MANAGED_DEFAULT_AGENT_BUNDLE_MARKER_FILE,
+  createManagedDefaultAgentBundleMarker,
+  isManagedDefaultAgentBundleMarker,
+  loadDefaultAgentInstructionsBundle,
+  loadLegacyDefaultAgentInstructionsBundles,
+  resolveDefaultAgentInstructionsBundleRole,
+  type ManagedDefaultAgentBundleMarker,
+} from "./default-agent-instructions.js";
 
 const ENTRY_FILE_DEFAULT = "AGENTS.md";
 const MODE_KEY = "instructionsBundleMode";
@@ -73,6 +82,13 @@ type BundleState = {
   warnings: string[];
   legacyPromptTemplateActive: boolean;
   legacyBootstrapPromptTemplateActive: boolean;
+};
+
+type ManagedDefaultBundleRepairResult = {
+  updated: boolean;
+  reason: "repaired_legacy" | "marked_current" | null;
+  adapterConfig: Record<string, unknown>;
+  bundle: AgentInstructionsBundle;
 };
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -155,6 +171,57 @@ async function statIfExists(targetPath: string) {
   return fs.stat(targetPath).catch(() => null);
 }
 
+function normalizeBundleFileContent(content: string) {
+  return content.replace(/\r\n/g, "\n");
+}
+
+async function readManagedDefaultBundleMarker(rootPath: string): Promise<ManagedDefaultAgentBundleMarker | null> {
+  const markerPath = path.join(rootPath, MANAGED_DEFAULT_AGENT_BUNDLE_MARKER_FILE);
+  const raw = await fs.readFile(markerPath, "utf8").catch(() => null);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return isManagedDefaultAgentBundleMarker(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeManagedDefaultBundleMarker(rootPath: string, marker: ManagedDefaultAgentBundleMarker) {
+  const markerPath = path.join(rootPath, MANAGED_DEFAULT_AGENT_BUNDLE_MARKER_FILE);
+  await fs.mkdir(path.dirname(markerPath), { recursive: true });
+  await fs.writeFile(markerPath, `${JSON.stringify(marker, null, 2)}\n`, "utf8");
+}
+
+async function clearManagedDefaultBundleMarker(rootPath: string) {
+  await fs.rm(path.join(rootPath, MANAGED_DEFAULT_AGENT_BUNDLE_MARKER_FILE), { force: true });
+}
+
+async function readBundleFiles(rootPath: string): Promise<Record<string, string>> {
+  const relativePaths = await listFilesRecursive(rootPath);
+  const files = await Promise.all(relativePaths.map(async (relativePath) => {
+    const absolutePath = resolvePathWithinRoot(rootPath, relativePath);
+    const content = await fs.readFile(absolutePath, "utf8");
+    return [relativePath, content] as const;
+  }));
+  return Object.fromEntries(files);
+}
+
+function bundleFilesEqual(left: Record<string, string>, right: Record<string, string>) {
+  const leftKeys = Object.keys(left).sort((a, b) => a.localeCompare(b));
+  const rightKeys = Object.keys(right).sort((a, b) => a.localeCompare(b));
+  if (leftKeys.length !== rightKeys.length) return false;
+  for (let idx = 0; idx < leftKeys.length; idx += 1) {
+    const leftKey = leftKeys[idx];
+    const rightKey = rightKeys[idx];
+    if (leftKey !== rightKey) return false;
+    if (normalizeBundleFileContent(left[leftKey] ?? "") !== normalizeBundleFileContent(right[rightKey] ?? "")) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function shouldIgnoreInstructionsEntry(entry: { name: string; isDirectory(): boolean; isFile(): boolean }) {
   if (entry.name === "." || entry.name === "..") return true;
   if (entry.isDirectory()) {
@@ -162,7 +229,9 @@ function shouldIgnoreInstructionsEntry(entry: { name: string; isDirectory(): boo
   }
   if (!entry.isFile()) return false;
   return (
-    IGNORED_INSTRUCTIONS_FILE_NAMES.has(entry.name)
+    entry.name === MANAGED_DEFAULT_AGENT_BUNDLE_MARKER_FILE
+    || entry.name === `${MANAGED_DEFAULT_AGENT_BUNDLE_MARKER_FILE}.tmp`
+    || IGNORED_INSTRUCTIONS_FILE_NAMES.has(entry.name)
     || entry.name.startsWith("._")
     || entry.name.endsWith(".pyc")
     || entry.name.endsWith(".pyo")
@@ -446,6 +515,7 @@ export function agentInstructionsService() {
         await fs.writeFile(entryPath, legacyInstructions, "utf8");
       }
     }
+    await clearManagedDefaultBundleMarker(managedRoot);
 
     return {
       adapterConfig: nextConfig,
@@ -493,6 +563,7 @@ export function agentInstructionsService() {
       const nextEntryContent = exported.files[nextEntryFile] ?? exported.files[exported.entryFile] ?? "";
       await writeBundleFiles(nextRootPath, { [nextEntryFile]: nextEntryContent });
     }
+    await clearManagedDefaultBundleMarker(nextRootPath);
 
     const nextConfig = applyBundleConfig(state.config, {
       mode: nextMode,
@@ -532,6 +603,7 @@ export function agentInstructionsService() {
     const absolutePath = resolvePathWithinRoot(prepared.state.rootPath!, relativePath);
     await fs.mkdir(path.dirname(absolutePath), { recursive: true });
     await fs.writeFile(absolutePath, content, "utf8");
+    await clearManagedDefaultBundleMarker(prepared.state.rootPath!);
     const nextAgent = { ...agent, adapterConfig: prepared.adapterConfig };
     const [bundle, file] = await Promise.all([
       getBundle(nextAgent),
@@ -555,6 +627,7 @@ export function agentInstructionsService() {
     }
     const absolutePath = resolvePathWithinRoot(state.rootPath, normalizedPath);
     await fs.rm(absolutePath, { force: true });
+    await clearManagedDefaultBundleMarker(state.rootPath);
     const bundle = await getBundle(agent);
     return { bundle, adapterConfig: state.config };
   }
@@ -595,6 +668,7 @@ export function agentInstructionsService() {
       clearLegacyPromptTemplate?: boolean;
       replaceExisting?: boolean;
       entryFile?: string;
+      managedDefaultBundleMarker?: ManagedDefaultAgentBundleMarker | null;
     },
   ): Promise<{ bundle: AgentInstructionsBundle; adapterConfig: Record<string, unknown> }> {
     const rootPath = resolveManagedInstructionsRoot(agent);
@@ -617,6 +691,11 @@ export function agentInstructionsService() {
     if (!normalizedEntries.some(([relativePath]) => relativePath === entryFile)) {
       await fs.writeFile(resolvePathWithinRoot(rootPath, entryFile), "", "utf8");
     }
+    if (options?.managedDefaultBundleMarker) {
+      await writeManagedDefaultBundleMarker(rootPath, options.managedDefaultBundleMarker);
+    } else {
+      await clearManagedDefaultBundleMarker(rootPath);
+    }
 
     const adapterConfig = applyBundleConfig(asRecord(agent.adapterConfig), {
       mode: "managed",
@@ -628,6 +707,88 @@ export function agentInstructionsService() {
     return { bundle, adapterConfig };
   }
 
+  async function repairManagedDefaultBundle(
+    agent: AgentLike & { role?: string | null },
+  ): Promise<ManagedDefaultBundleRepairResult> {
+    const role = resolveDefaultAgentInstructionsBundleRole(typeof agent.role === "string" ? agent.role : "");
+    const state = deriveBundleState(agent);
+    const fallbackBundle = await getBundle(agent);
+    if (!state.rootPath || state.mode !== "managed") {
+      return {
+        updated: false,
+        reason: null,
+        adapterConfig: state.config,
+        bundle: fallbackBundle,
+      };
+    }
+
+    const managedRoot = resolveManagedInstructionsRoot(agent);
+    if (path.resolve(state.rootPath) !== managedRoot) {
+      return {
+        updated: false,
+        reason: null,
+        adapterConfig: state.config,
+        bundle: fallbackBundle,
+      };
+    }
+
+    const [marker, currentDefaultFiles, legacyDefaults] = await Promise.all([
+      readManagedDefaultBundleMarker(state.rootPath),
+      loadDefaultAgentInstructionsBundle(role),
+      loadLegacyDefaultAgentInstructionsBundles(role),
+    ]);
+    const existingFiles = await readBundleFiles(state.rootPath).catch(() => null);
+    if (!existingFiles) {
+      return {
+        updated: false,
+        reason: null,
+        adapterConfig: state.config,
+        bundle: fallbackBundle,
+      };
+    }
+
+    const currentMarker = createManagedDefaultAgentBundleMarker(role);
+    if (bundleFilesEqual(existingFiles, currentDefaultFiles)) {
+      if (!marker || marker.role !== currentMarker.role || marker.version !== currentMarker.version) {
+        await writeManagedDefaultBundleMarker(state.rootPath, currentMarker);
+        return {
+          updated: true,
+          reason: "marked_current",
+          adapterConfig: state.config,
+          bundle: await getBundle(agent),
+        };
+      }
+      return {
+        updated: false,
+        reason: null,
+        adapterConfig: state.config,
+        bundle: fallbackBundle,
+      };
+    }
+
+    const matchedLegacy = legacyDefaults.find((entry) => bundleFilesEqual(existingFiles, entry.files));
+    if (!matchedLegacy) {
+      return {
+        updated: false,
+        reason: null,
+        adapterConfig: state.config,
+        bundle: fallbackBundle,
+      };
+    }
+
+    const repaired = await materializeManagedBundle(agent, currentDefaultFiles, {
+      replaceExisting: true,
+      entryFile: "AGENTS.md",
+      managedDefaultBundleMarker: currentMarker,
+    });
+    return {
+      updated: true,
+      reason: "repaired_legacy",
+      adapterConfig: repaired.adapterConfig,
+      bundle: repaired.bundle,
+    };
+  }
+
   return {
     getBundle,
     readFile,
@@ -637,5 +798,6 @@ export function agentInstructionsService() {
     exportFiles,
     ensureManagedBundle: ensureWritableBundle,
     materializeManagedBundle,
+    repairManagedDefaultBundle,
   };
 }

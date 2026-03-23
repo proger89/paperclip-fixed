@@ -698,6 +698,8 @@ Three-pane layout. Middle pane renders the approval payload nicely based on type
 
 **`approve_ceo_strategy` type:** Shows the strategy text, proposed goal breakdown, initial task structure.
 
+**`publish_content` type:** Shows outbound channel/destination, author voice, publish time, source summary, draft excerpt, linked editorial document ids, risk flags, and checklist state so the board can review publication safety quickly.
+
 For pending approvals, prominent action buttons at the top of the middle pane:
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -820,7 +822,7 @@ Items are grouped by category, with the most actionable items first:
 - Requester + relative timestamp
 - Key payload summary (1 line — agent name/role for hires, plan title for strategies)
 - Inline **[Approve]** and **[Reject]** buttons for simple approvals (hire_agent). Clicking Approve/Reject shows a brief confirmation with an optional decision note field.
-- **[View details →]** link for complex approvals (approve_ceo_strategy) that need full review before deciding.
+- **[View details →]** link for complex approvals (`approve_ceo_strategy`, `publish_content`) that need full review before deciding.
 - "See all approvals →" link in the category header navigates to `/approvals`.
 
 **Alerts.** Agent errors (failed heartbeats, error status) and budget alerts (agents or company approaching 80% or 100% limits). Each links to the relevant agent or cost page.

@@ -1,5 +1,19 @@
 import type { ApprovalStatus, ApprovalType } from "../constants.js";
 
+export interface PublishContentApprovalPayload {
+  channel?: string;
+  destinationLabel?: string;
+  publishAt?: string;
+  authorVoice?: string;
+  sourceSummary?: string;
+  draftExcerpt?: string;
+  finalDocumentId?: string;
+  draftDocumentId?: string;
+  sourceDocumentId?: string;
+  riskFlags?: string[];
+  safetyChecks?: string[];
+}
+
 export interface Approval {
   id: string;
   companyId: string;

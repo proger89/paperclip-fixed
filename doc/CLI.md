@@ -138,6 +138,7 @@ pnpm paperclipai agent local-cli claudecoder --company-id <company-id>
 pnpm paperclipai approval list --company-id <company-id> [--status pending]
 pnpm paperclipai approval get <approval-id>
 pnpm paperclipai approval create --company-id <company-id> --type hire_agent --payload '{"name":"..."}' [--issue-ids <id1,id2>]
+pnpm paperclipai approval create --company-id <company-id> --type publish_content --payload '{"channel":"telegram","destinationLabel":"@author_channel","finalDocumentId":"uuid","riskFlags":["needs source link"]}' [--issue-ids <id1,id2>]
 pnpm paperclipai approval approve <approval-id> [--decision-note "..."]
 pnpm paperclipai approval reject <approval-id> [--decision-note "..."]
 pnpm paperclipai approval request-revision <approval-id> [--decision-note "..."]
