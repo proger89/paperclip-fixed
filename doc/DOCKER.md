@@ -4,6 +4,8 @@ Run Paperclip in Docker without installing Node or pnpm locally.
 
 ## One-liner (build + run)
 
+Direct single-container `docker run` is still useful for image debugging, but the recommended local runtime is Compose. Compose now starts a dedicated PostgreSQL container so Paperclip boots reliably on Docker Desktop for Windows instead of relying on embedded PostgreSQL inside a bind mount.
+
 ```sh
 docker build -t paperclip-local . && \
 docker run --name paperclip \
@@ -14,16 +16,15 @@ docker run --name paperclip \
   paperclip-local
 ```
 
-Open: `http://localhost:3100`
+Open: `http://127.0.0.1:3100`
 
 Data persistence:
 
-- Embedded PostgreSQL data
 - uploaded assets
 - local secrets key
 - local agent workspace data
 
-All persisted under your bind mount (`./data/docker-paperclip` in the example above).
+In Compose mode, Paperclip app data stays under your bind mount (`./data/docker-paperclip` by default) and PostgreSQL data stays in the named Docker volume `paperclip_postgres_data`.
 
 ## Compose Quickstart
 
@@ -35,6 +36,23 @@ Defaults:
 
 - host port: `3100`
 - persistent data dir: `./data/docker-paperclip`
+- database volume: `paperclip_postgres_data`
+- public URL default: `http://127.0.0.1:3100`
+- Better Auth secret default: `paperclip-docker-dev-secret`
+
+On first startup in authenticated mode, the container now auto-generates a bootstrap CEO invite if no instance admin exists yet and prints the invite URL into the Paperclip container logs. Example:
+
+```sh
+docker compose -f docker-compose.quickstart.yml logs paperclip
+```
+
+Look for:
+
+```text
+Invite URL: http://127.0.0.1:3100/invite/pcp_bootstrap_...
+```
+
+If `OPENAI_API_KEY` is present in the container environment, the Docker entrypoint also runs `codex login --with-api-key` automatically so the `codex_local` adapter probe works without a separate manual login step inside the container.
 
 Optional overrides:
 
@@ -53,6 +71,8 @@ Start Paperclip:
 ```sh
 docker compose -f docker-compose.hybrid.yml up --build
 ```
+
+Hybrid Compose now also uses the dedicated `postgres` service by default, so it avoids the Windows bind-mount failure mode from embedded PostgreSQL.
 
 Start the host bridge on the host machine:
 
@@ -84,7 +104,7 @@ paperclipai host-runtime serve `
 
 Hybrid mode requirements:
 
-- Set `PAPERCLIP_HOST_BRIDGE_TOKEN` on both the container and the host bridge.
+- `docker-compose.hybrid.yml` defaults `PAPERCLIP_HOST_BRIDGE_TOKEN` to `paperclip-hybrid-dev-token` for local private use. Override it for any shared or non-local deployment.
 - Set `PAPERCLIP_HOST_BRIDGE_URL` if you do not want the default `http://host.docker.internal:4243`.
 - Every path the host-executed adapter needs must be covered by a `--path-map` entry.
 - Absolute `command`, `cwd`, env path values, and absolute path-like `extraArgs` entries are translated through the configured path maps before the host process starts.

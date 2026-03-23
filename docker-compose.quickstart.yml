@@ -1,18 +1,40 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: "${PAPERCLIP_POSTGRES_USER:-paperclip}"
+      POSTGRES_PASSWORD: "${PAPERCLIP_POSTGRES_PASSWORD:-paperclip}"
+      POSTGRES_DB: "${PAPERCLIP_POSTGRES_DB:-paperclip}"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PAPERCLIP_POSTGRES_USER:-paperclip} -d ${PAPERCLIP_POSTGRES_DB:-paperclip}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - paperclip_postgres_data:/var/lib/postgresql/data
+
   paperclip:
     build:
       context: .
       dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "${PAPERCLIP_PORT:-3100}:3100"
     environment:
       HOST: "0.0.0.0"
       PAPERCLIP_HOME: "/paperclip"
+      DATABASE_URL: "${DATABASE_URL:-postgres://${PAPERCLIP_POSTGRES_USER:-paperclip}:${PAPERCLIP_POSTGRES_PASSWORD:-paperclip}@postgres:5432/${PAPERCLIP_POSTGRES_DB:-paperclip}}"
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
       PAPERCLIP_DEPLOYMENT_MODE: "authenticated"
       PAPERCLIP_DEPLOYMENT_EXPOSURE: "private"
-      PAPERCLIP_PUBLIC_URL: "${PAPERCLIP_PUBLIC_URL:-http://localhost:3100}"
-      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set}"
+      PAPERCLIP_PUBLIC_URL: "${PAPERCLIP_PUBLIC_URL:-http://127.0.0.1:3100}"
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:-paperclip-docker-dev-secret}"
+      PAPERCLIP_AUTO_BOOTSTRAP_CEO: "${PAPERCLIP_AUTO_BOOTSTRAP_CEO:-true}"
     volumes:
       - "${PAPERCLIP_DATA_DIR:-./data/docker-paperclip}:/paperclip"
+
+volumes:
+  paperclip_postgres_data:

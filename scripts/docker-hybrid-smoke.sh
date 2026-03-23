@@ -287,16 +287,31 @@ EOF
   chmod +x "$smoke_root/fake-codex.mjs"
 }
 
+resolve_node_command() {
+  if command -v node >/dev/null 2>&1; then
+    command -v node
+    return 0
+  fi
+  if command -v node.exe >/dev/null 2>&1; then
+    command -v node.exe
+    return 0
+  fi
+  echo "Hybrid smoke failed: node is not available on PATH" >&2
+  return 1
+}
+
 start_host_bridge_if_needed() {
   if [[ "$HYBRID_SMOKE_START_BRIDGE" != "true" ]]; then
     return 0
   fi
 
+  local node_cmd
+  node_cmd="$(resolve_node_command)"
   mkdir -p "$(dirname "$HOST_BRIDGE_LOG_FILE")"
   : >"$HOST_BRIDGE_LOG_FILE"
   (
     cd "$REPO_ROOT"
-    pnpm paperclipai host-runtime serve \
+    "$node_cmd" cli/node_modules/tsx/dist/cli.mjs cli/src/index.ts host-runtime serve \
       --listen "127.0.0.1:${HOST_BRIDGE_PORT}" \
       --token "$PAPERCLIP_HOST_BRIDGE_TOKEN" \
       --path-map "/paperclip=${DATA_DIR}" \
