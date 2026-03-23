@@ -3,3 +3,24 @@
 > node scripts/dev-runner.mjs watch
 
 [paperclip] dev mode: local_trusted (default)
+[paperclip] building plugin sdk...
+
+> @paperclipai/plugin-sdk@1.0.0 build D:\new-projects\paperclip\packages\plugins\sdk
+> pnpm --filter @paperclipai/shared build && tsc
+
+
+> @paperclipai/shared@0.3.1 build D:\new-projects\paperclip\packages\shared
+> tsc
+
+
+> @paperclipai/server@0.3.1 dev:watch D:\new-projects\paperclip\server
+> cross-env PAPERCLIP_MIGRATION_PROMPT=never PAPERCLIP_MIGRATION_AUTO_APPLY=true tsx watch --ignore ../ui/node_modules --ignore ../ui/.vite --ignore ../ui/dist src/index.ts
+
+[06:39:35] [33mWARN[39m: [36mEmbedded PostgreSQL port is in use; using next free port (requestedPort=55432, selectedPort=55433)[39m
+[06:39:35] [32mINFO[39m: [36mUsing embedded PostgreSQL because no DATABASE_URL set (dataDir=C:\Users\test\.paperclip-worktrees\instances\repo-local\db, port=55433)[39m
+[06:39:35] [32mINFO[39m: [36mEmbedded PostgreSQL cluster already exists (C:\Users\test\.paperclip-worktrees\instances\repo-local\db\PG_VERSION); skipping init[39m
+[06:39:45] [31mERROR[39m: [36mEmbedded PostgreSQL failed; showing buffered startup logs[39m [90m{"phase":"start","recentLogs":["2026-03-23 09:39:45.652 MSK [15736] FATAL:  pre-existing shared memory block is still in use","2026-03-23 09:39:45.652 MSK [15736] HINT:  Check if there are any old server processes still running, and terminate them.","2026-03-23 09:39:45.652 MSK [15736] LOG:  database system is shut down"]}[39m
+[06:39:45] [31mERROR[39m: [36mPaperclip server failed to start[39m
+D:\new-projects\paperclip\server:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @paperclipai/server@0.3.1 dev:watch: `cross-env PAPERCLIP_MIGRATION_PROMPT=never PAPERCLIP_MIGRATION_AUTO_APPLY=true tsx watch --ignore ../ui/node_modules --ignore ../ui/.vite --ignore ../ui/dist src/index.ts`
+Exit status 3221225786

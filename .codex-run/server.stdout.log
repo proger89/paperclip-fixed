@@ -2,11 +2,913 @@
 > @paperclipai/server@0.3.1 dev D:\new-projects\paperclip\server
 > tsx src/index.ts
 
-[06:38:01] [32mINFO[39m: [36mUsing embedded PostgreSQL because no DATABASE_URL set (dataDir=C:\Users\test\.paperclip-worktrees\instances\repo-local\db, port=54329)[39m
-[06:38:01] [32mINFO[39m: [36mEmbedded PostgreSQL cluster already exists (C:\Users\test\.paperclip-worktrees\instances\repo-local\db\PG_VERSION); skipping init[39m
-[06:38:01] [33mWARN[39m: [36mRemoving stale embedded PostgreSQL lock file[39m
-[06:38:11] [31mERROR[39m: [36mEmbedded PostgreSQL failed; showing buffered startup logs[39m [90m{"phase":"start","recentLogs":["2026-03-23 09:38:11.607 MSK [19692] FATAL:  pre-existing shared memory block is still in use","2026-03-23 09:38:11.607 MSK [19692] HINT:  Check if there are any old server processes still running, and terminate them.","2026-03-23 09:38:11.607 MSK [19692] LOG:  database system is shut down"]}[39m
-[06:38:11] [31mERROR[39m: [36mPaperclip server failed to start[39m
-D:\new-projects\paperclip\server:
- ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @paperclipai/server@0.3.1 dev: `tsx src/index.ts`
-Exit status 1
+[06:41:00] [32mINFO[39m: [36mUsing embedded PostgreSQL because no DATABASE_URL set (dataDir=C:\Users\test\.paperclip-worktrees\instances\repo-local\db, port=54329)[39m
+[06:41:00] [32mINFO[39m: [36mEmbedded PostgreSQL cluster already exists (C:\Users\test\.paperclip-worktrees\instances\repo-local\db\PG_VERSION); skipping init[39m
+[06:41:01] [32mINFO[39m: [36mEmbedded PostgreSQL ready[39m
+
+[36m██████╗  █████╗ ██████╗ ███████╗██████╗  ██████╗██╗     ██╗██████╗ [0m
+[36m██╔══██╗██╔══██╗██╔══██╗██╔════╝██╔══██╗██╔════╝██║     ██║██╔══██╗[0m
+[36m██████╔╝███████║██████╔╝█████╗  ██████╔╝██║     ██║     ██║██████╔╝[0m
+[36m██╔═══╝ ██╔══██║██╔═══╝ ██╔══╝  ██╔══██╗██║     ██║     ██║██╔═══╝ [0m
+[36m██║     ██║  ██║██║     ███████╗██║  ██║╚██████╗███████╗██║██║     [0m
+[36m╚═╝     ╚═╝  ╚═╝╚═╝     ╚══════╝╚═╝  ╚═╝ ╚═════╝╚══════╝╚═╝╚═╝     [0m
+[34m  ───────────────────────────────────────────────────────[0m
+[2mMode            [0m [32membedded-postgres[0m  |  [35mstatic-ui[0m
+[2mDeploy          [0m local_trusted (private)
+[2mAuth            [0m [32mready[0m
+[2mServer          [0m 3100
+[2mAPI             [0m http://127.0.0.1:3100/api [2m(health: http://127.0.0.1:3100/api/health)[0m
+[2mUI              [0m http://127.0.0.1:3100
+[2mDatabase        [0m C:\Users\test\.paperclip-worktrees\instances\repo-local\db [2m(pg:54329)[0m
+[2mMigrations      [0m already applied
+[2mAgent JWT       [0m [32mset[0m
+[2mHeartbeat       [0m enabled [2m(30000ms)[0m
+[2mDB Backup       [0m enabled [2m(every 60m, keep 30d)[0m
+[2mBackup Dir      [0m C:\Users\test\.paperclip-worktrees\instances\repo-local\data\backups
+[2mConfig          [0m D:\
+ew-projects\paperclip\.paperclip\config.json
+[34m  ───────────────────────────────────────────────────────[0m
+
+[06:41:01] [32mINFO[39m: [36mplugin job coordinator started — listening to lifecycle events[39m [90m{"service":"plugin-job-coordinator"}[39m
+[06:41:01] [32mINFO[39m: [36mplugin job scheduler started[39m [90m{"service":"plugin-job-scheduler","tickIntervalMs":30000,"maxConcurrentJobs":10}[39m
+[06:41:01] [32mINFO[39m: [36minitializing plugin tool dispatcher[39m [90m{"service":"plugin-tool-dispatcher"}[39m
+[06:41:01] [32mINFO[39m: [36mplugin-loader: loading all ready plugins[39m [90m{"service":"plugin-loader"}[39m
+[06:41:01] [32mINFO[39m: [36mAutomatic database backups enabled[39m [90m{"intervalMinutes":60,"retentionDays":30,"backupDir":"C:\Users\test\.paperclip-worktrees\instances\repo-local\data\backups"}[39m
+[06:41:01] [32mINFO[39m: [36mServer listening on 127.0.0.1:3100[39m
+[06:41:01] [32mINFO[39m: [36mloaded tools from ready plugins[39m [90m{"service":"plugin-tool-dispatcher","readyPlugins":0,"registeredTools":0}[39m
+[06:41:01] [32mINFO[39m: [36mplugin tool dispatcher initialized[39m [90m{"service":"plugin-tool-dispatcher","totalTools":0}[39m
+[06:41:01] [32mINFO[39m: [36mplugin-loader: no ready plugins to load[39m [90m{"service":"plugin-loader"}[39m
+[06:41:31] [31mERROR[39m: [36mscheduler tick error[39m [90m{"service":"plugin-job-scheduler"}[39m
+    err: "could not open file \"base/16384/1249\": No such file or directory"
+[06:41:31] [31mERROR[39m: [36mperiodic heartbeat recovery failed[39m 
+    err: {
+      "type": "PostgresError",
+      "message": "could not open file \"base/16384/24728\": No such file or directory",
+      "stack":
+          PostgresError: could not open file "base/16384/24728": No such file or directory
+              at ErrorResponse (file:///D:/new-projects/paperclip/node_modules/.pnpm/postgres@3.4.8/node_modules/postgres/src/connection.js:815:30)
+              at handle (file:///D:/new-projects/paperclip/node_modules/.pnpm/postgres@3.4.8/node_modules/postgres/src/connection.js:489:6)
+              at Socket.data (file:///D:/new-projects/paperclip/node_modules/.pnpm/postgres@3.4.8/node_modules/postgres/src/connection.js:324:9)
+              at Socket.emit (node:events:518:28)
+              at addChunk (node:internal/streams/readable:561:12)
+              at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+              at Readable.push (node:internal/streams/readable:392:5)
+              at TCP.onStreamRead (node:internal/stream_base_commons:189:23)
+      "name": "PostgresError",
+      "severity_local": "ERROR",
+      "severity": "ERROR",
+      "code": "58P01",
+      "file": "md.c",
+      "line": "675",
+      "routine": "mdopenfork"
+    }
+[06:41:31] [31mERROR[39m: [36mroutine scheduler tick failed[39m 
+    err: {
+      "type": "PostgresError",
+      "message": "could not open file \"base/16384/26522\": No such file or directory",
+      "stack":
+          PostgresError: could not open file "base/16384/26522": No such file or directory
+              at ErrorResponse (file:///D:/new-projects/paperclip/node_modules/.pnpm/postgres@3.4.8/node_modules/postgres/src/connection.js:815:30)
+              at handle (file:///D:/new-projects/paperclip/node_modules/.pnpm/postgres@3.4.8/node_modules/postgres/src/connection.js:489:6)
+              at Socket.data (file:///D:/new-projects/paperclip/node_modules/.pnpm/postgres@3.4.8/node_modules/postgres/src/connection.js:324:9)
+              at Socket.emit (node:events:518:28)
+              at addChunk (node:internal/streams/readable:561:12)
+              at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+              at Readable.push (node:internal/streams/readable:392:5)
+              at TCP.onStreamRead (node:internal/stream_base_commons:189:23)
+      "name": "PostgresError",
+      "severity_local": "ERROR",
+      "severity": "ERROR",
+      "code": "58P01",
+      "file": "md.c",
+      "line": "675",
+      "routine": "mdopenfork"
+    }
+[06:41:31] [31mERROR[39m: [36mheartbeat timer tick failed[39m 
+    err: {
+      "type": "PostgresError",
+      "message": "could not read blocks 0..0 in file \"base/16384/24621\": No such file or directory",
+      "stack":
+          PostgresError: could not read blocks 0..0 in file "base/16384/24621": No such file or directory
+              at ErrorResponse (file:///D:/new-projects/paperclip/node_modules/.pnpm/postgres@3.4.8/node_modules/postgres/src/connection.js:815:30)
+              at handle (file:///D:/new-projects/paperclip/node_modules/.pnpm/postgres@3.4.8/node_modules/postgres/src/connection.js:489:6)
+              at Socket.data (file:///D:/new-projects/paperclip/node_modules/.pnpm/postgres@3.4.8/node_modules/postgres/src/connection.js:324:9)
+              at Socket.emit (node:events:518:28)
+              at addChunk (node:internal/streams/readable:561:12)
+              at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+              at Readable.push (node:internal/streams/readable:392:5)
+              at TCP.onStreamRead (node:internal/stream_base_commons:189:23)
+      "name": "PostgresError",
+      "severity_local": "ERROR",
+      "severity": "ERROR",
+      "code": "58P01",
+      "file": "md.c",
+      "line": "2050",
+      "routine": "md_readv_report"
+    }
+[06:41:39] [32mINFO[39m: [36mGET / 200[39m
+[06:41:41] [32mINFO[39m: [36mGET /TEL/agents/founding-engineer/runs/5104a57c-79b2-4f0e-ae28-d18db30b87c9 200[39m
+[06:41:41] [32mINFO[39m: [36mGET /assets/index-DMKgkynP.css 200[39m
+[06:41:41] [32mINFO[39m: [36mGET /assets/index-dW_Co4rW.js 200[39m
+[06:41:41] [32mINFO[39m: [36mGET /site.webmanifest 200[39m
+[06:41:41] [32mINFO[39m: [36mGET / 200[39m
+[06:41:41] [32mINFO[39m: [36mGET /api/auth/get-session 200[39m
+[06:41:41] [31mERROR[39m: [36mGET /api/companies 500 — could not open file "base/16384/1249": No such file or directory[39m [90m{"errorContext":{"message":"could not open file \"base/16384/1249\": No such file or directory","stack":"PostgresError: could not open file \"base/16384/1249\": No such file or directory\n    at ErrorResponse (file:///D:/new-projects/paperclip/node_modules/.pnpm/postgres@3.4.8/node_modules/postgres/src/connection.js:815:30)\n    at handle (file:///D:/new-projects/paperclip/node_modules/.pnpm/postgres@3.4.8/node_modules/postgres/src/connection.js:489:6)\n    at Socket.data (file:///D:/new-projects/paperclip/node_modules/.pnpm/postgres@3.4.8/node_modules/postgres/src/connection.js:324:9)\n    at Socket.emit (node:events:518:28)\n    at addChunk (node:internal/streams/readable:561:12)\n    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)\n    at Readable.push (node:internal/streams/readable:392:5)\n    at TCP.onStreamRead (node:internal/stream_base_commons:189:23)","name":"PostgresError"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "PostgresError",
+      "message": "could not open file \"base/16384/1249\": No such file or directory",
+      "stack":
+          PostgresError: could not open file "base/16384/1249": No such file or directory
+              at ErrorResponse (file:///D:/new-projects/paperclip/node_modules/.pnpm/postgres@3.4.8/node_modules/postgres/src/connection.js:815:30)
+              at handle (file:///D:/new-projects/paperclip/node_modules/.pnpm/postgres@3.4.8/node_modules/postgres/src/connection.js:489:6)
+              at Socket.data (file:///D:/new-projects/paperclip/node_modules/.pnpm/postgres@3.4.8/node_modules/postgres/src/connection.js:324:9)
+              at Socket.emit (node:events:518:28)
+              at addChunk (node:internal/streams/readable:561:12)
+              at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+              at Readable.push (node:internal/streams/readable:392:5)
+              at TCP.onStreamRead (node:internal/stream_base_commons:189:23)
+      "name": "PostgresError",
+      "severity_local": "ERROR",
+      "severity": "ERROR",
+      "code": "58P01",
+      "position": "409",
+      "file": "md.c",
+      "line": "675",
+      "routine": "mdopenfork"
+    }
+[06:41:41] [32mINFO[39m: [36mGET /sw.js 200[39m
+[06:41:41] [31mERROR[39m: [36mGET /api/plugins/ui-contributions 500 — could not open file "base/16384/25879": No such file or directory[39m [90m{"errorContext":{"message":"could not open file \"base/16384/25879\": No such file or directory","stack":"PostgresError: could not open file \"base/16384/25879\": No such file or directory\n    at ErrorResponse (file:///D:/new-projects/paperclip/node_modules/.pnpm/postgres@3.4.8/node_modules/postgres/src/connection.js:815:30)\n    at handle (file:///D:/new-projects/paperclip/node_modules/.pnpm/postgres@3.4.8/node_modules/postgres/src/connection.js:489:6)\n    at Socket.data (file:///D:/new-projects/paperclip/node_modules/.pnpm/postgres@3.4.8/node_modules/postgres/src/connection.js:324:9)\n    at Socket.emit (node:events:518:28)\n    at addChunk (node:internal/streams/readable:561:12)\n    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)\n    at Readable.push (node:internal/streams/readable:392:5)\n    at TCP.onStreamRead (node:internal/stream_base_commons:189:23)","name":"PostgresError"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "PostgresError",
+      "message": "could not open file \"base/16384/25879\": No such file or directory",
+      "stack":
+          PostgresError: could not open file "base/16384/25879": No such file or directory
+              at ErrorResponse (file:///D:/new-projects/paperclip/node_modules/.pnpm/postgres@3.4.8/node_modules/postgres/src/connection.js:815:30)
+              at handle (file:///D:/new-projects/paperclip/node_modules/.pnpm/postgres@3.4.8/node_modules/postgres/src/connection.js:489:6)
+              at Socket.data (file:///D:/new-projects/paperclip/node_modules/.pnpm/postgres@3.4.8/node_modules/postgres/src/connection.js:324:9)
+              at Socket.emit (node:events:518:28)
+              at addChunk (node:internal/streams/readable:561:12)
+              at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+              at Readable.push (node:internal/streams/readable:392:5)
+              at TCP.onStreamRead (node:internal/stream_base_commons:189:23)
+      "name": "PostgresError",
+      "severity_local": "ERROR",
+      "severity": "ERROR",
+      "code": "58P01",
+      "file": "md.c",
+      "line": "675",
+      "routine": "mdopenfork"
+    }
+[06:41:41] [32mINFO[39m: [36mGET /android-chrome-192x192.png 200[39m
+[06:41:42] [32mINFO[39m: [36mGET /plugins/ui-contributions 200[39m
+{
+  severity_local: 'WARNING',
+  severity: 'WARNING',
+  code: '57P01',
+  message: 'terminating connection due to immediate shutdown command',
+  file: 'postgres.c',
+  line: '3000',
+  routine: 'quickdie'
+}
+{
+  severity_local: 'WARNING',
+  severity: 'WARNING',
+  code: '57P01',
+  message: 'terminating connection due to immediate shutdown command',
+  file: 'postgres.c',
+  line: '3000',
+  routine: 'quickdie'
+}
+{
+  severity_local: 'WARNING',
+  severity: 'WARNING',
+  code: '57P01',
+  message: 'terminating connection due to immediate shutdown command',
+  file: 'postgres.c',
+  line: '3000',
+  routine: 'quickdie'
+}
+{
+  severity_local: 'WARNING',
+  severity: 'WARNING',
+  code: '57P01',
+  message: 'terminating connection due to immediate shutdown command',
+  file: 'postgres.c',
+  line: '3000',
+  routine: 'quickdie'
+}
+[06:42:01] [31mERROR[39m: [36mscheduler tick error[39m [90m{"service":"plugin-job-scheduler"}[39m
+    err: "connect ECONNREFUSED 127.0.0.1:54329"
+[06:42:01] [31mERROR[39m: [36mheartbeat timer tick failed[39m 
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:42:01] [31mERROR[39m: [36mroutine scheduler tick failed[39m 
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:42:01] [31mERROR[39m: [36mperiodic heartbeat recovery failed[39m 
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:42:04] [31mERROR[39m: [36mGET /api/companies 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:42:20] [32mINFO[39m: [36mGET /api/auth/get-session 304[39m
+[06:42:20] [32mINFO[39m: [36mGET / 304[39m
+[06:42:20] [31mERROR[39m: [36mGET /api/companies 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:42:20] [31mERROR[39m: [36mGET /api/plugins/ui-contributions 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:42:21] [31mERROR[39m: [36mGET /api/plugins/ui-contributions 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:42:23] [31mERROR[39m: [36mGET /api/plugins/ui-contributions 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:42:28] [31mERROR[39m: [36mGET /api/plugins/ui-contributions 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:42:31] [31mERROR[39m: [36mscheduler tick error[39m [90m{"service":"plugin-job-scheduler"}[39m
+    err: "connect ECONNREFUSED 127.0.0.1:54329"
+[06:42:31] [31mERROR[39m: [36mheartbeat timer tick failed[39m 
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:42:31] [31mERROR[39m: [36mroutine scheduler tick failed[39m 
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:42:31] [31mERROR[39m: [36mperiodic heartbeat recovery failed[39m 
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:42:35] [31mERROR[39m: [36mGET /api/plugins 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:42:37] [31mERROR[39m: [36mGET /api/instance/settings/general 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:42:38] [31mERROR[39m: [36mGET /api/plugins 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:42:38] [32mINFO[39m: [36mGET /instance/settings/general 200[39m
+[06:42:38] [32mINFO[39m: [36mGET /assets/index-dW_Co4rW.js 304[39m
+[06:42:38] [32mINFO[39m: [36mGET /assets/index-DMKgkynP.css 304[39m
+[06:42:38] [32mINFO[39m: [36mGET /site.webmanifest 304[39m
+[06:42:38] [32mINFO[39m: [36mGET / 304[39m
+[06:42:38] [32mINFO[39m: [36mGET /api/auth/get-session 304[39m
+[06:42:38] [32mINFO[39m: [36mGET /android-chrome-192x192.png 304[39m
+[06:42:40] [31mERROR[39m: [36mGET /api/plugins 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:42:41] [31mERROR[39m: [36mGET /api/plugins/ui-contributions 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:42:41] [31mERROR[39m: [36mGET /api/companies 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:42:43] [31mERROR[39m: [36mGET /api/plugins 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:42:44] [32mINFO[39m: [36mGET /sw.js 304[39m
+[06:42:45] [31mERROR[39m: [36mGET /api/plugins 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:42:45] [31mERROR[39m: [36mGET /api/plugins/ui-contributions 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:42:49] [31mERROR[39m: [36mGET /api/plugins 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:42:50] [31mERROR[39m: [36mGET /api/instance/settings/general 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:42:55] [31mERROR[39m: [36mGET /api/plugins/ui-contributions 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:42:57] [31mERROR[39m: [36mGET /api/instance/settings/general 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:42:59] [31mERROR[39m: [36mGET /api/plugins/ui-contributions 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:43:00] [31mERROR[39m: [36mGET /api/instance/settings/general 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:43:01] [31mERROR[39m: [36mscheduler tick error[39m [90m{"service":"plugin-job-scheduler"}[39m
+    err: "connect ECONNREFUSED 127.0.0.1:54329"
+[06:43:01] [31mERROR[39m: [36mheartbeat timer tick failed[39m 
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:43:01] [31mERROR[39m: [36mroutine scheduler tick failed[39m 
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:43:05] [31mERROR[39m: [36mGET /api/instance/settings/general 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:43:05] [31mERROR[39m: [36mperiodic heartbeat recovery failed[39m 
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:43:31] [31mERROR[39m: [36mscheduler tick error[39m [90m{"service":"plugin-job-scheduler"}[39m
+    err: "connect ECONNREFUSED 127.0.0.1:54329"
+[06:43:31] [31mERROR[39m: [36mheartbeat timer tick failed[39m 
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:43:31] [31mERROR[39m: [36mroutine scheduler tick failed[39m 
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:43:31] [31mERROR[39m: [36mperiodic heartbeat recovery failed[39m 
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:43:51] [31mERROR[39m: [36mPOST /api/companies 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqBody":{"name":"Телеграм канал","budgetMonthlyCents":0},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:43:59] [31mERROR[39m: [36mPOST /api/companies 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqBody":{"name":"Телеграм канал","budgetMonthlyCents":0},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:44:01] [31mERROR[39m: [36mscheduler tick error[39m [90m{"service":"plugin-job-scheduler"}[39m
+    err: "connect ECONNREFUSED 127.0.0.1:54329"
+[06:44:01] [31mERROR[39m: [36mheartbeat timer tick failed[39m 
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:44:01] [31mERROR[39m: [36mroutine scheduler tick failed[39m 
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:44:01] [31mERROR[39m: [36mperiodic heartbeat recovery failed[39m 
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:44:08] [32mINFO[39m: [36mGET /api/auth/get-session 304[39m
+[06:44:08] [32mINFO[39m: [36mGET / 304[39m
+[06:44:08] [31mERROR[39m: [36mGET /api/companies 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:44:08] [31mERROR[39m: [36mGET /api/plugins/ui-contributions 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:44:08] [31mERROR[39m: [36mGET /api/plugins 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:44:08] [31mERROR[39m: [36mGET /api/instance/settings/general 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:44:09] [31mERROR[39m: [36mGET /api/plugins/ui-contributions 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:44:14] [31mERROR[39m: [36mGET /api/plugins 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:44:20] [31mERROR[39m: [36mGET /api/instance/settings/general 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:44:31] [31mERROR[39m: [36mscheduler tick error[39m [90m{"service":"plugin-job-scheduler"}[39m
+    err: "connect ECONNREFUSED 127.0.0.1:54329"
+[06:44:31] [31mERROR[39m: [36mheartbeat timer tick failed[39m 
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:44:31] [31mERROR[39m: [36mroutine scheduler tick failed[39m 
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:44:31] [31mERROR[39m: [36mperiodic heartbeat recovery failed[39m 
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:44:38] [32mINFO[39m: [36mGET /api/auth/get-session 304[39m
+[06:44:38] [32mINFO[39m: [36mGET / 304[39m
+[06:44:38] [31mERROR[39m: [36mGET /api/companies 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:44:38] [31mERROR[39m: [36mGET /api/plugins 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:44:38] [31mERROR[39m: [36mGET /api/plugins/ui-contributions 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
+[06:44:38] [31mERROR[39m: [36mGET /api/instance/settings/general 500 — connect ECONNREFUSED 127.0.0.1:54329[39m [90m{"errorContext":{"message":"connect ECONNREFUSED 127.0.0.1:54329","stack":"Error: connect ECONNREFUSED 127.0.0.1:54329\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)","name":"Error"},"reqParams":{},"reqQuery":{}}[39m
+    err: {
+      "type": "Error",
+      "message": "connect ECONNREFUSED 127.0.0.1:54329",
+      "stack":
+          Error: connect ECONNREFUSED 127.0.0.1:54329
+              at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1634:16)
+      "errno": -4078,
+      "code": "ECONNREFUSED",
+      "syscall": "connect",
+      "address": "127.0.0.1",
+      "port": 54329
+    }
