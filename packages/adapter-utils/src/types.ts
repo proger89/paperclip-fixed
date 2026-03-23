@@ -324,6 +324,7 @@ export interface CreateConfigValues {
   adapterType: string;
   cwd: string;
   instructionsFilePath?: string;
+  executionLocation?: string;
   promptTemplate: string;
   model: string;
   thinkingEffort: string;

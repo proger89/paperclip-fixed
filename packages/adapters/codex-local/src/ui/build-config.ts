@@ -70,6 +70,7 @@ export function buildCodexLocalConfig(v: CreateConfigValues): Record<string, unk
   const ac: Record<string, unknown> = {};
   if (v.cwd) ac.cwd = v.cwd;
   if (v.instructionsFilePath) ac.instructionsFilePath = v.instructionsFilePath;
+  if (v.executionLocation && v.executionLocation !== "container") ac.executionLocation = v.executionLocation;
   if (v.promptTemplate) ac.promptTemplate = v.promptTemplate;
   if (v.bootstrapPrompt) ac.bootstrapPromptTemplate = v.bootstrapPrompt;
   ac.model = v.model || DEFAULT_CODEX_LOCAL_MODEL;

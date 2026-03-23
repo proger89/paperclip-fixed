@@ -58,6 +58,7 @@ import {
   resolveSessionCompactionPolicy,
   type SessionCompactionPolicy,
 } from "@paperclipai/adapter-utils";
+import { cancelHostRuntimeExecution } from "./host-runtime-bridge.js";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
@@ -3857,6 +3858,7 @@ export function heartbeatService(db: Db) {
         }
       }, graceMs);
     }
+    await cancelHostRuntimeExecution(run.id).catch(() => undefined);
 
     const cancelled = await setRunStatus(run.id, "cancelled", {
       finishedAt: new Date(),
@@ -3908,6 +3910,7 @@ export function heartbeatService(db: Db) {
         running.child.kill("SIGTERM");
         runningProcesses.delete(run.id);
       }
+      await cancelHostRuntimeExecution(run.id).catch(() => undefined);
       await releaseIssueExecutionAndPromote(run);
     }
 

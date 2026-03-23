@@ -16,6 +16,7 @@ Adapter: claude_local
 Core fields:
 - cwd (string, optional): default absolute working directory fallback for the agent process (created if missing when possible)
 - instructionsFilePath (string, optional): absolute path to a markdown instructions file injected at runtime
+- executionLocation (string, optional): container (default) or host. Use host when Paperclip runs in Docker but Claude should execute on the host bridge companion.
 - model (string, optional): Claude model id
 - effort (string, optional): reasoning effort passed via --effort (low|medium|high)
 - chrome (boolean, optional): pass --chrome when running Claude
@@ -33,5 +34,5 @@ Operational fields:
 - graceSec (number, optional): SIGTERM grace period in seconds
 
 Notes:
-- When Paperclip realizes a workspace/runtime for a run, it injects PAPERCLIP_WORKSPACE_* and PAPERCLIP_RUNTIME_* env vars for agent-side tooling.
+- When Paperclip realizes a workspace/runtime for a run, it injects PAPERCLIP_WORKSPACE_* and PAPERCLIP_RUNTIME_* env vars for agent-side tooling, plus PAPERCLIP_PLAYWRIGHT_WS_ENDPOINT / PAPERCLIP_BROWSER_CDP_URL when a browser runtime is available.
 `;

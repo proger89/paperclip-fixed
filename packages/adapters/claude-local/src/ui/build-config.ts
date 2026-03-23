@@ -66,6 +66,7 @@ export function buildClaudeLocalConfig(v: CreateConfigValues): Record<string, un
   const ac: Record<string, unknown> = {};
   if (v.cwd) ac.cwd = v.cwd;
   if (v.instructionsFilePath) ac.instructionsFilePath = v.instructionsFilePath;
+  if (v.executionLocation && v.executionLocation !== "container") ac.executionLocation = v.executionLocation;
   if (v.promptTemplate) ac.promptTemplate = v.promptTemplate;
   if (v.bootstrapPrompt) ac.bootstrapPromptTemplate = v.bootstrapPrompt;
   if (v.model) ac.model = v.model;

@@ -23,6 +23,7 @@ Adapter: codex_local
 Core fields:
 - cwd (string, optional): default absolute working directory fallback for the agent process (created if missing when possible)
 - instructionsFilePath (string, optional): absolute path to a markdown instructions file prepended to stdin prompt at runtime
+- executionLocation (string, optional): container (default) or host. Use host when Paperclip runs in Docker but Codex should execute on the host bridge companion.
 - model (string, optional): Codex model id
 - modelReasoningEffort (string, optional): reasoning effort override (minimal|low|medium|high) passed via -c model_reasoning_effort=...
 - promptTemplate (string, optional): run prompt template
@@ -44,5 +45,5 @@ Notes:
 - Unless explicitly overridden in adapter config, Paperclip runs Codex with a per-company managed CODEX_HOME under the active Paperclip instance and seeds auth/config from the shared Codex home (the CODEX_HOME env var, when set, or ~/.codex).
 - On Windows, Paperclip best-effort normalizes Codex's child shell env instead of inheriting the host \`SHELL\` blindly, but Codex may still choose its own shell runtime. The reliable guardrail is UTF-8-safe byte-oriented issue/comment/document writes.
 - Some model/tool combinations reject certain effort levels (for example minimal with web search enabled).
-- When Paperclip realizes a workspace/runtime for a run, it injects PAPERCLIP_WORKSPACE_* and PAPERCLIP_RUNTIME_* env vars for agent-side tooling.
+- When Paperclip realizes a workspace/runtime for a run, it injects PAPERCLIP_WORKSPACE_* and PAPERCLIP_RUNTIME_* env vars for agent-side tooling, plus PAPERCLIP_PLAYWRIGHT_WS_ENDPOINT / PAPERCLIP_BROWSER_CDP_URL when a browser runtime is available.
 `;
