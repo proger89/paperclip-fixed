@@ -16,6 +16,7 @@ import {
   budgetService,
   companyPortabilityService,
   companyService,
+  heartbeatService,
   logActivity,
 } from "../services/index.js";
 import type { StorageService } from "../storage/types.js";
@@ -28,6 +29,7 @@ export function companyRoutes(db: Db, storage?: StorageService) {
   const portability = companyPortabilityService(db, storage);
   const access = accessService(db);
   const budgets = budgetService(db);
+  const heartbeat = heartbeatService(db);
 
   async function assertCanUpdateBranding(req: Request, companyId: string) {
     assertCompanyAccess(req, companyId);
@@ -244,6 +246,7 @@ export function companyRoutes(db: Db, storage?: StorageService) {
   router.patch("/:companyId", async (req, res) => {
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
+    const previousCompany = await svc.getById(companyId);
 
     const actor = getActorInfo(req);
     let body: Record<string, unknown>;
@@ -268,6 +271,14 @@ export function companyRoutes(db: Db, storage?: StorageService) {
     if (!company) {
       res.status(404).json({ error: "Company not found" });
       return;
+    }
+    if (previousCompany?.status !== company.status && company.status !== "active") {
+      await heartbeat.cancelCompanyWork(
+        companyId,
+        company.status === "archived"
+          ? "Cancelled because the company was archived"
+          : "Cancelled because the company was paused",
+      );
     }
     await logActivity(db, {
       companyId,
@@ -315,6 +326,7 @@ export function companyRoutes(db: Db, storage?: StorageService) {
       res.status(404).json({ error: "Company not found" });
       return;
     }
+    await heartbeat.cancelCompanyWork(companyId, "Cancelled because the company was archived");
     await logActivity(db, {
       companyId,
       actorType: "user",

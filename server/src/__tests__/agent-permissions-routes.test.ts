@@ -35,8 +35,11 @@ const baseAgent = {
 const mockAgentService = vi.hoisted(() => ({
   getById: vi.fn(),
   create: vi.fn(),
+  createApiKey: vi.fn(),
   updatePermissions: vi.fn(),
   getChainOfCommand: vi.fn(),
+  listKeys: vi.fn(),
+  revokeKey: vi.fn(),
   resolveByReference: vi.fn(),
 }));
 
@@ -137,6 +140,19 @@ describe("agent permission routes", () => {
     mockAgentService.getChainOfCommand.mockResolvedValue([]);
     mockAgentService.resolveByReference.mockResolvedValue({ ambiguous: false, agent: baseAgent });
     mockAgentService.create.mockResolvedValue(baseAgent);
+    mockAgentService.listKeys.mockResolvedValue([]);
+    mockAgentService.createApiKey.mockResolvedValue({
+      id: "key-1",
+      name: "Default key",
+      token: "pcp_test",
+      createdAt: new Date("2026-03-19T00:00:00.000Z"),
+    });
+    mockAgentService.revokeKey.mockResolvedValue({
+      id: "key-1",
+      agentId,
+      companyId,
+      revokedAt: new Date("2026-03-19T00:00:00.000Z"),
+    });
     mockAgentService.updatePermissions.mockResolvedValue(baseAgent);
     mockAccessService.getMembership.mockResolvedValue({
       id: "membership-1",
@@ -271,5 +287,34 @@ describe("agent permission routes", () => {
     );
     expect(res.body.access.canAssignTasks).toBe(true);
     expect(res.body.access.taskAssignSource).toBe("agent_creator");
+  });
+
+  it("rejects agent key management outside the caller's companies", async () => {
+    const foreignCompanyId = "33333333-3333-4333-8333-333333333333";
+    mockAgentService.getById.mockResolvedValue({
+      ...baseAgent,
+      companyId: foreignCompanyId,
+    });
+
+    const app = createApp({
+      type: "board",
+      userId: "board-user",
+      source: "session",
+      isInstanceAdmin: false,
+      companyIds: [companyId],
+    });
+
+    const [listRes, createRes, revokeRes] = await Promise.all([
+      request(app).get(`/api/agents/${agentId}/keys`),
+      request(app).post(`/api/agents/${agentId}/keys`).send({ name: "Foreign key" }),
+      request(app).delete(`/api/agents/${agentId}/keys/key-1`),
+    ]);
+
+    expect(listRes.status).toBe(403);
+    expect(createRes.status).toBe(403);
+    expect(revokeRes.status).toBe(403);
+    expect(mockAgentService.listKeys).not.toHaveBeenCalled();
+    expect(mockAgentService.createApiKey).not.toHaveBeenCalled();
+    expect(mockAgentService.revokeKey).not.toHaveBeenCalled();
   });
 });

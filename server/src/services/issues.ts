@@ -274,6 +274,8 @@ async function withIssueLabels(dbOrTx: any, rows: IssueRow[]): Promise<IssueWith
 }
 
 const ACTIVE_RUN_STATUSES = ["queued", "running"];
+const NON_INVOKABLE_AGENT_STATUSES = new Set(["paused", "terminated", "pending_approval"]);
+const STALE_QUEUED_EXECUTION_LOCK_IDLE_MS = 30_000;
 
 async function activeRunMapForIssues(
   dbOrTx: any,
@@ -318,6 +320,14 @@ function withActiveRuns(
     ...row,
     activeRun: row.executionRunId ? (runMap.get(row.executionRunId) ?? null) : null,
   }));
+}
+
+function clearExecutionLockFields(patch: Partial<typeof issues.$inferInsert>) {
+  patch.checkoutRunId = null;
+  patch.executionRunId = null;
+  patch.executionAgentNameKey = null;
+  patch.executionLockedAt = null;
+  return patch;
 }
 
 export function issueService(db: Db) {
@@ -443,6 +453,68 @@ export function issueService(db: Db) {
       .then((rows) => rows[0] ?? null);
     if (!run) return true;
     return TERMINAL_HEARTBEAT_RUN_STATUSES.has(run.status);
+  }
+
+  async function isStaleOrMissingExecutionHeartbeatRun(runId: string) {
+    const run = await db
+      .select({
+        id: heartbeatRuns.id,
+        status: heartbeatRuns.status,
+        startedAt: heartbeatRuns.startedAt,
+        createdAt: heartbeatRuns.createdAt,
+        updatedAt: heartbeatRuns.updatedAt,
+        agentId: heartbeatRuns.agentId,
+        companyStatus: companies.status,
+        agentStatus: agents.status,
+      })
+      .from(heartbeatRuns)
+      .leftJoin(agents, eq(agents.id, heartbeatRuns.agentId))
+      .leftJoin(companies, eq(companies.id, heartbeatRuns.companyId))
+      .where(eq(heartbeatRuns.id, runId))
+      .then((rows) => rows[0] ?? null);
+
+    if (!run) return true;
+    if (TERMINAL_HEARTBEAT_RUN_STATUSES.has(run.status)) return true;
+    if (run.status === "running") return false;
+    if (run.status !== "queued") return false;
+    if (run.companyStatus !== "active") return true;
+    if (!run.agentStatus || NON_INVOKABLE_AGENT_STATUSES.has(run.agentStatus)) return true;
+
+    const runningCount = await db
+      .select({
+        count: sql<number>`count(*)::int`,
+      })
+      .from(heartbeatRuns)
+      .where(and(eq(heartbeatRuns.agentId, run.agentId), eq(heartbeatRuns.status, "running")))
+      .then((rows) => Number(rows[0]?.count ?? 0));
+
+    if (runningCount > 0) return false;
+
+    const idleSince = run.updatedAt ?? run.createdAt;
+    const idleMs = Date.now() - idleSince.getTime();
+    return !run.startedAt && idleMs >= STALE_QUEUED_EXECUTION_LOCK_IDLE_MS;
+  }
+
+  async function clearStaleExecutionLock(input: {
+    issueId: string;
+    expectedExecutionRunId: string;
+  }) {
+    const stale = await isStaleOrMissingExecutionHeartbeatRun(input.expectedExecutionRunId);
+    if (!stale) return false;
+
+    const cleared = await db
+      .update(issues)
+      .set({
+        executionRunId: null,
+        executionAgentNameKey: null,
+        executionLockedAt: null,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(issues.id, input.issueId), eq(issues.executionRunId, input.expectedExecutionRunId)))
+      .returning({ id: issues.id })
+      .then((rows) => rows[0] ?? null);
+
+    return Boolean(cleared);
   }
 
   async function adoptStaleCheckoutRun(input: {
@@ -862,13 +934,13 @@ export function issueService(db: Db) {
         patch.cancelledAt = null;
       }
       if (issueData.status && issueData.status !== "in_progress") {
-        patch.checkoutRunId = null;
+        clearExecutionLockFields(patch);
       }
       if (
         (issueData.assigneeAgentId !== undefined && issueData.assigneeAgentId !== existing.assigneeAgentId) ||
         (issueData.assigneeUserId !== undefined && issueData.assigneeUserId !== existing.assigneeUserId)
       ) {
-        patch.checkoutRunId = null;
+        clearExecutionLockFields(patch);
       }
 
       return db.transaction(async (tx) => {
@@ -939,43 +1011,48 @@ export function issueService(db: Db) {
       await assertAssignableAgent(issueCompany.companyId, agentId);
 
       const now = new Date();
-      const sameRunAssigneeCondition = checkoutRunId
-        ? and(
-          eq(issues.assigneeAgentId, agentId),
-          or(isNull(issues.checkoutRunId), eq(issues.checkoutRunId, checkoutRunId)),
-        )
-        : and(eq(issues.assigneeAgentId, agentId), isNull(issues.checkoutRunId));
-      const executionLockCondition = checkoutRunId
-        ? or(isNull(issues.executionRunId), eq(issues.executionRunId, checkoutRunId))
-        : isNull(issues.executionRunId);
-      const updated = await db
-        .update(issues)
-        .set({
-          assigneeAgentId: agentId,
-          assigneeUserId: null,
-          checkoutRunId,
-          executionRunId: checkoutRunId,
-          status: "in_progress",
-          startedAt: now,
-          updatedAt: now,
-        })
-        .where(
-          and(
-            eq(issues.id, id),
-            inArray(issues.status, expectedStatuses),
-            or(isNull(issues.assigneeAgentId), sameRunAssigneeCondition),
-            executionLockCondition,
-          ),
-        )
-        .returning()
-        .then((rows) => rows[0] ?? null);
+      const tryCheckout = async () => {
+        const sameRunAssigneeCondition = checkoutRunId
+          ? and(
+            eq(issues.assigneeAgentId, agentId),
+            or(isNull(issues.checkoutRunId), eq(issues.checkoutRunId, checkoutRunId)),
+          )
+          : and(eq(issues.assigneeAgentId, agentId), isNull(issues.checkoutRunId));
+        const executionLockCondition = checkoutRunId
+          ? or(isNull(issues.executionRunId), eq(issues.executionRunId, checkoutRunId))
+          : isNull(issues.executionRunId);
+        return db
+          .update(issues)
+          .set({
+            assigneeAgentId: agentId,
+            assigneeUserId: null,
+            checkoutRunId,
+            executionRunId: checkoutRunId,
+            executionLockedAt: checkoutRunId ? now : null,
+            status: "in_progress",
+            startedAt: now,
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(issues.id, id),
+              inArray(issues.status, expectedStatuses),
+              or(isNull(issues.assigneeAgentId), sameRunAssigneeCondition),
+              executionLockCondition,
+            ),
+          )
+          .returning()
+          .then((rows) => rows[0] ?? null);
+      };
+
+      let updated = await tryCheckout();
 
       if (updated) {
         const [enriched] = await withIssueLabels(db, [updated]);
         return enriched;
       }
 
-      const current = await db
+      let current = await db
         .select({
           id: issues.id,
           status: issues.status,
@@ -986,6 +1063,35 @@ export function issueService(db: Db) {
         .from(issues)
         .where(eq(issues.id, id))
         .then((rows) => rows[0] ?? null);
+
+      if (!current) throw notFound("Issue not found");
+
+      if (
+        current.executionRunId &&
+        current.executionRunId !== checkoutRunId &&
+        await clearStaleExecutionLock({
+          issueId: id,
+          expectedExecutionRunId: current.executionRunId,
+        })
+      ) {
+        updated = await tryCheckout();
+        if (updated) {
+          const [enriched] = await withIssueLabels(db, [updated]);
+          return enriched;
+        }
+
+        current = await db
+          .select({
+            id: issues.id,
+            status: issues.status,
+            assigneeAgentId: issues.assigneeAgentId,
+            checkoutRunId: issues.checkoutRunId,
+            executionRunId: issues.executionRunId,
+          })
+          .from(issues)
+          .where(eq(issues.id, id))
+          .then((rows) => rows[0] ?? null);
+      }
 
       if (!current) throw notFound("Issue not found");
 

@@ -33,6 +33,10 @@ const mockCompanyPortabilityService = vi.hoisted(() => ({
   importBundle: vi.fn(),
 }));
 
+const mockHeartbeatService = vi.hoisted(() => ({
+  cancelCompanyWork: vi.fn(),
+}));
+
 const mockLogActivity = vi.hoisted(() => vi.fn());
 
 vi.mock("../services/index.js", () => ({
@@ -41,6 +45,7 @@ vi.mock("../services/index.js", () => ({
   budgetService: () => mockBudgetService,
   companyPortabilityService: () => mockCompanyPortabilityService,
   companyService: () => mockCompanyService,
+  heartbeatService: () => mockHeartbeatService,
   logActivity: mockLogActivity,
 }));
 
@@ -80,6 +85,7 @@ describe("PATCH /api/companies/:companyId/branding", () => {
   beforeEach(() => {
     mockCompanyService.update.mockReset();
     mockAgentService.getById.mockReset();
+    mockHeartbeatService.cancelCompanyWork.mockReset();
     mockLogActivity.mockReset();
   });
 

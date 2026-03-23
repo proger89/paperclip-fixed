@@ -200,4 +200,143 @@ describe("issue service release", () => {
     expect(recheckedOut.checkoutRunId).toBe(nextRunId);
     expect(recheckedOut.executionRunId).toBe(nextRunId);
   });
+
+  it("clears execution locks when an in-progress issue is reassigned", async () => {
+    const companyId = randomUUID();
+    const currentAgentId = randomUUID();
+    const nextAgentId = randomUUID();
+    const currentRunId = randomUUID();
+    const issueId = randomUUID();
+    const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+    const issuesSvc = issueService(db);
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(agents).values([
+      {
+        id: currentAgentId,
+        companyId,
+        name: "Current Engineer",
+        role: "engineer",
+        status: "active",
+        adapterType: "codex_local",
+        adapterConfig: {},
+        runtimeConfig: {},
+        permissions: {},
+      },
+      {
+        id: nextAgentId,
+        companyId,
+        name: "Next Engineer",
+        role: "engineer",
+        status: "active",
+        adapterType: "codex_local",
+        adapterConfig: {},
+        runtimeConfig: {},
+        permissions: {},
+      },
+    ]);
+
+    await db.insert(heartbeatRuns).values({
+      id: currentRunId,
+      companyId,
+      agentId: currentAgentId,
+      invocationSource: "assignment",
+      triggerDetail: "system",
+      status: "running",
+      contextSnapshot: { issueId },
+    });
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Reassign should clear execution state",
+      status: "in_progress",
+      priority: "medium",
+      assigneeAgentId: currentAgentId,
+      checkoutRunId: currentRunId,
+      executionRunId: currentRunId,
+      executionAgentNameKey: "current-engineer",
+      executionLockedAt: new Date("2026-03-23T07:00:00.000Z"),
+      issueNumber: 1,
+      identifier: `${issuePrefix}-1`,
+    });
+
+    const updated = await issuesSvc.update(issueId, {
+      assigneeAgentId: nextAgentId,
+    });
+
+    expect(updated).not.toBeNull();
+    expect(updated?.assigneeAgentId).toBe(nextAgentId);
+    expect(updated?.checkoutRunId).toBeNull();
+    expect(updated?.executionRunId).toBeNull();
+    expect(updated?.executionAgentNameKey).toBeNull();
+    expect(updated?.executionLockedAt).toBeNull();
+  });
+
+  it("recovers from a stale queued execution lock during checkout", async () => {
+    const companyId = randomUUID();
+    const agentId = randomUUID();
+    const staleRunId = randomUUID();
+    const issueId = randomUUID();
+    const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+    const issuesSvc = issueService(db);
+
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    await db.insert(agents).values({
+      id: agentId,
+      companyId,
+      name: "Recovery Engineer",
+      role: "engineer",
+      status: "active",
+      adapterType: "codex_local",
+      adapterConfig: {},
+      runtimeConfig: {},
+      permissions: {},
+    });
+
+    await db.insert(heartbeatRuns).values({
+      id: staleRunId,
+      companyId,
+      agentId,
+      invocationSource: "assignment",
+      triggerDetail: "system",
+      status: "queued",
+      contextSnapshot: { issueId },
+      createdAt: new Date("2026-03-23T07:00:00.000Z"),
+      updatedAt: new Date("2026-03-23T07:00:00.000Z"),
+    });
+
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Checkout should recover stale queued locks",
+      status: "todo",
+      priority: "medium",
+      executionRunId: staleRunId,
+      executionAgentNameKey: "recovery-engineer",
+      executionLockedAt: new Date("2026-03-23T07:00:00.000Z"),
+      issueNumber: 1,
+      identifier: `${issuePrefix}-1`,
+    });
+
+    const checkedOut = await issuesSvc.checkout(issueId, agentId, ["todo"], null);
+
+    expect(checkedOut.status).toBe("in_progress");
+    expect(checkedOut.assigneeAgentId).toBe(agentId);
+    expect(checkedOut.checkoutRunId).toBeNull();
+    expect(checkedOut.executionRunId).toBeNull();
+    expect(checkedOut.executionLockedAt).toBeNull();
+  });
 });

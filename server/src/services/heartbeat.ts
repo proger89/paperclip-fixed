@@ -10,6 +10,7 @@ import {
   agentRuntimeState,
   agentTaskSessions,
   agentWakeupRequests,
+  companies,
   heartbeatRunEvents,
   heartbeatRuns,
   issues,
@@ -60,6 +61,9 @@ import {
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_MAX = 10;
+const NON_INVOKABLE_AGENT_STATUSES = new Set(["paused", "terminated", "pending_approval"]);
+const INACTIVE_COMPANY_STATUSES = new Set(["paused", "archived"]);
+const STALE_QUEUED_ISSUE_EXECUTION_IDLE_MS = 30_000;
 const DEFERRED_WAKE_CONTEXT_KEY = "_paperclipWakeContext";
 const DETACHED_PROCESS_ERROR_CODE = "process_detached";
 const startLocksByAgent = new Map<string, Promise<void>>();
@@ -743,6 +747,19 @@ export function heartbeatService(db: Db) {
       .from(agents)
       .where(eq(agents.id, agentId))
       .then((rows) => rows[0] ?? null);
+  }
+
+  async function getCompany(companyId: string) {
+    return db
+      .select()
+      .from(companies)
+      .where(eq(companies.id, companyId))
+      .then((rows) => rows[0] ?? null);
+  }
+
+  async function getRunCompanyStatus(run: typeof heartbeatRuns.$inferSelect) {
+    const company = await getCompany(run.companyId);
+    return company?.status ?? null;
   }
 
   async function getRun(runId: string) {
@@ -1533,12 +1550,28 @@ export function heartbeatService(db: Db) {
 
   async function claimQueuedRun(run: typeof heartbeatRuns.$inferSelect) {
     if (run.status !== "queued") return run;
-    const agent = await getAgent(run.agentId);
+    const [agent, companyStatus] = await Promise.all([
+      getAgent(run.agentId),
+      getRunCompanyStatus(run),
+    ]);
+    if (!companyStatus) {
+      await cancelRunInternal(run.id, "Cancelled because the company no longer exists");
+      return null;
+    }
+    if (INACTIVE_COMPANY_STATUSES.has(companyStatus)) {
+      await cancelRunInternal(
+        run.id,
+        companyStatus === "archived"
+          ? "Cancelled because the company is archived"
+          : "Cancelled because the company is paused",
+      );
+      return null;
+    }
     if (!agent) {
       await cancelRunInternal(run.id, "Cancelled because the agent no longer exists");
       return null;
     }
-    if (agent.status === "paused" || agent.status === "terminated" || agent.status === "pending_approval") {
+    if (NON_INVOKABLE_AGENT_STATUSES.has(agent.status)) {
       await cancelRunInternal(run.id, "Cancelled because the agent is not invokable");
       return null;
     }
@@ -1803,7 +1836,11 @@ export function heartbeatService(db: Db) {
     return withAgentStartLock(agentId, async () => {
       const agent = await getAgent(agentId);
       if (!agent) return [];
-      if (agent.status === "paused" || agent.status === "terminated" || agent.status === "pending_approval") {
+      const company = await getCompany(agent.companyId);
+      if (!company || INACTIVE_COMPANY_STATUSES.has(company.status)) {
+        return [];
+      }
+      if (NON_INVOKABLE_AGENT_STATUSES.has(agent.status)) {
         return [];
       }
       const policy = parseHeartbeatPolicy(agent);
@@ -2718,6 +2755,18 @@ export function heartbeatService(db: Db) {
         })
         .where(eq(issues.id, issue.id));
 
+      const company = await tx
+        .select({
+          status: companies.status,
+        })
+        .from(companies)
+        .where(eq(companies.id, issue.companyId))
+        .then((rows) => rows[0] ?? null);
+
+      if (!company || INACTIVE_COMPANY_STATUSES.has(company.status)) {
+        return null;
+      }
+
       while (true) {
         const deferred = await tx
           .select()
@@ -2973,6 +3022,44 @@ export function heartbeatService(db: Db) {
 
         if (activeExecutionRun && activeExecutionRun.status !== "queued" && activeExecutionRun.status !== "running") {
           activeExecutionRun = null;
+        }
+
+        if (activeExecutionRun?.status === "queued") {
+          const [executionAgent, executionCompany] = await Promise.all([
+            tx
+              .select({ status: agents.status })
+              .from(agents)
+              .where(eq(agents.id, activeExecutionRun.agentId))
+              .then((rows) => rows[0] ?? null),
+            tx
+              .select({ status: companies.status })
+              .from(companies)
+              .where(eq(companies.id, activeExecutionRun.companyId))
+              .then((rows) => rows[0] ?? null),
+          ]);
+
+          const runningCount = await tx
+            .select({
+              count: sql<number>`count(*)::int`,
+            })
+            .from(heartbeatRuns)
+            .where(and(eq(heartbeatRuns.agentId, activeExecutionRun.agentId), eq(heartbeatRuns.status, "running")))
+            .then((rows) => Number(rows[0]?.count ?? 0));
+
+          const idleSince = activeExecutionRun.updatedAt ?? activeExecutionRun.createdAt;
+          const idleMs = Date.now() - idleSince.getTime();
+          const staleQueuedExecutionRun =
+            !executionCompany ||
+            INACTIVE_COMPANY_STATUSES.has(executionCompany.status) ||
+            !executionAgent ||
+            NON_INVOKABLE_AGENT_STATUSES.has(executionAgent.status) ||
+            (!activeExecutionRun.startedAt &&
+              runningCount === 0 &&
+              idleMs >= STALE_QUEUED_ISSUE_EXECUTION_IDLE_MS);
+
+          if (staleQueuedExecutionRun) {
+            activeExecutionRun = null;
+          }
         }
 
         if (!activeExecutionRun && issue.executionRunId) {
@@ -3372,8 +3459,24 @@ export function heartbeatService(db: Db) {
     return rows.map((row) => row.id);
   }
 
-  async function cancelPendingWakeupsForBudgetScope(scope: BudgetEnforcementScope) {
+  async function cancelPendingWakeupsByIds(wakeupIds: string[], reason: string) {
+    if (wakeupIds.length === 0) return 0;
+
     const now = new Date();
+    await db
+      .update(agentWakeupRequests)
+      .set({
+        status: "cancelled",
+        finishedAt: now,
+        error: reason,
+        updatedAt: now,
+      })
+      .where(inArray(agentWakeupRequests.id, wakeupIds));
+
+    return wakeupIds.length;
+  }
+
+  async function cancelPendingWakeupsForBudgetScope(scope: BudgetEnforcementScope) {
     let wakeupIds: string[] = [];
 
     if (scope.scopeType === "company") {
@@ -3405,19 +3508,7 @@ export function heartbeatService(db: Db) {
       wakeupIds = await listProjectScopedWakeupIds(scope.companyId, scope.scopeId);
     }
 
-    if (wakeupIds.length === 0) return 0;
-
-    await db
-      .update(agentWakeupRequests)
-      .set({
-        status: "cancelled",
-        finishedAt: now,
-        error: "Cancelled due to budget pause",
-        updatedAt: now,
-      })
-      .where(inArray(agentWakeupRequests.id, wakeupIds));
-
-    return wakeupIds.length;
+    return cancelPendingWakeupsByIds(wakeupIds, "Cancelled due to budget pause");
   }
 
   async function cancelRunInternal(runId: string, reason = "Cancelled by control plane") {
@@ -3518,6 +3609,40 @@ export function heartbeatService(db: Db) {
     }
 
     await cancelPendingWakeupsForBudgetScope(scope);
+  }
+
+  async function cancelCompanyWork(
+    companyId: string,
+    reason = "Cancelled because the company is not active",
+  ) {
+    const runIds = await db
+      .select({ id: heartbeatRuns.id })
+      .from(heartbeatRuns)
+      .where(
+        and(
+          eq(heartbeatRuns.companyId, companyId),
+          inArray(heartbeatRuns.status, ["queued", "running"]),
+        ),
+      )
+      .then((rows) => rows.map((row) => row.id));
+
+    for (const runId of runIds) {
+      await cancelRunInternal(runId, reason);
+    }
+
+    const wakeupIds = await db
+      .select({ id: agentWakeupRequests.id })
+      .from(agentWakeupRequests)
+      .where(
+        and(
+          eq(agentWakeupRequests.companyId, companyId),
+          inArray(agentWakeupRequests.status, ["queued", "deferred_issue_execution"]),
+          sql`${agentWakeupRequests.runId} is null`,
+        ),
+      )
+      .then((rows) => rows.map((row) => row.id));
+
+    await cancelPendingWakeupsByIds(wakeupIds, reason);
   }
 
   return {
@@ -3660,13 +3785,21 @@ export function heartbeatService(db: Db) {
     resumeQueuedRuns,
 
     tickTimers: async (now = new Date()) => {
-      const allAgents = await db.select().from(agents);
+      const allAgents = await db
+        .select({
+          agent: agents,
+          companyStatus: companies.status,
+        })
+        .from(agents)
+        .innerJoin(companies, eq(companies.id, agents.companyId));
       let checked = 0;
       let enqueued = 0;
       let skipped = 0;
 
-      for (const agent of allAgents) {
-        if (agent.status === "paused" || agent.status === "terminated" || agent.status === "pending_approval") continue;
+      for (const row of allAgents) {
+        const agent = row.agent;
+        if (row.companyStatus !== "active") continue;
+        if (NON_INVOKABLE_AGENT_STATUSES.has(agent.status)) continue;
         const policy = parseHeartbeatPolicy(agent);
         if (!policy.enabled || policy.intervalSec <= 0) continue;
 
@@ -3699,6 +3832,8 @@ export function heartbeatService(db: Db) {
     cancelActiveForAgent: (agentId: string) => cancelActiveForAgentInternal(agentId),
 
     cancelBudgetScopeWork,
+
+    cancelCompanyWork,
 
     getActiveRunForAgent: async (agentId: string) => {
       const [run] = await db

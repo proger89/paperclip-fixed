@@ -740,6 +740,14 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
         .where(eq(companies.id, companyId))
         .then((rows) => rows[0] ?? null);
       if (!company) throw notFound("Company not found");
+      if (company.status === "archived") {
+        return {
+          scopeType: "company" as const,
+          scopeId: companyId,
+          scopeName: company.name,
+          reason: "Company is archived and cannot start new work.",
+        };
+      }
       if (company.status === "paused") {
         return {
           scopeType: "company" as const,
