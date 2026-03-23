@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
+import { createServer, type Server } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -35,6 +36,28 @@ async function createTempRepo() {
   await runGit(repoRoot, ["commit", "-m", "Initial commit"]);
   await runGit(repoRoot, ["checkout", "-B", "main"]);
   return repoRoot;
+}
+
+async function startHostBridgeDouble(handler: Parameters<typeof createServer>[0]) {
+  const server = createServer(handler);
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("Could not resolve host bridge address.");
+  }
+  return {
+    server,
+    baseUrl: `http://127.0.0.1:${address.port}`,
+  };
+}
+
+async function stopHostBridgeDouble(server: Server) {
+  await new Promise<void>((resolve, reject) => {
+    server.close((err) => (err ? reject(err) : resolve()));
+  });
 }
 
 function buildWorkspace(cwd: string): RealizedExecutionWorkspace {
@@ -127,6 +150,8 @@ afterEach(async () => {
   delete process.env.PAPERCLIP_HOME;
   delete process.env.PAPERCLIP_INSTANCE_ID;
   delete process.env.DATABASE_URL;
+  delete process.env.PAPERCLIP_HOST_BRIDGE_URL;
+  delete process.env.PAPERCLIP_HOST_BRIDGE_TOKEN;
 });
 
 describe("realizeExecutionWorkspace", () => {
@@ -876,6 +901,76 @@ describe("ensureRuntimeServicesForRun", () => {
 
     await releaseRuntimeServicesForRun(runId);
     leasedRunIds.delete(runId);
+  });
+
+  it("creates and releases host-bridge browser runtime services", async () => {
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-runtime-host-browser-"));
+    const workspace = buildWorkspace(workspaceRoot);
+    const seenAuthHeaders: string[] = [];
+    const seenDeletes: string[] = [];
+    const { server, baseUrl } = await startHostBridgeDouble((req, res) => {
+      seenAuthHeaders.push(req.headers.authorization ?? "");
+      if (req.method === "POST" && req.url === "/v1/browser-sessions") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({
+          id: "browser-session-1",
+          managed: true,
+          wsEndpoint: "ws://127.0.0.1:9555/playwright",
+          cdpUrl: null,
+          url: null,
+        }));
+        return;
+      }
+      if (req.method === "DELETE" && req.url === "/v1/browser-sessions/browser-session-1") {
+        seenDeletes.push(req.url);
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+        return;
+      }
+      res.writeHead(404).end();
+    });
+
+    process.env.PAPERCLIP_HOST_BRIDGE_URL = baseUrl;
+    process.env.PAPERCLIP_HOST_BRIDGE_TOKEN = "bridge-token";
+
+    const runId = "run-host-browser";
+    leasedRunIds.add(runId);
+    const services = await ensureRuntimeServicesForRun({
+      runId,
+      agent: {
+        id: "agent-1",
+        name: "Codex Coder",
+        companyId: "company-1",
+      },
+      issue: null,
+      workspace,
+      config: {
+        workspaceRuntime: {
+          services: [
+            {
+              name: "browser",
+              location: "host",
+              lifecycle: "ephemeral",
+            },
+          ],
+        },
+      },
+      adapterEnv: {},
+    });
+
+    expect(services).toHaveLength(1);
+    expect(services[0]).toMatchObject({
+      serviceName: "browser",
+      provider: "host_bridge",
+      url: "ws://127.0.0.1:9555/playwright",
+    });
+    expect(seenAuthHeaders).toEqual(["Bearer bridge-token"]);
+
+    await releaseRuntimeServicesForRun(runId);
+    leasedRunIds.delete(runId);
+    await stopHostBridgeDouble(server);
+
+    expect(seenDeletes).toEqual(["/v1/browser-sessions/browser-session-1"]);
   });
 });
 

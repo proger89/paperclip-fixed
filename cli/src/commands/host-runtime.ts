@@ -1,9 +1,10 @@
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import { URL } from "node:url";
 import {
   type AdapterEnvironmentTestResult,
   type AdapterExecutionResult,
+  type AdapterInvocationMeta,
   type HostRuntimeBrowserSessionRequest,
   type HostRuntimeBrowserSessionResponse,
   type HostRuntimeCapability,
@@ -235,7 +236,7 @@ async function executeOnHost(
       onMeta: async (meta) => {
         sendNdjsonEvent(res, {
           type: "meta",
-          meta: translateInvocationMeta(meta as unknown as Record<string, unknown>, maps),
+          meta: translateInvocationMeta(meta as unknown as Record<string, unknown>, maps) as unknown as AdapterInvocationMeta,
         });
       },
       onSpawn: async (meta) => {
@@ -256,7 +257,7 @@ async function executeOnHost(
       onMeta: async (meta) => {
         sendNdjsonEvent(res, {
           type: "meta",
-          meta: translateInvocationMeta(meta as unknown as Record<string, unknown>, maps),
+          meta: translateInvocationMeta(meta as unknown as Record<string, unknown>, maps) as unknown as AdapterInvocationMeta,
         });
       },
       onSpawn: async (meta) => {
@@ -354,7 +355,7 @@ async function launchBrowserSession(
   };
 }
 
-export async function hostRuntimeServe(opts: HostRuntimeServeOptions) {
+export async function hostRuntimeServe(opts: HostRuntimeServeOptions): Promise<Server> {
   const token = opts.token?.trim() || process.env.PAPERCLIP_HOST_BRIDGE_TOKEN?.trim() || "";
   if (!token) {
     throw new Error("Host runtime bridge requires --token or PAPERCLIP_HOST_BRIDGE_TOKEN.");
@@ -466,4 +467,5 @@ export async function hostRuntimeServe(opts: HostRuntimeServeOptions) {
   process.stdout.write(
     `[paperclip host-runtime] listening on http://${host}:${port} capabilities=${Array.from(capabilities).join(",")}\n`,
   );
+  return server;
 }
