@@ -71,11 +71,19 @@ function resolveAgentJwtSecretStatus(
   status: "pass" | "warn";
   message: string;
 } {
-  const envValue = process.env.PAPERCLIP_AGENT_JWT_SECRET?.trim();
-  if (envValue) {
+  const agentJwtEnvValue = process.env.PAPERCLIP_AGENT_JWT_SECRET?.trim();
+  if (agentJwtEnvValue) {
     return {
       status: "pass",
-      message: "set",
+      message: "set via PAPERCLIP_AGENT_JWT_SECRET",
+    };
+  }
+
+  const betterAuthEnvValue = process.env.BETTER_AUTH_SECRET?.trim();
+  if (betterAuthEnvValue) {
+    return {
+      status: "pass",
+      message: "set via BETTER_AUTH_SECRET",
     };
   }
 
@@ -85,14 +93,21 @@ function resolveAgentJwtSecretStatus(
     if (fileValue) {
       return {
         status: "warn",
-        message: `found in ${envFilePath} but not loaded`,
+        message: `PAPERCLIP_AGENT_JWT_SECRET found in ${envFilePath} but not loaded`,
+      };
+    }
+    const betterAuthFileValue = typeof parsed.BETTER_AUTH_SECRET === "string" ? parsed.BETTER_AUTH_SECRET.trim() : "";
+    if (betterAuthFileValue) {
+      return {
+        status: "warn",
+        message: `BETTER_AUTH_SECRET found in ${envFilePath} but not loaded`,
       };
     }
   }
 
   return {
     status: "warn",
-    message: "missing (run `pnpm paperclipai onboard`)",
+    message: "missing (set BETTER_AUTH_SECRET or run `pnpm paperclipai onboard`)",
   };
 }
 

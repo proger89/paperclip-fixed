@@ -25,8 +25,22 @@ function parseNumber(value: string | undefined, fallback: number) {
   return Math.floor(parsed);
 }
 
+function resolveLocalAgentJwtSecret() {
+  const explicitSecret = process.env.PAPERCLIP_AGENT_JWT_SECRET?.trim();
+  if (explicitSecret) return explicitSecret;
+
+  const authSecret = process.env.BETTER_AUTH_SECRET?.trim();
+  if (authSecret) return authSecret;
+
+  return null;
+}
+
+export function localAgentJwtConfigured() {
+  return resolveLocalAgentJwtSecret() !== null;
+}
+
 function jwtConfig() {
-  const secret = process.env.PAPERCLIP_AGENT_JWT_SECRET;
+  const secret = resolveLocalAgentJwtSecret();
   if (!secret) return null;
 
   return {

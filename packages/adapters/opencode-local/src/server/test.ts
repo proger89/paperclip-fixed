@@ -6,10 +6,10 @@ import type {
 import {
   asString,
   asStringArray,
+  buildSafeChildProcessEnv,
   parseObject,
   ensureAbsoluteDirectory,
   ensureCommandResolvable,
-  ensurePathInEnv,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
 import { discoverOpenCodeModels, ensureOpenCodeModelConfiguredAndAvailable } from "./models.js";
@@ -90,7 +90,7 @@ export async function testEnvironment(
     });
   }
 
-  const runtimeEnv = normalizeEnv(ensurePathInEnv({ ...process.env, ...env }));
+  const runtimeEnv = buildSafeChildProcessEnv(env);
 
   const cwdInvalid = checks.some((check) => check.code === "opencode_cwd_invalid");
   if (cwdInvalid) {
@@ -244,6 +244,7 @@ export async function testEnvironment(
           graceSec: 5,
           stdin: "Respond with hello.",
           onLog: async () => {},
+          inheritParentEnv: false,
         },
       );
 

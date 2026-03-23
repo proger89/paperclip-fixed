@@ -22,6 +22,14 @@ const payload = {
   paperclipEnvKeys: Object.keys(process.env)
     .filter((key) => key.startsWith("PAPERCLIP_"))
     .sort(),
+  paperclipApiKey: process.env.PAPERCLIP_API_KEY || null,
+  instructionsFile: process.env.PAPERCLIP_INSTRUCTIONS_FILE || null,
+  instructionsDir: process.env.PAPERCLIP_INSTRUCTIONS_DIR || null,
+  betterAuthSecret: process.env.BETTER_AUTH_SECRET || null,
+  agentJwtSecret: process.env.PAPERCLIP_AGENT_JWT_SECRET || null,
+  hostBridgeToken: process.env.PAPERCLIP_HOST_BRIDGE_TOKEN || null,
+  hostBridgeUrl: process.env.PAPERCLIP_HOST_BRIDGE_URL || null,
+  databaseUrl: process.env.DATABASE_URL || null,
 };
 if (capturePath) {
   fs.writeFileSync(capturePath, JSON.stringify(payload), "utf8");
@@ -68,6 +76,14 @@ type CapturePayload = {
   lang: string | null;
   lcAll: string | null;
   paperclipEnvKeys: string[];
+  paperclipApiKey: string | null;
+  instructionsFile: string | null;
+  instructionsDir: string | null;
+  betterAuthSecret: string | null;
+  agentJwtSecret: string | null;
+  hostBridgeToken: string | null;
+  hostBridgeUrl: string | null;
+  databaseUrl: string | null;
 };
 
 type LogEntry = {
@@ -639,6 +655,101 @@ describe("codex execute", () => {
       else process.env.HOME = previousHome;
       if (previousUserProfile === undefined) delete process.env.USERPROFILE;
       else process.env.USERPROFILE = previousUserProfile;
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("injects instructions metadata and strips server-private secrets from the child env", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-codex-execute-env-"));
+    const workspace = path.join(root, "workspace");
+    const commandPath = path.join(root, "codex");
+    const capturePath = path.join(root, "capture.json");
+    const instructionsDir = path.join(root, "instructions");
+    const instructionsPath = path.join(instructionsDir, "AGENTS.md");
+    await fs.mkdir(workspace, { recursive: true });
+    await fs.mkdir(instructionsDir, { recursive: true });
+    await fs.writeFile(instructionsPath, "Read the sibling files.\n", "utf8");
+    await writeFakeCodexCommand(commandPath);
+
+    const previousHome = process.env.HOME;
+    const previousUserProfile = process.env.USERPROFILE;
+    const previousBetterAuthSecret = process.env.BETTER_AUTH_SECRET;
+    const previousAgentJwtSecret = process.env.PAPERCLIP_AGENT_JWT_SECRET;
+    const previousHostBridgeToken = process.env.PAPERCLIP_HOST_BRIDGE_TOKEN;
+    const previousHostBridgeUrl = process.env.PAPERCLIP_HOST_BRIDGE_URL;
+    const previousDatabaseUrl = process.env.DATABASE_URL;
+    process.env.HOME = root;
+    process.env.USERPROFILE = root;
+    process.env.BETTER_AUTH_SECRET = "server-better-auth-secret";
+    process.env.PAPERCLIP_AGENT_JWT_SECRET = "server-agent-jwt-secret";
+    process.env.PAPERCLIP_HOST_BRIDGE_TOKEN = "server-host-bridge-token";
+    process.env.PAPERCLIP_HOST_BRIDGE_URL = "http://host.docker.internal:4243";
+    process.env.DATABASE_URL = "postgres://server-db.example.com/paperclip";
+
+    try {
+      const result = await execute({
+        runId: "run-env-isolation",
+        agent: {
+          id: "agent-1",
+          companyId: "company-1",
+          name: "Codex Coder",
+          adapterType: "codex_local",
+          adapterConfig: {},
+        },
+        runtime: {
+          sessionId: null,
+          sessionParams: null,
+          sessionDisplayId: null,
+          taskKey: null,
+        },
+        config: {
+          command: commandPath,
+          cwd: workspace,
+          instructionsFilePath: instructionsPath,
+          env: {
+            PAPERCLIP_TEST_CAPTURE_PATH: capturePath,
+          },
+          promptTemplate: "Follow the paperclip heartbeat.",
+        },
+        context: {},
+        authToken: "run-jwt-token",
+        onLog: async () => {},
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.errorMessage).toBeNull();
+
+      const capture = JSON.parse(await fs.readFile(capturePath, "utf8")) as CapturePayload;
+      expect(capture.paperclipApiKey).toBe("run-jwt-token");
+      expect(capture.instructionsFile).toBe(instructionsPath);
+      expect(capture.instructionsDir).toBe(instructionsDir);
+      expect(capture.paperclipEnvKeys).toEqual(
+        expect.arrayContaining([
+          "PAPERCLIP_API_KEY",
+          "PAPERCLIP_INSTRUCTIONS_DIR",
+          "PAPERCLIP_INSTRUCTIONS_FILE",
+        ]),
+      );
+      expect(capture.betterAuthSecret).toBeNull();
+      expect(capture.agentJwtSecret).toBeNull();
+      expect(capture.hostBridgeToken).toBeNull();
+      expect(capture.hostBridgeUrl).toBeNull();
+      expect(capture.databaseUrl).toBeNull();
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+      if (previousUserProfile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = previousUserProfile;
+      if (previousBetterAuthSecret === undefined) delete process.env.BETTER_AUTH_SECRET;
+      else process.env.BETTER_AUTH_SECRET = previousBetterAuthSecret;
+      if (previousAgentJwtSecret === undefined) delete process.env.PAPERCLIP_AGENT_JWT_SECRET;
+      else process.env.PAPERCLIP_AGENT_JWT_SECRET = previousAgentJwtSecret;
+      if (previousHostBridgeToken === undefined) delete process.env.PAPERCLIP_HOST_BRIDGE_TOKEN;
+      else process.env.PAPERCLIP_HOST_BRIDGE_TOKEN = previousHostBridgeToken;
+      if (previousHostBridgeUrl === undefined) delete process.env.PAPERCLIP_HOST_BRIDGE_URL;
+      else process.env.PAPERCLIP_HOST_BRIDGE_URL = previousHostBridgeUrl;
+      if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+      else process.env.DATABASE_URL = previousDatabaseUrl;
       await fs.rm(root, { recursive: true, force: true });
     }
   });

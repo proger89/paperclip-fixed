@@ -40,6 +40,30 @@ export const runningProcesses = new Map<string, RunningProcess>();
 export const MAX_CAPTURE_BYTES = 4 * 1024 * 1024;
 export const MAX_EXCERPT_BYTES = 32 * 1024;
 const SENSITIVE_ENV_KEY = /(key|token|secret|password|passwd|authorization|cookie)/i;
+const CHILD_PROCESS_PARENT_ENV_ALLOWLIST = [
+  /^(?:PATH|Path|PATHEXT)$/i,
+  /^(?:HOME|USERPROFILE|HOMEDRIVE|HOMEPATH|APPDATA|LOCALAPPDATA)$/i,
+  /^(?:TMPDIR|TMP|TEMP)$/i,
+  /^(?:SHELL|COMSPEC|ComSpec|SystemRoot|windir)$/i,
+  /^(?:TERM|COLORTERM|LANG|LC_[A-Z_]+|TZ)$/i,
+  /^(?:NO_COLOR|FORCE_COLOR|CLICOLOR|CLICOLOR_FORCE)$/i,
+  /^(?:HTTP_PROXY|HTTPS_PROXY|NO_PROXY|ALL_PROXY)$/i,
+  /^(?:SSL_CERT_FILE|SSL_CERT_DIR|REQUESTS_CA_BUNDLE|CURL_CA_BUNDLE|NODE_EXTRA_CA_CERTS)$/i,
+  /^(?:OPENAI|ANTHROPIC|CURSOR|GEMINI|GOOGLE|OPENROUTER|AZURE_OPENAI|XAI|MISTRAL|PI|OPENCODE)(?:_[A-Z0-9_]+)?$/i,
+] as const;
+const CHILD_PROCESS_SERVER_PRIVATE_ENV_DENYLIST = [
+  /^BETTER_AUTH(?:_[A-Z0-9_]+)?$/i,
+  /^PAPERCLIP_AGENT_JWT(?:_[A-Z0-9_]+)?$/i,
+  /^PAPERCLIP_HOST_BRIDGE(?:_[A-Z0-9_]+)?$/i,
+  /^DATABASE_URL$/i,
+  /^DATABASE_PRIVATE_URL$/i,
+] as const;
+const CLAUDE_CODE_NESTING_VARS = [
+  "CLAUDECODE",
+  "CLAUDE_CODE_ENTRYPOINT",
+  "CLAUDE_CODE_SESSION",
+  "CLAUDE_CODE_PARENT_SESSION",
+] as const;
 const PAPERCLIP_SKILL_ROOT_RELATIVE_CANDIDATES = [
   "../../skills",
   "../../../../../skills",
@@ -221,6 +245,53 @@ export function buildPaperclipEnv(agent: { id: string; companyId: string }): Rec
   const apiUrl = process.env.PAPERCLIP_API_URL ?? `http://${runtimeHost}:${runtimePort}`;
   vars.PAPERCLIP_API_URL = apiUrl;
   return vars;
+}
+
+function shouldInheritParentEnvKey(key: string) {
+  return CHILD_PROCESS_PARENT_ENV_ALLOWLIST.some((pattern) => pattern.test(key));
+}
+
+function shouldStripServerPrivateEnvKey(key: string) {
+  return CHILD_PROCESS_SERVER_PRIVATE_ENV_DENYLIST.some((pattern) => pattern.test(key));
+}
+
+export function buildSafeChildProcessEnv(
+  overrides: Record<string, string>,
+  opts: {
+    parentEnv?: NodeJS.ProcessEnv;
+    inheritParentEnv?: boolean;
+  } = {},
+): Record<string, string> {
+  const parentEnv = opts.parentEnv ?? process.env;
+  const inheritedEntries =
+    opts.inheritParentEnv === false
+      ? []
+      : Object.entries(parentEnv).filter(
+          (entry): entry is [string, string] =>
+            typeof entry[0] === "string" &&
+            typeof entry[1] === "string" &&
+            shouldInheritParentEnvKey(entry[0]),
+        );
+  const merged: NodeJS.ProcessEnv = {
+    ...Object.fromEntries(inheritedEntries),
+    ...overrides,
+  };
+
+  for (const key of CLAUDE_CODE_NESTING_VARS) {
+    delete merged[key];
+  }
+
+  for (const key of Object.keys(merged)) {
+    if (shouldStripServerPrivateEnvKey(key)) {
+      delete merged[key];
+    }
+  }
+
+  return Object.fromEntries(
+    Object.entries(withWindowsUtf8EnvDefaults(ensurePathInEnv(merged))).filter(
+      (entry): entry is [string, string] => typeof entry[1] === "string",
+    ),
+  );
 }
 
 export function defaultPathForPlatform() {
@@ -931,24 +1002,17 @@ export async function runChildProcess(
     onLogError?: (err: unknown, runId: string, message: string) => void;
     onSpawn?: (meta: { pid: number; startedAt: string }) => Promise<void>;
     stdin?: string;
+    inheritParentEnv?: boolean;
   },
 ): Promise<RunProcessResult> {
   const onLogError = opts.onLogError ?? ((err, id, msg) => console.warn({ err, runId: id }, msg));
 
   return new Promise<RunProcessResult>((resolve, reject) => {
-    const rawMerged: NodeJS.ProcessEnv = { ...process.env, ...opts.env };
+    const rawMerged: NodeJS.ProcessEnv =
+      opts.inheritParentEnv === false
+        ? { ...opts.env }
+        : { ...process.env, ...opts.env };
 
-    // Strip Claude Code nesting-guard env vars so spawned `claude` processes
-    // don't refuse to start with "cannot be launched inside another session".
-    // These vars leak in when the Paperclip server itself is started from
-    // within a Claude Code session (e.g. `npx paperclipai run` in a terminal
-    // owned by Claude Code) or when cron inherits a contaminated shell env.
-    const CLAUDE_CODE_NESTING_VARS = [
-      "CLAUDECODE",
-      "CLAUDE_CODE_ENTRYPOINT",
-      "CLAUDE_CODE_SESSION",
-      "CLAUDE_CODE_PARENT_SESSION",
-    ] as const;
     for (const key of CLAUDE_CODE_NESTING_VARS) {
       delete rawMerged[key];
     }

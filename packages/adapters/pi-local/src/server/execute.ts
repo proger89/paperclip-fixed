@@ -14,7 +14,7 @@ import {
   ensureAbsoluteDirectory,
   ensureCommandResolvable,
   ensurePaperclipSkillSymlink,
-  ensurePathInEnv,
+  buildSafeChildProcessEnv,
   readPaperclipRuntimeSkillEntries,
   resolvePaperclipDesiredSkillNames,
   removeMaintainerOnlySkillSymlinks,
@@ -183,7 +183,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   if (approvalId) env.PAPERCLIP_APPROVAL_ID = approvalId;
   if (approvalStatus) env.PAPERCLIP_APPROVAL_STATUS = approvalStatus;
   if (linkedIssueIds.length > 0) env.PAPERCLIP_LINKED_ISSUE_IDS = linkedIssueIds.join(",");
-  if (workspaceCwd) env.PAPERCLIP_WORKSPACE_CWD = workspaceCwd;
+  if (effectiveWorkspaceCwd) env.PAPERCLIP_WORKSPACE_CWD = effectiveWorkspaceCwd;
   if (workspaceSource) env.PAPERCLIP_WORKSPACE_SOURCE = workspaceSource;
   if (workspaceId) env.PAPERCLIP_WORKSPACE_ID = workspaceId;
   if (workspaceRepoUrl) env.PAPERCLIP_WORKSPACE_REPO_URL = workspaceRepoUrl;
@@ -197,12 +197,17 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   if (!hasExplicitApiKey && authToken) {
     env.PAPERCLIP_API_KEY = authToken;
   }
-  
-  const runtimeEnv = Object.fromEntries(
-    Object.entries(ensurePathInEnv({ ...process.env, ...env })).filter(
-      (entry): entry is [string, string] => typeof entry[1] === "string",
-    ),
-  );
+
+  const instructionsFilePath = asString(config.instructionsFilePath, "").trim();
+  const resolvedInstructionsFilePath = instructionsFilePath
+    ? path.resolve(cwd, instructionsFilePath)
+    : "";
+  if (resolvedInstructionsFilePath) {
+    env.PAPERCLIP_INSTRUCTIONS_FILE = resolvedInstructionsFilePath;
+    env.PAPERCLIP_INSTRUCTIONS_DIR = path.dirname(resolvedInstructionsFilePath);
+  }
+
+  const runtimeEnv = buildSafeChildProcessEnv(env);
   await ensureCommandResolvable(command, cwd, runtimeEnv);
 
   // Validate model is available before execution
@@ -250,11 +255,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   }
 
   // Handle instructions file and build system prompt extension
-  const instructionsFilePath = asString(config.instructionsFilePath, "").trim();
-  const resolvedInstructionsFilePath = instructionsFilePath
-    ? path.resolve(cwd, instructionsFilePath)
-    : "";
-  const instructionsFileDir = instructionsFilePath ? `${path.dirname(instructionsFilePath)}/` : "";
+  const instructionsFileDir = resolvedInstructionsFilePath ? `${path.dirname(resolvedInstructionsFilePath)}/` : "";
   
   let systemPromptExtension = "";
   let instructionsReadFailed = false;
@@ -315,7 +316,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   };
 
   const commandNotes = (() => {
-    if (!resolvedInstructionsFilePath) return [] as string[];
+  if (!resolvedInstructionsFilePath) return [] as string[];
     if (instructionsReadFailed) {
       return [
         `Configured instructionsFilePath ${resolvedInstructionsFilePath}, but file could not be read; continuing without injected instructions.`,
@@ -369,7 +370,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         cwd,
         commandNotes,
         commandArgs: args,
-        env: redactEnvForLogs(env),
+        env: redactEnvForLogs(runtimeEnv),
         prompt: userPrompt,
         promptMetrics,
         context,
@@ -407,6 +408,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       onSpawn,
       onLog: bufferedOnLog,
       stdin: buildRpcStdin(),
+      inheritParentEnv: false,
     });
     
     // Flush any remaining buffer content

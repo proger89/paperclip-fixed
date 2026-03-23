@@ -19,6 +19,8 @@ Invoke it whenever you need to remember, retrieve, or organize anything.
 
 These files are essential. Read them.
 
-- `$AGENT_HOME/HEARTBEAT.md` -- execution and extraction checklist. Run every heartbeat.
-- `$AGENT_HOME/SOUL.md` -- who you are and how you should act.
-- `$AGENT_HOME/TOOLS.md` -- tools you have access to
+- `$PAPERCLIP_INSTRUCTIONS_DIR/HEARTBEAT.md` -- execution and extraction checklist. Run every heartbeat.
+- `$PAPERCLIP_INSTRUCTIONS_DIR/SOUL.md` -- who you are and how you should act.
+- `$PAPERCLIP_INSTRUCTIONS_DIR/TOOLS.md` -- tools you have access to
+
+Your workspace and memory root remain `$AGENT_HOME`. Use `$PAPERCLIP_INSTRUCTIONS_FILE` and `$PAPERCLIP_INSTRUCTIONS_DIR` when you need the location of the managed instruction bundle.

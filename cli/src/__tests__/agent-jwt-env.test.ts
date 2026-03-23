@@ -24,6 +24,7 @@ describe("agent jwt env helpers", () => {
   beforeEach(() => {
     process.env = { ...ORIGINAL_ENV };
     delete process.env.PAPERCLIP_AGENT_JWT_SECRET;
+    delete process.env.BETTER_AUTH_SECRET;
   });
 
   afterEach(() => {
@@ -56,6 +57,14 @@ describe("agent jwt env helpers", () => {
     const configPath = tempConfigPath();
     const envPath = resolveAgentJwtEnvFile(configPath);
     fs.writeFileSync(envPath, "PAPERCLIP_AGENT_JWT_SECRET=check-secret\n", { mode: 0o600 });
+
+    const result = agentJwtSecretCheck(configPath);
+    expect(result.status).toBe("pass");
+  });
+
+  it("doctor check passes when BETTER_AUTH_SECRET is set", () => {
+    const configPath = tempConfigPath();
+    process.env.BETTER_AUTH_SECRET = "better-auth-secret";
 
     const result = agentJwtSecretCheck(configPath);
     expect(result.status).toBe("pass");

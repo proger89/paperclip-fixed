@@ -14,7 +14,7 @@ import {
   ensureCommandResolvable,
   createPaperclipSkillLink,
   ensurePaperclipSkillSymlink,
-  ensurePathInEnv,
+  buildSafeChildProcessEnv,
   readPaperclipRuntimeSkillEntries,
   resolvePaperclipDesiredSkillNames,
   renderTemplate,
@@ -429,6 +429,12 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   if (runtimePrimaryUrl) {
     env.PAPERCLIP_RUNTIME_PRIMARY_URL = runtimePrimaryUrl;
   }
+  const instructionsFilePath = asString(config.instructionsFilePath, "").trim();
+  const resolvedInstructionsFilePath = instructionsFilePath ? path.resolve(cwd, instructionsFilePath) : "";
+  if (resolvedInstructionsFilePath) {
+    env.PAPERCLIP_INSTRUCTIONS_FILE = resolvedInstructionsFilePath;
+    env.PAPERCLIP_INSTRUCTIONS_DIR = path.dirname(resolvedInstructionsFilePath);
+  }
   for (const [k, v] of Object.entries(envConfig)) {
     if (typeof v === "string") env[k] = v;
   }
@@ -436,13 +442,8 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     env.PAPERCLIP_API_KEY = authToken;
   }
   const normalizedRuntimeEnv = normalizeCodexWindowsShellEnv(env, envConfig);
-  const effectiveEnv = Object.fromEntries(
-    Object.entries({ ...process.env, ...normalizedRuntimeEnv }).filter(
-      (entry): entry is [string, string] => typeof entry[1] === "string",
-    ),
-  );
-  const billingType = resolveCodexBillingType(effectiveEnv);
-  const runtimeEnv = ensurePathInEnv(effectiveEnv);
+  const runtimeEnv = buildSafeChildProcessEnv(normalizedRuntimeEnv);
+  const billingType = resolveCodexBillingType(runtimeEnv);
   await ensureCommandResolvable(command, cwd, runtimeEnv);
   if (process.platform === "win32") {
     await onLog(
@@ -472,40 +473,39 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       `[paperclip] Codex session "${runtimeSessionId}" was saved for cwd "${runtimeSessionCwd}" and will not be resumed in "${cwd}".\n`,
     );
   }
-  const instructionsFilePath = asString(config.instructionsFilePath, "").trim();
-  const instructionsDir = instructionsFilePath ? `${path.dirname(instructionsFilePath)}/` : "";
+  const instructionsDir = resolvedInstructionsFilePath ? `${path.dirname(resolvedInstructionsFilePath)}/` : "";
   let instructionsPrefix = "";
   let instructionsChars = 0;
-  if (instructionsFilePath) {
+  if (resolvedInstructionsFilePath) {
     try {
-      const instructionsContents = await fs.readFile(instructionsFilePath, "utf8");
+      const instructionsContents = await fs.readFile(resolvedInstructionsFilePath, "utf8");
       instructionsPrefix =
         `${instructionsContents}\n\n` +
-        `The above agent instructions were loaded from ${instructionsFilePath}. ` +
+        `The above agent instructions were loaded from ${resolvedInstructionsFilePath}. ` +
         `Resolve any relative file references from ${instructionsDir}.\n\n`;
       instructionsChars = instructionsPrefix.length;
       await onLog(
         "stdout",
-        `[paperclip] Loaded agent instructions file: ${instructionsFilePath}\n`,
+        `[paperclip] Loaded agent instructions file: ${resolvedInstructionsFilePath}\n`,
       );
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       await onLog(
         "stdout",
-        `[paperclip] Warning: could not read agent instructions file "${instructionsFilePath}": ${reason}\n`,
+        `[paperclip] Warning: could not read agent instructions file "${resolvedInstructionsFilePath}": ${reason}\n`,
       );
     }
   }
   const commandNotes = (() => {
-    if (!instructionsFilePath) return [] as string[];
+    if (!resolvedInstructionsFilePath) return [] as string[];
     if (instructionsPrefix.length > 0) {
       return [
-        `Loaded agent instructions from ${instructionsFilePath}`,
+        `Loaded agent instructions from ${resolvedInstructionsFilePath}`,
         `Prepended instructions + path directive to stdin prompt (relative references from ${instructionsDir}).`,
       ];
     }
     return [
-      `Configured instructionsFilePath ${instructionsFilePath}, but file could not be read; continuing without injected instructions.`,
+      `Configured instructionsFilePath ${resolvedInstructionsFilePath}, but file could not be read; continuing without injected instructions.`,
     ];
   })();
   const bootstrapPromptTemplate = asString(config.bootstrapPromptTemplate, "");
@@ -563,7 +563,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
           if (idx === args.length - 1 && value !== "-") return `<prompt ${prompt.length} chars>`;
           return value;
         }),
-        env: redactEnvForLogs(normalizedRuntimeEnv),
+        env: redactEnvForLogs(runtimeEnv),
         prompt,
         promptMetrics,
         context,
@@ -572,7 +572,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
     const proc = await runChildProcess(runId, command, args, {
       cwd,
-      env: normalizedRuntimeEnv,
+      env: runtimeEnv,
       stdin: prompt,
       timeoutSec,
       graceSec,
@@ -586,6 +586,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         if (!cleaned.trim()) return;
         await onLog(stream, cleaned);
       },
+      inheritParentEnv: false,
     });
     const cleanedStderr = stripCodexStderrNoise(proc.stderr);
     return {
@@ -650,7 +651,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       sessionParams: resolvedSessionParams,
       sessionDisplayId: resolvedSessionId,
       provider: "openai",
-      biller: resolveCodexBiller(effectiveEnv, billingType),
+      biller: resolveCodexBiller(runtimeEnv, billingType),
       model,
       billingType,
       costUsd: null,

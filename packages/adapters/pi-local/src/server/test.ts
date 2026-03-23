@@ -8,7 +8,7 @@ import {
   parseObject,
   ensureAbsoluteDirectory,
   ensureCommandResolvable,
-  ensurePathInEnv,
+  buildSafeChildProcessEnv,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
 import {
@@ -101,7 +101,7 @@ export async function testEnvironment(
   for (const [key, value] of Object.entries(envConfig)) {
     if (typeof value === "string") env[key] = value;
   }
-  const runtimeEnv = normalizeEnv(ensurePathInEnv({ ...process.env, ...env }));
+  const runtimeEnv = buildSafeChildProcessEnv(env);
 
   const cwdInvalid = checks.some((check) => check.code === "pi_cwd_invalid");
   if (cwdInvalid) {
@@ -228,6 +228,7 @@ export async function testEnvironment(
           timeoutSec: 60,
           graceSec: 5,
           onLog: async () => {},
+          inheritParentEnv: false,
         },
       );
 

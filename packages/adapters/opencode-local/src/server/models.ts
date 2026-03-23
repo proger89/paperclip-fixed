@@ -3,7 +3,7 @@ import os from "node:os";
 import type { AdapterModel } from "@paperclipai/adapter-utils";
 import {
   asString,
-  ensurePathInEnv,
+  buildSafeChildProcessEnv,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
 
@@ -120,7 +120,9 @@ export async function discoverOpenCodeModels(input: {
     // /etc/passwd entry (e.g. `docker run --user 1234` with a minimal
     // image). Fall back to process.env.HOME.
   }
-  const runtimeEnv = normalizeEnv(ensurePathInEnv({ ...process.env, ...env, ...(resolvedHome ? { HOME: resolvedHome } : {}) }));
+  const runtimeEnv = buildSafeChildProcessEnv(
+    normalizeEnv({ ...env, ...(resolvedHome ? { HOME: resolvedHome } : {}) }),
+  );
 
   const result = await runChildProcess(
     `opencode-models-${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -132,6 +134,7 @@ export async function discoverOpenCodeModels(input: {
       timeoutSec: MODELS_DISCOVERY_TIMEOUT_MS / 1000,
       graceSec: 3,
       onLog: async () => {},
+      inheritParentEnv: false,
     },
   );
 

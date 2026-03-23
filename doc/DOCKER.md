@@ -40,6 +40,11 @@ Defaults:
 - public URL default: `http://127.0.0.1:3100`
 - Better Auth secret default: `paperclip-docker-dev-secret`
 
+Authenticated Docker note:
+
+- `BETTER_AUTH_SECRET` is also sufficient for managed local agent JWT signing.
+- `PAPERCLIP_AGENT_JWT_SECRET` is optional and only needed if you want a dedicated override separate from Better Auth.
+
 On first startup in authenticated mode, the container now auto-generates a bootstrap CEO invite if no instance admin exists yet and prints the invite URL into the Paperclip container logs. Example:
 
 ```sh
@@ -205,6 +210,12 @@ services:
 - hostname allowlist defaults (hostname extracted from URL)
 
 Granular overrides remain available if needed (`PAPERCLIP_AUTH_PUBLIC_BASE_URL`, `BETTER_AUTH_URL`, `BETTER_AUTH_TRUSTED_ORIGINS`, `PAPERCLIP_ALLOWED_HOSTNAMES`).
+
+Managed local/host agent note:
+
+- In authenticated deployments, Paperclip injects `PAPERCLIP_API_KEY` into managed local and host-bridge runs.
+- By default that agent auth token is signed with `BETTER_AUTH_SECRET`.
+- Set `PAPERCLIP_AGENT_JWT_SECRET` only if you want to override that signer secret explicitly.
 
 Set `PAPERCLIP_ALLOWED_HOSTNAMES` explicitly only when you need additional hostnames beyond the public URL host (for example Tailscale/LAN aliases or multiple private hostnames).
 

@@ -180,6 +180,32 @@ console.log(JSON.stringify({ type: "turn.completed", usage: { input_tokens: 1, c
   await fsPromises.chmod(commandPath, 0o755);
 }
 
+async function writeFakeCodexApiKeyRequiredCommand(
+  commandPath: string,
+  capturePath: string,
+): Promise<void> {
+  const script = `#!/usr/bin/env node
+const fs = require("node:fs");
+const payload = {
+  apiKeyPresent: Boolean(process.env.PAPERCLIP_API_KEY),
+  apiKey: process.env.PAPERCLIP_API_KEY || null,
+};
+fs.writeFileSync(${JSON.stringify(capturePath)}, JSON.stringify(payload), "utf8");
+if (!process.env.PAPERCLIP_API_KEY) {
+  console.log(JSON.stringify({
+    type: "error",
+    message: "Missing PAPERCLIP_API_KEY",
+  }));
+  process.exit(1);
+}
+console.log(JSON.stringify({ type: "thread.started", thread_id: "codex-session-auth" }));
+console.log(JSON.stringify({ type: "item.completed", item: { type: "agent_message", text: "authenticated" } }));
+console.log(JSON.stringify({ type: "turn.completed", usage: { input_tokens: 1, cached_input_tokens: 0, output_tokens: 1 } }));
+`;
+  await fsPromises.writeFile(commandPath, script, "utf8");
+  await fsPromises.chmod(commandPath, 0o755);
+}
+
 async function waitForRunToFinish(
   heartbeat: ReturnType<typeof heartbeatService>,
   runId: string,
@@ -305,6 +331,9 @@ describe("heartbeat orphaned process recovery", () => {
     }
     delete process.env.PAPERCLIP_HOST_BRIDGE_URL;
     delete process.env.PAPERCLIP_HOST_BRIDGE_TOKEN;
+    delete process.env.PAPERCLIP_DEPLOYMENT_MODE;
+    delete process.env.PAPERCLIP_AGENT_JWT_SECRET;
+    delete process.env.BETTER_AUTH_SECRET;
   });
 
   afterAll(async () => {
@@ -637,6 +666,228 @@ describe("heartbeat orphaned process recovery", () => {
       } else {
         process.env.USERPROFILE = previousUserProfile;
       }
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("uses BETTER_AUTH_SECRET to mint PAPERCLIP_API_KEY for authenticated local runs", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "paperclip-heartbeat-better-auth-"));
+    const workspace = path.join(root, "workspace");
+    const commandPath = path.join(root, "codex");
+    const capturePath = path.join(root, "capture.json");
+    await fsPromises.mkdir(workspace, { recursive: true });
+    await writeFakeCodexApiKeyRequiredCommand(commandPath, capturePath);
+
+    const previousHome = process.env.HOME;
+    const previousUserProfile = process.env.USERPROFILE;
+    const previousDeploymentMode = process.env.PAPERCLIP_DEPLOYMENT_MODE;
+    const previousAgentJwtSecret = process.env.PAPERCLIP_AGENT_JWT_SECRET;
+    const previousBetterAuthSecret = process.env.BETTER_AUTH_SECRET;
+    process.env.HOME = root;
+    process.env.USERPROFILE = root;
+    process.env.PAPERCLIP_DEPLOYMENT_MODE = "authenticated";
+    delete process.env.PAPERCLIP_AGENT_JWT_SECRET;
+    process.env.BETTER_AUTH_SECRET = "better-auth-only-secret";
+
+    try {
+      const companyId = randomUUID();
+      const agentId = randomUUID();
+      const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+      const heartbeat = heartbeatService(db);
+
+      await db.insert(companies).values({
+        id: companyId,
+        name: "Paperclip",
+        issuePrefix,
+        requireBoardApprovalForNewAgents: false,
+      });
+
+      await db.insert(agents).values({
+        id: agentId,
+        companyId,
+        name: "Authenticated Agent",
+        role: "engineer",
+        status: "active",
+        adapterType: "codex_local",
+        adapterConfig: {
+          command: commandPath,
+          cwd: workspace,
+          promptTemplate: "Continue your work.",
+        },
+        runtimeConfig: {},
+        permissions: {},
+      });
+
+      const queuedRun = await heartbeat.invoke(
+        agentId,
+        "on_demand",
+        {},
+        "manual",
+        { actorType: "system", actorId: "better-auth-test" },
+      );
+      const finalizedRun = await waitForRunToFinish(heartbeat, queuedRun!.id);
+      expect(finalizedRun.status).toBe("succeeded");
+
+      const capture = JSON.parse(await fsPromises.readFile(capturePath, "utf8")) as Record<string, unknown>;
+      expect(capture.apiKeyPresent).toBe(true);
+      expect(typeof capture.apiKey).toBe("string");
+      expect((capture.apiKey as string).length).toBeGreaterThan(0);
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+      if (previousUserProfile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = previousUserProfile;
+      if (previousDeploymentMode === undefined) delete process.env.PAPERCLIP_DEPLOYMENT_MODE;
+      else process.env.PAPERCLIP_DEPLOYMENT_MODE = previousDeploymentMode;
+      if (previousAgentJwtSecret === undefined) delete process.env.PAPERCLIP_AGENT_JWT_SECRET;
+      else process.env.PAPERCLIP_AGENT_JWT_SECRET = previousAgentJwtSecret;
+      if (previousBetterAuthSecret === undefined) delete process.env.BETTER_AUTH_SECRET;
+      else process.env.BETTER_AUTH_SECRET = previousBetterAuthSecret;
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("fails fast with local_agent_jwt_unavailable in authenticated mode when no signer secret exists", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "paperclip-heartbeat-missing-jwt-"));
+    const workspace = path.join(root, "workspace");
+    const commandPath = path.join(root, "codex");
+    const capturePath = path.join(root, "capture.json");
+    await fsPromises.mkdir(workspace, { recursive: true });
+    await writeFakeCodexApiKeyRequiredCommand(commandPath, capturePath);
+
+    const previousHome = process.env.HOME;
+    const previousUserProfile = process.env.USERPROFILE;
+    const previousDeploymentMode = process.env.PAPERCLIP_DEPLOYMENT_MODE;
+    const previousAgentJwtSecret = process.env.PAPERCLIP_AGENT_JWT_SECRET;
+    const previousBetterAuthSecret = process.env.BETTER_AUTH_SECRET;
+    process.env.HOME = root;
+    process.env.USERPROFILE = root;
+    process.env.PAPERCLIP_DEPLOYMENT_MODE = "authenticated";
+    delete process.env.PAPERCLIP_AGENT_JWT_SECRET;
+    delete process.env.BETTER_AUTH_SECRET;
+
+    try {
+      const companyId = randomUUID();
+      const agentId = randomUUID();
+      const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+      const heartbeat = heartbeatService(db);
+
+      await db.insert(companies).values({
+        id: companyId,
+        name: "Paperclip",
+        issuePrefix,
+        requireBoardApprovalForNewAgents: false,
+      });
+
+      await db.insert(agents).values({
+        id: agentId,
+        companyId,
+        name: "Missing JWT Agent",
+        role: "engineer",
+        status: "active",
+        adapterType: "codex_local",
+        adapterConfig: {
+          command: commandPath,
+          cwd: workspace,
+          promptTemplate: "Continue your work.",
+        },
+        runtimeConfig: {},
+        permissions: {},
+      });
+
+      const queuedRun = await heartbeat.invoke(
+        agentId,
+        "on_demand",
+        {},
+        "manual",
+        { actorType: "system", actorId: "missing-jwt-test" },
+      );
+      const finalizedRun = await waitForRunToFinish(heartbeat, queuedRun!.id);
+      expect(finalizedRun.status).toBe("failed");
+      expect(finalizedRun.errorCode).toBe("local_agent_jwt_unavailable");
+      await expect(fsPromises.stat(capturePath)).rejects.toThrow();
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+      if (previousUserProfile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = previousUserProfile;
+      if (previousDeploymentMode === undefined) delete process.env.PAPERCLIP_DEPLOYMENT_MODE;
+      else process.env.PAPERCLIP_DEPLOYMENT_MODE = previousDeploymentMode;
+      if (previousAgentJwtSecret === undefined) delete process.env.PAPERCLIP_AGENT_JWT_SECRET;
+      else process.env.PAPERCLIP_AGENT_JWT_SECRET = previousAgentJwtSecret;
+      if (previousBetterAuthSecret === undefined) delete process.env.BETTER_AUTH_SECRET;
+      else process.env.BETTER_AUTH_SECRET = previousBetterAuthSecret;
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("still allows local_trusted runs without a JWT signer", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "paperclip-heartbeat-local-trusted-"));
+    const workspace = path.join(root, "workspace");
+    const commandPath = path.join(root, "codex");
+    await fsPromises.mkdir(workspace, { recursive: true });
+    await writeFakeCodexSuccessCommand(commandPath, "local trusted ok");
+
+    const previousHome = process.env.HOME;
+    const previousUserProfile = process.env.USERPROFILE;
+    const previousDeploymentMode = process.env.PAPERCLIP_DEPLOYMENT_MODE;
+    const previousAgentJwtSecret = process.env.PAPERCLIP_AGENT_JWT_SECRET;
+    const previousBetterAuthSecret = process.env.BETTER_AUTH_SECRET;
+    process.env.HOME = root;
+    process.env.USERPROFILE = root;
+    process.env.PAPERCLIP_DEPLOYMENT_MODE = "local_trusted";
+    delete process.env.PAPERCLIP_AGENT_JWT_SECRET;
+    delete process.env.BETTER_AUTH_SECRET;
+
+    try {
+      const companyId = randomUUID();
+      const agentId = randomUUID();
+      const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+      const heartbeat = heartbeatService(db);
+
+      await db.insert(companies).values({
+        id: companyId,
+        name: "Paperclip",
+        issuePrefix,
+        requireBoardApprovalForNewAgents: false,
+      });
+
+      await db.insert(agents).values({
+        id: agentId,
+        companyId,
+        name: "Local Trusted Agent",
+        role: "engineer",
+        status: "active",
+        adapterType: "codex_local",
+        adapterConfig: {
+          command: commandPath,
+          cwd: workspace,
+          promptTemplate: "Continue your work.",
+        },
+        runtimeConfig: {},
+        permissions: {},
+      });
+
+      const queuedRun = await heartbeat.invoke(
+        agentId,
+        "on_demand",
+        {},
+        "manual",
+        { actorType: "system", actorId: "local-trusted-test" },
+      );
+      const finalizedRun = await waitForRunToFinish(heartbeat, queuedRun!.id);
+      expect(finalizedRun.status).toBe("succeeded");
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+      if (previousUserProfile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = previousUserProfile;
+      if (previousDeploymentMode === undefined) delete process.env.PAPERCLIP_DEPLOYMENT_MODE;
+      else process.env.PAPERCLIP_DEPLOYMENT_MODE = previousDeploymentMode;
+      if (previousAgentJwtSecret === undefined) delete process.env.PAPERCLIP_AGENT_JWT_SECRET;
+      else process.env.PAPERCLIP_AGENT_JWT_SECRET = previousAgentJwtSecret;
+      if (previousBetterAuthSecret === undefined) delete process.env.BETTER_AUTH_SECRET;
+      else process.env.BETTER_AUTH_SECRET = previousBetterAuthSecret;
       fs.rmSync(root, { recursive: true, force: true });
     }
   });

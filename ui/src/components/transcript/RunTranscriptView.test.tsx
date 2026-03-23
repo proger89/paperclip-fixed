@@ -58,12 +58,12 @@ describe("RunTranscriptView", () => {
     expect(html).toContain("<li>second</li>");
   });
 
-  it("hides saved-session resume skip stderr from nice mode normalization", () => {
+  it("hides fresh-session stderr from nice mode normalization", () => {
     const entries: TranscriptEntry[] = [
       {
         kind: "stderr",
         ts: "2026-03-12T00:00:00.000Z",
-        text: "[paperclip] Skipping saved session resume for task \"PAP-485\" because wake reason is issue_assigned.",
+        text: "[paperclip] Starting a fresh session for task \"PAP-485\" because wake reason is issue_assigned.",
       },
       {
         kind: "assistant",

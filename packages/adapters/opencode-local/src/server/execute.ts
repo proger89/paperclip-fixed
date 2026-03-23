@@ -14,7 +14,7 @@ import {
   ensureAbsoluteDirectory,
   ensureCommandResolvable,
   ensurePaperclipSkillSymlink,
-  ensurePathInEnv,
+  buildSafeChildProcessEnv,
   renderTemplate,
   runChildProcess,
   readPaperclipRuntimeSkillEntries,
@@ -172,11 +172,15 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   if (!hasExplicitApiKey && authToken) {
     env.PAPERCLIP_API_KEY = authToken;
   }
-  const runtimeEnv = Object.fromEntries(
-    Object.entries(ensurePathInEnv({ ...process.env, ...env })).filter(
-      (entry): entry is [string, string] => typeof entry[1] === "string",
-    ),
-  );
+  const instructionsFilePath = asString(config.instructionsFilePath, "").trim();
+  const resolvedInstructionsFilePath = instructionsFilePath
+    ? path.resolve(cwd, instructionsFilePath)
+    : "";
+  if (resolvedInstructionsFilePath) {
+    env.PAPERCLIP_INSTRUCTIONS_FILE = resolvedInstructionsFilePath;
+    env.PAPERCLIP_INSTRUCTIONS_DIR = path.dirname(resolvedInstructionsFilePath);
+  }
+  const runtimeEnv = buildSafeChildProcessEnv(env);
   await ensureCommandResolvable(command, cwd, runtimeEnv);
 
   await ensureOpenCodeModelConfiguredAndAvailable({
@@ -208,10 +212,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     );
   }
 
-  const instructionsFilePath = asString(config.instructionsFilePath, "").trim();
-  const resolvedInstructionsFilePath = instructionsFilePath
-    ? path.resolve(cwd, instructionsFilePath)
-    : "";
   const instructionsDir = resolvedInstructionsFilePath ? `${path.dirname(resolvedInstructionsFilePath)}/` : "";
   let instructionsPrefix = "";
   if (resolvedInstructionsFilePath) {
@@ -295,7 +295,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         cwd,
         commandNotes,
         commandArgs: [...args, `<stdin prompt ${prompt.length} chars>`],
-        env: redactEnvForLogs(env),
+        env: redactEnvForLogs(runtimeEnv),
         prompt,
         promptMetrics,
         context,
@@ -310,6 +310,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       graceSec,
       onSpawn,
       onLog,
+      inheritParentEnv: false,
     });
     return {
       proc,

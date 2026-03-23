@@ -84,6 +84,10 @@ const SESSIONED_LOCAL_ADAPTERS = new Set([
   "pi_local",
 ]);
 
+function isAuthenticatedDeploymentMode() {
+  return (process.env.PAPERCLIP_DEPLOYMENT_MODE ?? "").trim() === "authenticated";
+}
+
 function deriveRepoNameFromRepoUrl(repoUrl: string | null): string | null {
   const trimmed = repoUrl?.trim() ?? "";
   if (!trimmed) return null;
@@ -1240,15 +1244,15 @@ export function heartbeatService(db: Db) {
     const warnings: string[] = [];
     if (sessionCwd) {
       warnings.push(
-        `Saved session workspace "${sessionCwd}" is not available. Using fallback workspace "${cwd}" for this run.`,
+        `Saved session workspace "${sessionCwd}" is not available. Using agent home workspace "${cwd}" for this run.`,
       );
     } else if (resolvedProjectId) {
       warnings.push(
-        `No project workspace directory is currently available for this issue. Using fallback workspace "${cwd}" for this run.`,
+        `No project workspace directory is currently available for this issue. Using agent home workspace "${cwd}" for this run.`,
       );
     } else {
       warnings.push(
-        `No project or prior session workspace was available. Using fallback workspace "${cwd}" for this run.`,
+        `No project or prior session workspace was available. Using agent home workspace "${cwd}" for this run.`,
       );
     }
     return {
@@ -2431,8 +2435,8 @@ export function heartbeatService(db: Db) {
       ...(resetTaskSession && sessionResetReason
         ? [
             taskKey
-              ? `Skipping saved session resume for task "${taskKey}" because ${sessionResetReason}.`
-              : `Skipping saved session resume because ${sessionResetReason}.`,
+              ? `Starting a fresh session for task "${taskKey}" because ${sessionResetReason}.`
+              : `Starting a fresh session because ${sessionResetReason}.`,
           ]
         : []),
     ];
@@ -2677,7 +2681,11 @@ export function heartbeatService(db: Db) {
       const authToken = adapter.supportsLocalAgentJwt
         ? createLocalAgentJwt(agent.id, agent.companyId, agent.adapterType, run.id)
         : null;
-      if (adapter.supportsLocalAgentJwt && !authToken) {
+      const missingManagedAgentAuth =
+        adapter.supportsLocalAgentJwt &&
+        !authToken &&
+        isAuthenticatedDeploymentMode();
+      if (adapter.supportsLocalAgentJwt && !authToken && !missingManagedAgentAuth) {
         logger.warn(
           {
             companyId: agent.companyId,
@@ -2688,19 +2696,41 @@ export function heartbeatService(db: Db) {
           "local agent jwt secret missing or invalid; running without injected PAPERCLIP_API_KEY",
         );
       }
-      const adapterResult = await adapter.execute({
-        runId: run.id,
-        agent,
-        runtime: runtimeForAdapter,
-        config: runtimeConfig,
-        context,
-        onLog,
-        onMeta: onAdapterMeta,
-        onSpawn: async (meta) => {
-          await persistRunProcessMetadata(run.id, meta);
-        },
-        authToken: authToken ?? undefined,
-      });
+      const adapterResult: AdapterExecutionResult = missingManagedAgentAuth
+        ? await (async () => {
+            const message =
+              "Managed local agent authentication is unavailable. Configure BETTER_AUTH_SECRET or PAPERCLIP_AGENT_JWT_SECRET so Paperclip can inject PAPERCLIP_API_KEY for this run.";
+            logger.error(
+              {
+                companyId: agent.companyId,
+                agentId: agent.id,
+                runId: run.id,
+                adapterType: agent.adapterType,
+              },
+              "managed local agent auth signer unavailable in authenticated deployment",
+            );
+            await onLog("stderr", `[paperclip] ${message}\n`);
+            return {
+              exitCode: null,
+              signal: null,
+              timedOut: false,
+              errorCode: "local_agent_jwt_unavailable",
+              errorMessage: message,
+            } satisfies AdapterExecutionResult;
+          })()
+        : await adapter.execute({
+            runId: run.id,
+            agent,
+            runtime: runtimeForAdapter,
+            config: runtimeConfig,
+            context,
+            onLog,
+            onMeta: onAdapterMeta,
+            onSpawn: async (meta) => {
+              await persistRunProcessMetadata(run.id, meta);
+            },
+            authToken: authToken ?? undefined,
+          });
       const adapterManagedRuntimeServices = adapterResult.runtimeServices
         ? await persistAdapterManagedRuntimeServices({
             db,

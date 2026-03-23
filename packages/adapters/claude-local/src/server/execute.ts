@@ -18,7 +18,7 @@ import {
   ensureAbsoluteDirectory,
   ensureCommandResolvable,
   createPaperclipSkillLink,
-  ensurePathInEnv,
+  buildSafeChildProcessEnv,
   renderTemplate,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
@@ -73,7 +73,7 @@ interface ClaudeRuntimeConfig {
   workspaceId: string | null;
   workspaceRepoUrl: string | null;
   workspaceRepoRef: string | null;
-  env: Record<string, string>;
+  runtimeEnv: Record<string, string>;
   timeoutSec: number;
   graceSec: number;
   extraArgs: string[];
@@ -252,6 +252,12 @@ async function buildClaudeRuntimeConfig(input: ClaudeExecutionInput): Promise<Cl
   if (runtimePrimaryUrl) {
     env.PAPERCLIP_RUNTIME_PRIMARY_URL = runtimePrimaryUrl;
   }
+  const instructionsFilePath = asString(config.instructionsFilePath, "").trim();
+  const resolvedInstructionsFilePath = instructionsFilePath ? path.resolve(cwd, instructionsFilePath) : "";
+  if (resolvedInstructionsFilePath) {
+    env.PAPERCLIP_INSTRUCTIONS_FILE = resolvedInstructionsFilePath;
+    env.PAPERCLIP_INSTRUCTIONS_DIR = path.dirname(resolvedInstructionsFilePath);
+  }
 
   for (const [key, value] of Object.entries(envConfig)) {
     if (typeof value === "string") env[key] = value;
@@ -261,7 +267,7 @@ async function buildClaudeRuntimeConfig(input: ClaudeExecutionInput): Promise<Cl
     env.PAPERCLIP_API_KEY = authToken;
   }
 
-  const runtimeEnv = ensurePathInEnv({ ...process.env, ...env });
+  const runtimeEnv = buildSafeChildProcessEnv(env);
   await ensureCommandResolvable(command, cwd, runtimeEnv);
 
   const timeoutSec = asNumber(config.timeoutSec, 0);
@@ -278,7 +284,7 @@ async function buildClaudeRuntimeConfig(input: ClaudeExecutionInput): Promise<Cl
     workspaceId,
     workspaceRepoUrl,
     workspaceRepoRef,
-    env,
+    runtimeEnv,
     timeoutSec,
     graceSec,
     extraArgs,
@@ -304,10 +310,11 @@ export async function runClaudeLogin(input: {
 
   const proc = await runChildProcess(input.runId, runtime.command, ["login"], {
     cwd: runtime.cwd,
-    env: runtime.env,
+    env: runtime.runtimeEnv,
     timeoutSec: runtime.timeoutSec,
     graceSec: runtime.graceSec,
     onLog,
+    inheritParentEnv: false,
   });
 
   const loginMeta = detectClaudeLoginRequired({
@@ -335,12 +342,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const maxTurns = asNumber(config.maxTurnsPerRun, 0);
   const dangerouslySkipPermissions = asBoolean(config.dangerouslySkipPermissions, false);
   const instructionsFilePath = asString(config.instructionsFilePath, "").trim();
-  const instructionsFileDir = instructionsFilePath ? `${path.dirname(instructionsFilePath)}/` : "";
-  const commandNotes = instructionsFilePath
-    ? [
-        `Injected agent instructions via --append-system-prompt-file ${instructionsFilePath} (with path directive appended)`,
-      ]
-    : [];
+  const commandNotes: string[] = [];
 
   const runtimeConfig = await buildClaudeRuntimeConfig({
     runId,
@@ -355,36 +357,38 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     workspaceId,
     workspaceRepoUrl,
     workspaceRepoRef,
-    env,
+    runtimeEnv,
     timeoutSec,
     graceSec,
     extraArgs,
   } = runtimeConfig;
-  const effectiveEnv = Object.fromEntries(
-    Object.entries({ ...process.env, ...env }).filter(
-      (entry): entry is [string, string] => typeof entry[1] === "string",
-    ),
-  );
-  const billingType = resolveClaudeBillingType(effectiveEnv);
+  const billingType = resolveClaudeBillingType(runtimeEnv);
   const skillsDir = await buildSkillsDir(config);
+  const resolvedInstructionsFilePath = instructionsFilePath ? path.resolve(cwd, instructionsFilePath) : "";
+  const instructionsFileDir = resolvedInstructionsFilePath ? `${path.dirname(resolvedInstructionsFilePath)}/` : "";
+  if (resolvedInstructionsFilePath) {
+    commandNotes.push(
+      `Injected agent instructions via --append-system-prompt-file ${resolvedInstructionsFilePath} (with path directive appended)`,
+    );
+  }
 
   // When instructionsFilePath is configured, create a combined temp file that
   // includes both the file content and the path directive, so we only need
   // --append-system-prompt-file (Claude CLI forbids using both flags together).
-  let effectiveInstructionsFilePath: string | undefined = instructionsFilePath;
-  if (instructionsFilePath) {
+  let effectiveInstructionsFilePath: string | undefined = resolvedInstructionsFilePath || undefined;
+  if (resolvedInstructionsFilePath) {
     try {
-      const instructionsContent = await fs.readFile(instructionsFilePath, "utf-8");
-      const pathDirective = `\nThe above agent instructions were loaded from ${instructionsFilePath}. Resolve any relative file references from ${instructionsFileDir}.`;
+      const instructionsContent = await fs.readFile(resolvedInstructionsFilePath, "utf-8");
+      const pathDirective = `\nThe above agent instructions were loaded from ${resolvedInstructionsFilePath}. Resolve any relative file references from ${instructionsFileDir}.`;
       const combinedPath = path.join(skillsDir, "agent-instructions.md");
       await fs.writeFile(combinedPath, instructionsContent + pathDirective, "utf-8");
       effectiveInstructionsFilePath = combinedPath;
-      await onLog("stderr", `[paperclip] Loaded agent instructions file: ${instructionsFilePath}\n`);
+      await onLog("stderr", `[paperclip] Loaded agent instructions file: ${resolvedInstructionsFilePath}\n`);
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       await onLog(
         "stderr",
-        `[paperclip] Warning: could not read agent instructions file "${instructionsFilePath}": ${reason}\n`,
+        `[paperclip] Warning: could not read agent instructions file "${resolvedInstructionsFilePath}": ${reason}\n`,
       );
       effectiveInstructionsFilePath = undefined;
     }
@@ -472,7 +476,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         cwd,
         commandArgs: args,
         commandNotes,
-        env: redactEnvForLogs(env),
+        env: redactEnvForLogs(runtimeEnv),
         prompt,
         promptMetrics,
         context,
@@ -481,12 +485,13 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
     const proc = await runChildProcess(runId, command, args, {
       cwd,
-      env,
+      env: runtimeEnv,
       stdin: prompt,
       timeoutSec,
       graceSec,
       onSpawn,
       onLog,
+      inheritParentEnv: false,
     });
 
     const parsedStream = parseClaudeStreamJson(proc.stdout);

@@ -514,6 +514,8 @@ export async function startServer(): Promise<StartedServer> {
     runtimeListenHost === "0.0.0.0" || runtimeListenHost === "::"
       ? "localhost"
       : runtimeListenHost;
+  process.env.PAPERCLIP_DEPLOYMENT_MODE = config.deploymentMode;
+  process.env.PAPERCLIP_DEPLOYMENT_EXPOSURE = config.deploymentExposure;
   process.env.PAPERCLIP_LISTEN_HOST = runtimeListenHost;
   process.env.PAPERCLIP_LISTEN_PORT = String(listenPort);
   process.env.PAPERCLIP_API_URL = `http://${runtimeApiHost}:${listenPort}`;
