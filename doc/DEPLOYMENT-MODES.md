@@ -101,10 +101,14 @@ When running `authenticated` mode, if the only instance admin is `local-board`, 
 
 This prevents lockout when a user migrates from long-running local trusted usage to authenticated mode.
 
-## 8. Current Code Reality (As Of 2026-02-23)
+## 8. Current Code Reality (As Of 2026-03-23)
 
 - runtime values are `local_trusted | authenticated`
-- `authenticated` uses Better Auth sessions and bootstrap invite flow
+- `authenticated` uses Better Auth sessions
+- when `authDisableSignUp=false`, authenticated mode is self-service: users sign up directly, the first registered user becomes `instance_admin`, and any signed-in user can create a company
+- company visibility remains membership-scoped; users only see companies they created or were invited into
+- company invites are company-scoped and are the normal way to grant another human access to an existing company
+- `bootstrap_ceo` remains as a legacy/operator-managed path when `authDisableSignUp=true`
 - `local_trusted` ensures a real local Board user principal in `authUsers` with `instance_user_roles` admin access
 - company creation ensures creator membership in `company_memberships` so user assignment/access flows remain consistent
 

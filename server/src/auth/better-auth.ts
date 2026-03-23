@@ -12,6 +12,7 @@ import {
 } from "@paperclipai/db";
 import type { Config } from "../config.js";
 import { logger } from "../middleware/logger.js";
+import { accessService } from "../services/access.js";
 
 export type BetterAuthSessionUser = {
   id: string;
@@ -70,6 +71,7 @@ export function createBetterAuthInstance(db: Db, config: Config, trustedOrigins?
   const baseUrl = config.authBaseUrlMode === "explicit" ? config.authPublicBaseUrl : undefined;
   const secret = process.env.BETTER_AUTH_SECRET ?? process.env.PAPERCLIP_AGENT_JWT_SECRET ?? "paperclip-dev-secret";
   const effectiveTrustedOrigins = trustedOrigins ?? deriveAuthTrustedOrigins(config);
+  const access = accessService(db);
 
   const publicUrl = process.env.PAPERCLIP_PUBLIC_URL ?? baseUrl;
   const isHttpOnly = publicUrl ? publicUrl.startsWith("http://") : false;
@@ -100,6 +102,15 @@ export function createBetterAuthInstance(db: Db, config: Config, trustedOrigins?
           },
           "Generated password reset link",
         );
+      },
+    },
+    databaseHooks: {
+      user: {
+        create: {
+          after: async (user: { id: string }) => {
+            await access.ensureFirstRegisteredUserIsInstanceAdmin(user.id);
+          },
+        },
       },
     },
     ...(isHttpOnly ? { advanced: { useSecureCookies: false } } : {}),

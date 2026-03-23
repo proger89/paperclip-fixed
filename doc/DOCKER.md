@@ -24,7 +24,7 @@ Data persistence:
 - local secrets key
 - local agent workspace data
 
-In Compose mode, Paperclip app data stays under your bind mount (`./data/docker-paperclip` by default) and PostgreSQL data stays in the named Docker volume `paperclip_postgres_data`.
+In Compose mode, Paperclip app data stays under your bind mount (`./data/docker-paperclip` by default) and PostgreSQL data stays under a host bind mount (`./data/docker-paperclip/postgres` by default).
 
 ## Compose Quickstart
 
@@ -36,36 +36,52 @@ Defaults:
 
 - host port: `3100`
 - persistent data dir: `./data/docker-paperclip`
-- database volume: `paperclip_postgres_data`
+- persistent postgres dir: `./data/docker-paperclip/postgres`
 - public URL default: `http://127.0.0.1:3100`
 - Better Auth secret default: `paperclip-docker-dev-secret`
+- sign-up mode default: `PAPERCLIP_AUTH_DISABLE_SIGN_UP=false`
 
 Authenticated Docker note:
 
 - `BETTER_AUTH_SECRET` is also sufficient for managed local agent JWT signing.
 - `PAPERCLIP_AGENT_JWT_SECRET` is optional and only needed if you want a dedicated override separate from Better Auth.
 
-On first startup in authenticated mode, the container now auto-generates a bootstrap CEO invite if no instance admin exists yet and prints the invite URL into the Paperclip container logs. Example:
+On first startup in authenticated mode with sign-up enabled, the normal flow is now:
 
-```sh
-docker compose -f docker-compose.quickstart.yml logs paperclip
-```
-
-Look for:
-
-```text
-Invite URL: http://127.0.0.1:3100/invite/pcp_bootstrap_...
-```
+- open the app
+- create an account
+- create your first company
+- invite other people into that company from company settings
 
 If `OPENAI_API_KEY` is present in the container environment, the Docker entrypoint also runs `codex login --with-api-key` automatically so the `codex_local` adapter probe works without a separate manual login step inside the container.
+
+If you intentionally run closed sign-up mode with `PAPERCLIP_AUTH_DISABLE_SIGN_UP=true`, the container keeps the legacy bootstrap flow and can still auto-generate a bootstrap CEO invite in logs.
 
 Optional overrides:
 
 ```sh
-PAPERCLIP_PORT=3200 PAPERCLIP_DATA_DIR=./data/pc docker compose -f docker-compose.quickstart.yml up --build
+PAPERCLIP_PORT=3200 PAPERCLIP_DATA_DIR=./data/pc PAPERCLIP_POSTGRES_DATA_DIR=./data/pc-postgres docker compose -f docker-compose.quickstart.yml up --build
 ```
 
 If you change host port or use a non-local domain, set `PAPERCLIP_PUBLIC_URL` to the external URL you will use in browser/auth flows.
+
+Persistence notes:
+
+- `docker compose down` keeps both bind-mounted data directories.
+- `docker compose down -v` removes Docker volumes, but it does not remove your bind-mounted Paperclip or Postgres directories.
+- Data is deleted only if you remove the host directories yourself.
+- Default host paths:
+  - app/runtime data: `./data/docker-paperclip`
+  - postgres data: `./data/docker-paperclip/postgres`
+
+Migration from the old named volume layout:
+
+```sh
+mkdir -p ./data/docker-paperclip/postgres
+docker run --rm -v paperclip_postgres_data:/from -v "$(pwd)/data/docker-paperclip/postgres:/to" alpine sh -lc 'cp -a /from/. /to/'
+```
+
+After that, switch to the current compose files and keep using the bind-mounted postgres directory.
 
 ## Hybrid Docker Mode
 
@@ -160,7 +176,8 @@ It does all of the following:
 
 - starts `paperclipai host-runtime serve` on the host unless `HYBRID_SMOKE_START_BRIDGE=false`
 - brings up `docker-compose.hybrid.yml`
-- bootstraps authenticated mode
+- signs up a real user in authenticated mode
+- only uses legacy bootstrap invite flow when `PAPERCLIP_AUTH_DISABLE_SIGN_UP=true`
 - prepares a shared `/paperclip/hybrid-smoke` workspace for host-executed agent checks
 
 Detached mode for Playwright or CI:
@@ -206,7 +223,7 @@ services:
 
 - auth public base URL
 - Better Auth base URL defaults
-- bootstrap invite URL defaults
+- invite URL defaults
 - hostname allowlist defaults (hostname extracted from URL)
 
 Granular overrides remain available if needed (`PAPERCLIP_AUTH_PUBLIC_BASE_URL`, `BETTER_AUTH_URL`, `BETTER_AUTH_TRUSTED_ORIGINS`, `PAPERCLIP_ALLOWED_HOSTNAMES`).
@@ -305,8 +322,9 @@ Notes:
 - Container runtime user id defaults to your local `id -u` so the mounted data dir stays writable while avoiding root runtime.
 - Smoke script defaults to `authenticated/private` mode so `HOST=0.0.0.0` can be exposed to the host.
 - Smoke script defaults host port to `3131` to avoid conflicts with local Paperclip on `3100`.
-- Smoke script also defaults `PAPERCLIP_PUBLIC_URL` to `http://localhost:<HOST_PORT>` so bootstrap invite URLs and auth callbacks use the reachable host port instead of the container's internal `3100`.
-- In authenticated mode, the smoke script defaults `SMOKE_AUTO_BOOTSTRAP=true` and drives the real bootstrap path automatically: it signs up a real user, runs `paperclipai auth bootstrap-ceo` inside the container to mint a real bootstrap invite, accepts that invite over HTTP, and verifies board session access.
+- Smoke script also defaults `PAPERCLIP_PUBLIC_URL` to `http://localhost:<HOST_PORT>` so auth callbacks and invite links use the reachable host port instead of the container's internal `3100`.
+- In authenticated mode with sign-up enabled, the smoke script signs up a real user and verifies board session access directly.
+- If `PAPERCLIP_AUTH_DISABLE_SIGN_UP=true`, the smoke script falls back to the legacy bootstrap flow automatically.
 - Run the script in the foreground to watch the onboarding flow; stop with `Ctrl+C` after validation.
 - Set `SMOKE_DETACH=true` to leave the container running for automation and optionally write shell-ready metadata to `SMOKE_METADATA_FILE`.
 - The image definition is in `Dockerfile.onboard-smoke`.

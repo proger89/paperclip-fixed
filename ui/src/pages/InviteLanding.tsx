@@ -141,10 +141,10 @@ export function InviteLandingPage() {
         <div className="rounded-lg border border-border bg-card p-6">
           <h1 className="text-lg font-semibold">Bootstrap complete</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            The first instance admin is now configured. You can continue to the board.
+            The first instance admin is now configured. Continue to create your first company.
           </p>
           <Button asChild className="mt-4">
-            <Link to="/">Open board</Link>
+            <Link to="/onboarding">Create first company</Link>
           </Button>
         </div>
       </div>
@@ -171,12 +171,17 @@ export function InviteLandingPage() {
     const onboardingTextUrl = readNestedString(payload.onboarding, ["textInstructions", "url"]);
     const onboardingTextPath = readNestedString(payload.onboarding, ["textInstructions", "path"]);
     const diagnostics = Array.isArray(payload.diagnostics) ? payload.diagnostics : [];
+    const directHumanJoin = payload.requestType === "human" && payload.status === "approved";
     return (
       <div className="mx-auto max-w-xl py-10">
         <div className="rounded-lg border border-border bg-card p-6">
-          <h1 className="text-lg font-semibold">Join request submitted</h1>
+          <h1 className="text-lg font-semibold">
+            {directHumanJoin ? "Joined company" : "Join request submitted"}
+          </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Your request is pending admin approval. You will not have access until approved.
+            {directHumanJoin
+              ? "You now have access to this company."
+              : "Your request is pending admin approval. You will not have access until approved."}
           </p>
           <div className="mt-4 rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
             Request ID: <span className="font-mono">{payload.id}</span>
@@ -215,6 +220,11 @@ export function InviteLandingPage() {
                 </div>
               ))}
             </div>
+          )}
+          {directHumanJoin && (
+            <Button asChild className="mt-4">
+              <Link to="/">Open company</Link>
+            </Button>
           )}
         </div>
       </div>

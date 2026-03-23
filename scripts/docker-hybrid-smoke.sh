@@ -6,6 +6,7 @@ COMPOSE_FILE="$REPO_ROOT/docker-compose.hybrid.yml"
 HOST_PORT="${HOST_PORT:-3242}"
 HOST_BRIDGE_PORT="${HOST_BRIDGE_PORT:-4243}"
 DATA_DIR="${DATA_DIR:-$REPO_ROOT/data/docker-hybrid-smoke}"
+PAPERCLIP_POSTGRES_DATA_DIR="${PAPERCLIP_POSTGRES_DATA_DIR:-$DATA_DIR/postgres}"
 SMOKE_DETACH="${SMOKE_DETACH:-false}"
 SMOKE_METADATA_FILE="${SMOKE_METADATA_FILE:-}"
 HYBRID_SMOKE_START_BRIDGE="${HYBRID_SMOKE_START_BRIDGE:-true}"
@@ -24,6 +25,7 @@ BRIDGE_PID=""
 PRESERVE_STACK_ON_EXIT="false"
 
 mkdir -p "$DATA_DIR"
+mkdir -p "$PAPERCLIP_POSTGRES_DATA_DIR"
 
 cleanup() {
   if [[ "$PRESERVE_STACK_ON_EXIT" != "true" ]]; then
@@ -224,23 +226,37 @@ bootstrap_authenticated_mode() {
 
   sign_up_or_sign_in
 
-  if [[ "$health_json" == *'"bootstrapStatus":"ready"'* ]]; then
-    return 0
+  if [[ "$health_json" == *'"authDisableSignUp":true'* && "$health_json" != *'"bootstrapStatus":"ready"'* ]]; then
+    local invite_url
+    invite_url="$(generate_bootstrap_invite_url)"
+    local invite_token="${invite_url##*/}"
+    local accept_response="$TMP_DIR/accept.json"
+    local accept_status
+    accept_status="$(post_json_with_cookies \
+      "$PAPERCLIP_PUBLIC_URL/api/invites/$invite_token/accept" \
+      '{"requestType":"human"}' \
+      "$accept_response")"
+    if [[ ! "$accept_status" =~ ^2 ]]; then
+      echo "Hybrid smoke failed: bootstrap invite acceptance returned HTTP $accept_status" >&2
+      cat "$accept_response" >&2 || true
+      echo >&2
+      return 1
+    fi
   fi
 
-  local invite_url
-  invite_url="$(generate_bootstrap_invite_url)"
-  local invite_token="${invite_url##*/}"
-  local accept_response="$TMP_DIR/accept.json"
-  local accept_status
-  accept_status="$(post_json_with_cookies \
-    "$PAPERCLIP_PUBLIC_URL/api/invites/$invite_token/accept" \
-    '{"requestType":"human"}' \
-    "$accept_response")"
-  if [[ ! "$accept_status" =~ ^2 ]]; then
-    echo "Hybrid smoke failed: bootstrap invite acceptance returned HTTP $accept_status" >&2
-    cat "$accept_response" >&2 || true
-    echo >&2
+  local session_json
+  session_json="$(get_with_cookies "$PAPERCLIP_PUBLIC_URL/api/auth/get-session")"
+  if [[ "$session_json" != *'"userId"'* ]]; then
+    echo "Hybrid smoke failed: no authenticated session after auth bootstrap" >&2
+    echo "$session_json" >&2
+    return 1
+  fi
+
+  local companies_json
+  companies_json="$(get_with_cookies "$PAPERCLIP_PUBLIC_URL/api/companies")"
+  if [[ "${companies_json:0:1}" != "[" ]]; then
+    echo "Hybrid smoke failed: board companies endpoint did not return JSON array" >&2
+    echo "$companies_json" >&2
     return 1
   fi
 }
@@ -337,7 +353,9 @@ start_host_bridge_if_needed
 echo "==> Starting hybrid Docker stack"
 export PAPERCLIP_PORT="$HOST_PORT"
 export PAPERCLIP_DATA_DIR="$DATA_DIR"
+export PAPERCLIP_POSTGRES_DATA_DIR
 export PAPERCLIP_PUBLIC_URL
+export PAPERCLIP_AUTH_DISABLE_SIGN_UP="${PAPERCLIP_AUTH_DISABLE_SIGN_UP:-false}"
 export BETTER_AUTH_SECRET
 export PAPERCLIP_HOST_BRIDGE_URL="http://host.docker.internal:${HOST_BRIDGE_PORT}"
 export PAPERCLIP_HOST_BRIDGE_TOKEN

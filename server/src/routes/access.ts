@@ -2074,11 +2074,13 @@ export function accessRoutes(
       const claimSecretExpiresAt = claimSecret
         ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
         : null;
+      const autoApproveHumanInvite = requestType === "human";
 
       const actorEmail =
         requestType === "human" ? await resolveActorEmail(db, req) : null;
       const created = !inviteAlreadyAccepted
         ? await db.transaction(async (tx) => {
+            const accessTx = accessService(tx as unknown as Db);
             await tx
               .update(invites)
               .set({ acceptedAt: new Date(), updatedAt: new Date() })
@@ -2096,7 +2098,7 @@ export function accessRoutes(
                 inviteId: invite.id,
                 companyId,
                 requestType,
-                status: "pending_approval",
+                status: autoApproveHumanInvite ? "approved" : "pending_approval",
                 requestIp: requestIp(req),
                 requestingUserId:
                   requestType === "human"
@@ -2113,10 +2115,35 @@ export function accessRoutes(
                 agentDefaultsPayload:
                   requestType === "agent" ? joinDefaults.normalized : null,
                 claimSecretHash,
-                claimSecretExpiresAt
+                claimSecretExpiresAt,
+                approvedByUserId: autoApproveHumanInvite
+                  ? req.actor.userId ?? (isLocalImplicit(req) ? "local-board" : null)
+                  : null,
+                approvedAt: autoApproveHumanInvite ? new Date() : null
               })
               .returning()
               .then((rows) => rows[0]);
+
+            if (autoApproveHumanInvite && row.requestingUserId) {
+              await accessTx.ensureMembership(
+                companyId,
+                "user",
+                row.requestingUserId,
+                "member",
+                "active",
+              );
+              const grants = grantsFromDefaults(
+                invite.defaultsPayload as Record<string, unknown> | null,
+                "human",
+              );
+              await accessTx.setPrincipalGrants(
+                companyId,
+                "user",
+                row.requestingUserId,
+                grants,
+                req.actor.userId ?? (isLocalImplicit(req) ? "local-board" : null),
+              );
+            }
             return row;
           })
         : await db
@@ -2146,6 +2173,24 @@ export function accessRoutes(
 
       if (!created) {
         throw conflict("Join request not found");
+      }
+
+      if (autoApproveHumanInvite) {
+        await logActivity(db, {
+          companyId,
+          actorType: req.actor.type === "agent" ? "agent" : "user",
+          actorId:
+            req.actor.type === "agent"
+              ? req.actor.agentId ?? "invite-agent"
+              : req.actor.userId ?? "board",
+          action: "join.approved",
+          entityType: "join_request",
+          entityId: created.id,
+          details: {
+            requestType: created.requestType,
+            approvalMode: "invite_accept",
+          },
+        });
       }
 
       if (

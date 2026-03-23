@@ -15,7 +15,7 @@ When there is a conflict, `SPEC-implementation.md` controls V1 behavior.
 
 Paperclip V1 must provide a full control-plane loop for autonomous agents:
 
-1. A human board creates a company and defines goals.
+1. A signed-in human board user creates a company and defines goals.
 2. The board creates and manages agents in an org tree.
 3. Agents receive and execute tasks via heartbeat invocations.
 4. All work is tracked through tasks/comments with audit visibility.
@@ -32,7 +32,7 @@ These decisions close open questions from `SPEC.md` for V1.
 |---|---|
 | Tenancy | Single-tenant deployment, multi-company data model |
 | Company model | Company is first-order; all business entities are company-scoped |
-| Board | Single human board operator per deployment |
+| Board | Multiple human users may sign in; company visibility is membership-scoped and the first authenticated self-signup user becomes `instance_admin` |
 | Org graph | Strict tree (`reports_to` nullable root); no multi-manager reporting |
 | Visibility | Full visibility to board and all agents in same company |
 | Communication | Tasks + comments only (no separate chat system) |

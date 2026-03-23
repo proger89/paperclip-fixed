@@ -14,6 +14,15 @@ type GrantInput = {
   scope?: Record<string, unknown> | null;
 };
 
+const FIRST_INSTANCE_ADMIN_ADVISORY_LOCK_KEY = 881041;
+const DEFAULT_COMPANY_OWNER_PERMISSION_KEYS: PermissionKey[] = [
+  "agents:create",
+  "users:invite",
+  "users:manage_permissions",
+  "tasks:assign",
+  "joins:approve",
+];
+
 export function accessService(db: Db) {
   async function lookupMembership(
     companyId: string,
@@ -210,6 +219,45 @@ export function accessService(db: Db) {
       .then((rows) => rows[0]);
   }
 
+  async function ensureFirstRegisteredUserIsInstanceAdmin(userId: string) {
+    return db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(${FIRST_INSTANCE_ADMIN_ADVISORY_LOCK_KEY})`,
+      );
+
+      const existingAdmin = await tx
+        .select({
+          id: instanceUserRoles.id,
+          userId: instanceUserRoles.userId,
+          role: instanceUserRoles.role,
+          createdAt: instanceUserRoles.createdAt,
+          updatedAt: instanceUserRoles.updatedAt,
+        })
+        .from(instanceUserRoles)
+        .where(eq(instanceUserRoles.role, "instance_admin"))
+        .then((rows) => rows[0] ?? null);
+      if (existingAdmin) {
+        return existingAdmin.userId === userId ? existingAdmin : null;
+      }
+
+      const existingForUser = await tx
+        .select()
+        .from(instanceUserRoles)
+        .where(and(eq(instanceUserRoles.userId, userId), eq(instanceUserRoles.role, "instance_admin")))
+        .then((rows) => rows[0] ?? null);
+      if (existingForUser) return existingForUser;
+
+      return tx
+        .insert(instanceUserRoles)
+        .values({
+          userId,
+          role: "instance_admin",
+        })
+        .returning()
+        .then((rows) => rows[0] ?? null);
+    });
+  }
+
   async function demoteInstanceAdmin(userId: string) {
     return db
       .delete(instanceUserRoles)
@@ -374,7 +422,14 @@ export function accessService(db: Db) {
       return;
     }
 
-    await ensureMembership(companyId, principalType, principalId, "member", "active");
+    const membership = await getMembership(companyId, principalType, principalId);
+    await ensureMembership(
+      companyId,
+      principalType,
+      principalId,
+      membership?.membershipRole ?? "member",
+      "active",
+    );
 
     const existing = await db
       .select()
@@ -413,6 +468,26 @@ export function accessService(db: Db) {
     });
   }
 
+  async function grantCompanyOwnerDefaults(
+    companyId: string,
+    userId: string,
+    grantedByUserId: string | null,
+  ) {
+    await ensureMembership(companyId, "user", userId, "owner", "active");
+    await Promise.all(
+      DEFAULT_COMPANY_OWNER_PERMISSION_KEYS.map((permissionKey) =>
+        setPrincipalPermission(
+          companyId,
+          "user",
+          userId,
+          permissionKey,
+          true,
+          grantedByUserId,
+        ),
+      ),
+    );
+  }
+
   return {
     isInstanceAdmin,
     canUser,
@@ -430,5 +505,7 @@ export function accessService(db: Db) {
     setPrincipalGrants,
     listPrincipalGrants,
     setPrincipalPermission,
+    grantCompanyOwnerDefaults,
+    ensureFirstRegisteredUserIsInstanceAdmin,
   };
 }

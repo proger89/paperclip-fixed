@@ -6,6 +6,7 @@ IMAGE_NAME="${IMAGE_NAME:-paperclip-onboard-smoke}"
 HOST_PORT="${HOST_PORT:-3131}"
 PAPERCLIPAI_VERSION="${PAPERCLIPAI_VERSION:-latest}"
 DATA_DIR="${DATA_DIR:-$REPO_ROOT/data/docker-onboard-smoke}"
+PAPERCLIP_POSTGRES_DATA_DIR="${PAPERCLIP_POSTGRES_DATA_DIR:-$DATA_DIR/postgres}"
 HOST_UID="${HOST_UID:-$(id -u)}"
 SMOKE_DETACH="${SMOKE_DETACH:-false}"
 SMOKE_METADATA_FILE="${SMOKE_METADATA_FILE:-}"
@@ -23,6 +24,7 @@ TMP_DIR=""
 PRESERVE_CONTAINER_ON_EXIT="false"
 
 mkdir -p "$DATA_DIR"
+mkdir -p "$PAPERCLIP_POSTGRES_DATA_DIR"
 
 cleanup() {
   if [[ -n "$LOG_PID" ]]; then
@@ -195,7 +197,9 @@ auto_bootstrap_authenticated_smoke() {
 
   sign_up_or_sign_in
 
-  if [[ "$health_json" == *'"bootstrapStatus":"ready"'* ]]; then
+  if [[ "$health_json" != *'"authDisableSignUp":true'* ]]; then
+    echo "    Smoke bootstrap: self-signup mode detected"
+  elif [[ "$health_json" == *'"bootstrapStatus":"ready"'* ]]; then
     echo "    Smoke bootstrap: instance already ready"
   else
     local invite_url
@@ -267,7 +271,9 @@ docker run -d --rm \
   -e PAPERCLIP_DEPLOYMENT_MODE="$PAPERCLIP_DEPLOYMENT_MODE" \
   -e PAPERCLIP_DEPLOYMENT_EXPOSURE="$PAPERCLIP_DEPLOYMENT_EXPOSURE" \
   -e PAPERCLIP_PUBLIC_URL="$PAPERCLIP_PUBLIC_URL" \
+  -e PAPERCLIP_AUTH_DISABLE_SIGN_UP="${PAPERCLIP_AUTH_DISABLE_SIGN_UP:-false}" \
   -v "$DATA_DIR:/paperclip" \
+  -v "$PAPERCLIP_POSTGRES_DATA_DIR:/var/lib/postgresql/data" \
   "$IMAGE_NAME" >/dev/null
 
 if [[ "$SMOKE_DETACH" != "true" ]]; then

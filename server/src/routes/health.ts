@@ -13,11 +13,13 @@ export function healthRoutes(
     deploymentMode: DeploymentMode;
     deploymentExposure: DeploymentExposure;
     authReady: boolean;
+    authDisableSignUp: boolean;
     companyDeletionEnabled: boolean;
   } = {
     deploymentMode: "local_trusted",
     deploymentExposure: "private",
     authReady: true,
+    authDisableSignUp: false,
     companyDeletionEnabled: true,
   },
 ) {
@@ -80,6 +82,7 @@ export function healthRoutes(
       deploymentMode: opts.deploymentMode,
       deploymentExposure: opts.deploymentExposure,
       authReady: opts.authReady,
+      authDisableSignUp: opts.authDisableSignUp,
       bootstrapStatus,
       bootstrapInviteActive,
       features: {

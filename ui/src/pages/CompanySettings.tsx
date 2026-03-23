@@ -2,7 +2,6 @@ import { ChangeEvent, useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
-import { useToast } from "../context/ToastContext";
 import { companiesApi } from "../api/companies";
 import { accessApi } from "../api/access";
 import { assetsApi } from "../api/assets";
@@ -30,7 +29,6 @@ export function CompanySettings() {
     setSelectedCompanyId
   } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
-  const { pushToast } = useToast();
   const queryClient = useQueryClient();
   // General settings local state
   const [companyName, setCompanyName] = useState("");
@@ -52,6 +50,9 @@ export function CompanySettings() {
   const [inviteSnippet, setInviteSnippet] = useState<string | null>(null);
   const [snippetCopied, setSnippetCopied] = useState(false);
   const [snippetCopyDelightId, setSnippetCopyDelightId] = useState(0);
+  const [humanInviteError, setHumanInviteError] = useState<string | null>(null);
+  const [humanInviteUrl, setHumanInviteUrl] = useState<string | null>(null);
+  const [humanInviteCopied, setHumanInviteCopied] = useState(false);
 
   const generalDirty =
     !!selectedCompany &&
@@ -133,6 +134,30 @@ export function CompanySettings() {
     }
   });
 
+  const humanInviteMutation = useMutation({
+    mutationFn: () =>
+      accessApi.createCompanyInvite(selectedCompanyId!, {
+        allowedJoinTypes: "human"
+      }),
+    onSuccess: async (invite) => {
+      setHumanInviteError(null);
+      setHumanInviteUrl(invite.inviteUrl);
+      setHumanInviteCopied(false);
+      try {
+        await navigator.clipboard.writeText(invite.inviteUrl);
+        setHumanInviteCopied(true);
+        setTimeout(() => setHumanInviteCopied(false), 2000);
+      } catch {
+        /* clipboard may not be available */
+      }
+    },
+    onError: (err) => {
+      setHumanInviteError(
+        err instanceof Error ? err.message : "Failed to create teammate invite"
+      );
+    }
+  });
+
   const syncLogoState = (nextLogoUrl: string | null) => {
     setLogoUrl(nextLogoUrl ?? "");
     void queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
@@ -174,6 +199,9 @@ export function CompanySettings() {
     setInviteSnippet(null);
     setSnippetCopied(false);
     setSnippetCopyDelightId(0);
+    setHumanInviteError(null);
+    setHumanInviteUrl(null);
+    setHumanInviteCopied(false);
   }, [selectedCompanyId]);
 
   const archiveMutation = useMutation({
@@ -397,6 +425,59 @@ export function CompanySettings() {
           Invites
         </div>
         <div className="space-y-3 rounded-md border border-border px-4 py-4">
+          <div className="space-y-2 rounded-md border border-border/60 bg-muted/20 p-3">
+            <div>
+              <div className="text-sm font-medium">Invite teammates to this company</div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Create a company-scoped invite link for another human user.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => humanInviteMutation.mutate()}
+                disabled={humanInviteMutation.isPending}
+              >
+                {humanInviteMutation.isPending ? "Generating..." : "Create teammate invite"}
+              </Button>
+              {humanInviteCopied && (
+                <span className="flex items-center gap-1 text-xs text-green-600">
+                  <Check className="h-3 w-3" />
+                  Copied
+                </span>
+              )}
+            </div>
+            {humanInviteError && (
+              <p className="text-sm text-destructive">{humanInviteError}</p>
+            )}
+            {humanInviteUrl && (
+              <div className="space-y-2 rounded-md border border-border bg-background p-3">
+                <div className="text-xs text-muted-foreground">Teammate invite link</div>
+                <div className="break-all rounded-md border border-border bg-muted/30 px-2 py-2 font-mono text-xs">
+                  {humanInviteUrl}
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={async () => {
+                      if (!humanInviteUrl) return;
+                      try {
+                        await navigator.clipboard.writeText(humanInviteUrl);
+                        setHumanInviteCopied(true);
+                        setTimeout(() => setHumanInviteCopied(false), 2000);
+                      } catch {
+                        /* clipboard may not be available */
+                      }
+                    }}
+                  >
+                    {humanInviteCopied ? "Copied invite" : "Copy invite"}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
           <div className="flex items-center gap-1.5">
             <span className="text-xs text-muted-foreground">
               Generate an OpenClaw agent invite snippet.

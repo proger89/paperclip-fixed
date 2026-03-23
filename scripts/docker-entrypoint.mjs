@@ -64,6 +64,7 @@ async function waitForHealth(serverProcess, timeoutMs = 120_000) {
 function maybeCreateBootstrapInvite(health) {
   if ((process.env.PAPERCLIP_AUTO_BOOTSTRAP_CEO ?? "true") !== "true") return;
   if ((process.env.PAPERCLIP_DEPLOYMENT_MODE ?? "").trim() !== "authenticated") return;
+  if ((process.env.PAPERCLIP_AUTH_DISABLE_SIGN_UP ?? "false") !== "true") return;
   if (!health || health.bootstrapStatus !== "bootstrap_pending" || health.bootstrapInviteActive) return;
 
   const publicBaseUrl = normalizePublicBaseUrl();

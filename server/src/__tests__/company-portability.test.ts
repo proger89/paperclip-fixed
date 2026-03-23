@@ -16,6 +16,7 @@ const agentSvc = {
 
 const accessSvc = {
   ensureMembership: vi.fn(),
+  grantCompanyOwnerDefaults: vi.fn(),
   listActiveUserMemberships: vi.fn(),
   copyActiveUserMemberships: vi.fn(),
   setPrincipalPermission: vi.fn(),

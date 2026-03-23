@@ -11,7 +11,7 @@ services:
       timeout: 5s
       retries: 20
     volumes:
-      - paperclip_postgres_data:/var/lib/postgresql/data
+      - "${PAPERCLIP_POSTGRES_DATA_DIR:-./data/docker-paperclip/postgres}:/var/lib/postgresql/data"
 
   paperclip:
     build:
@@ -30,6 +30,7 @@ services:
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
       PAPERCLIP_DEPLOYMENT_MODE: "authenticated"
       PAPERCLIP_DEPLOYMENT_EXPOSURE: "private"
+      PAPERCLIP_AUTH_DISABLE_SIGN_UP: "${PAPERCLIP_AUTH_DISABLE_SIGN_UP:-false}"
       PAPERCLIP_PUBLIC_URL: "${PAPERCLIP_PUBLIC_URL:-http://127.0.0.1:3100}"
       BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:-paperclip-docker-dev-secret}"
       PAPERCLIP_AUTO_BOOTSTRAP_CEO: "${PAPERCLIP_AUTO_BOOTSTRAP_CEO:-true}"
@@ -48,6 +49,3 @@ services:
       TOKEN: "${PLAYWRIGHT_BROWSER_TOKEN:-paperclip}"
     expose:
       - "3000"
-
-volumes:
-  paperclip_postgres_data:

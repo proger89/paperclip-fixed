@@ -2923,7 +2923,11 @@ export function companyPortabilityService(db: Db, storage?: StorageService) {
       if (mode === "agent_safe" && options?.sourceCompanyId) {
         await access.copyActiveUserMemberships(options.sourceCompanyId, created.id);
       } else {
-        await access.ensureMembership(created.id, "user", actorUserId ?? "board", "owner", "active");
+        await access.grantCompanyOwnerDefaults(
+          created.id,
+          actorUserId ?? "local-board",
+          actorUserId ?? "board",
+        );
       }
       targetCompany = created;
       companyAction = "created";

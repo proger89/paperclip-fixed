@@ -214,11 +214,12 @@ export function companyRoutes(db: Db, storage?: StorageService) {
 
   router.post("/", validate(createCompanySchema), async (req, res) => {
     assertBoard(req);
-    if (!(req.actor.source === "local_implicit" || req.actor.isInstanceAdmin)) {
-      throw forbidden("Instance admin required");
-    }
     const company = await svc.create(req.body);
-    await access.ensureMembership(company.id, "user", req.actor.userId ?? "local-board", "owner", "active");
+    await access.grantCompanyOwnerDefaults(
+      company.id,
+      req.actor.userId ?? "local-board",
+      req.actor.userId ?? "board",
+    );
     await logActivity(db, {
       companyId: company.id,
       actorType: "user",
