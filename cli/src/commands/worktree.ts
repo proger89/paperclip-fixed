@@ -577,17 +577,24 @@ export function rebindWorkspaceCwd(input: {
   targetRepoRoot: string;
   workspaceCwd: string;
 }): string | null {
-  const sourceRepoRoot = path.resolve(input.sourceRepoRoot);
-  const targetRepoRoot = path.resolve(input.targetRepoRoot);
-  const workspaceCwd = path.resolve(input.workspaceCwd);
-  const relative = path.relative(sourceRepoRoot, workspaceCwd);
+  const looksPosixAbsolute = (value: string) => value.startsWith("/") && !value.includes("\\");
+  const pathApi =
+    looksPosixAbsolute(input.sourceRepoRoot) &&
+    looksPosixAbsolute(input.targetRepoRoot) &&
+    looksPosixAbsolute(input.workspaceCwd)
+      ? path.posix
+      : path;
+  const sourceRepoRoot = pathApi.resolve(input.sourceRepoRoot);
+  const targetRepoRoot = pathApi.resolve(input.targetRepoRoot);
+  const workspaceCwd = pathApi.resolve(input.workspaceCwd);
+  const relative = pathApi.relative(sourceRepoRoot, workspaceCwd);
   if (!relative || relative === "") {
     return targetRepoRoot;
   }
-  if (relative.startsWith("..") || path.isAbsolute(relative)) {
+  if (relative.startsWith("..") || pathApi.isAbsolute(relative)) {
     return null;
   }
-  return path.resolve(targetRepoRoot, relative);
+  return pathApi.resolve(targetRepoRoot, relative);
 }
 
 async function rebindSeededProjectWorkspaces(input: {

@@ -283,7 +283,7 @@ async function directoryExists(value: string) {
   return fs.stat(value).then((stats) => stats.isDirectory()).catch(() => false);
 }
 
-function terminateChildProcess(child: ChildProcess) {
+async function terminateChildProcess(child: ChildProcess) {
   if (!child.pid) return;
   if (process.platform !== "win32") {
     try {
@@ -292,10 +292,36 @@ function terminateChildProcess(child: ChildProcess) {
     } catch {
       // Fall through to the direct child kill.
     }
+    if (!child.killed) {
+      child.kill("SIGTERM");
+    }
+    return;
   }
-  if (!child.killed) {
-    child.kill("SIGTERM");
-  }
+
+  await new Promise<void>((resolve) => {
+    const killer = spawn("taskkill", ["/PID", String(child.pid), "/T", "/F"], {
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    killer.on("error", () => {
+      if (!child.killed) {
+        child.kill("SIGTERM");
+      }
+      resolve();
+    });
+    killer.on("close", () => resolve());
+  });
+}
+
+async function waitForChildExit(child: ChildProcess, timeoutMs: number) {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+
+  await Promise.race([
+    new Promise<void>((resolve) => {
+      child.once("exit", () => resolve());
+    }),
+    delay(timeoutMs).then(() => undefined),
+  ]);
 }
 
 function buildWorkspaceCommandEnv(input: {
@@ -1171,7 +1197,7 @@ async function startLocalRuntimeService(input: {
   try {
     await waitForReadiness({ service: input.service, url });
   } catch (err) {
-    terminateChildProcess(child);
+    await terminateChildProcess(child);
     throw new Error(
       `Failed to start runtime service "${serviceName}": ${err instanceof Error ? err.message : String(err)}${stderrExcerpt ? ` | stderr: ${stderrExcerpt.trim()}` : ""}`,
     );
@@ -1231,7 +1257,12 @@ async function stopRuntimeService(serviceId: string) {
   record.lastUsedAt = new Date().toISOString();
   record.stoppedAt = new Date().toISOString();
   if (record.child && record.child.pid) {
-    terminateChildProcess(record.child);
+    await terminateChildProcess(record.child);
+    await waitForChildExit(record.child, 1_000);
+    if (record.child.exitCode === null && record.child.signalCode === null) {
+      record.child.kill("SIGKILL");
+      await waitForChildExit(record.child, 1_000);
+    }
   }
   runtimeServicesById.delete(serviceId);
   if (record.reuseKey) {

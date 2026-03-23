@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { BookOpen, Moon, Settings, Sun } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { BookOpen, LogOut, Moon, Settings, Sun } from "lucide-react";
 import { Link, Outlet, useLocation, useNavigate, useParams } from "@/lib/router";
 import { CompanyRail } from "./CompanyRail";
 import { Sidebar } from "./Sidebar";
@@ -23,6 +23,7 @@ import { useSidebar } from "../context/SidebarContext";
 import { useTheme } from "../context/ThemeContext";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { useCompanyPageMemory } from "../hooks/useCompanyPageMemory";
+import { authApi } from "../api/auth";
 import { healthApi } from "../api/health";
 import { shouldSyncCompanySelectionFromRoute } from "../lib/company-selection";
 import {
@@ -47,6 +48,7 @@ function readRememberedInstanceSettingsPath(): string {
 }
 
 export function Layout() {
+  const queryClient = useQueryClient();
   const { sidebarOpen, setSidebarOpen, toggleSidebar, isMobile } = useSidebar();
   const { openNewIssue, openOnboarding } = useDialog();
   const { togglePanelVisible } = usePanel();
@@ -67,6 +69,7 @@ export function Layout() {
   const lastMainScrollTop = useRef(0);
   const [mobileNavVisible, setMobileNavVisible] = useState(true);
   const [instanceSettingsTarget, setInstanceSettingsTarget] = useState<string>(() => readRememberedInstanceSettingsPath());
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const nextTheme = theme === "dark" ? "light" : "dark";
   const matchedCompany = useMemo(() => {
     if (!companyPrefix) return null;
@@ -258,6 +261,19 @@ export function Layout() {
     }
   }, [location.hash, location.pathname, location.search]);
 
+  const handleSignOut = useCallback(async () => {
+    if (isSigningOut) return;
+    setIsSigningOut(true);
+    try {
+      await authApi.signOut();
+      await queryClient.invalidateQueries({ queryKey: queryKeys.auth.session });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
+      navigate("/auth", { replace: true });
+    } finally {
+      setIsSigningOut(false);
+    }
+  }, [isSigningOut, navigate, queryClient]);
+
   return (
     <div
       className={cn(
@@ -336,6 +352,20 @@ export function Layout() {
                 >
                   {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                 </Button>
+                {health?.deploymentMode === "authenticated" && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-muted-foreground shrink-0"
+                    onClick={() => void handleSignOut()}
+                    aria-label="Sign out"
+                    title="Sign out"
+                    disabled={isSigningOut}
+                  >
+                    <LogOut className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
             </div>
           </div>
@@ -394,6 +424,20 @@ export function Layout() {
                 >
                   {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                 </Button>
+                {health?.deploymentMode === "authenticated" && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-muted-foreground shrink-0"
+                    onClick={() => void handleSignOut()}
+                    aria-label="Sign out"
+                    title="Sign out"
+                    disabled={isSigningOut}
+                  >
+                    <LogOut className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
             </div>
           </div>

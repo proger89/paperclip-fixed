@@ -114,6 +114,14 @@ jobs:
           fi
           git push origin "refs/tags/${tag}"
 
+  smoke_canary:
+    if: github.event_name == 'push'
+    needs: publish_canary
+    uses: ./.github/workflows/release-smoke.yml
+    with:
+      paperclip_version: canary
+      artifact_name: release-smoke-canary
+
   verify_stable:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -259,3 +267,11 @@ jobs:
             exit 1
           fi
           ./scripts/create-github-release.sh "$version"
+
+  smoke_stable:
+    if: github.event_name == 'workflow_dispatch' && !inputs.dry_run
+    needs: publish_stable
+    uses: ./.github/workflows/release-smoke.yml
+    with:
+      paperclip_version: latest
+      artifact_name: release-smoke-stable

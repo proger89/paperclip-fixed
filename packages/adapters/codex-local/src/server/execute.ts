@@ -21,7 +21,7 @@ import {
   joinPromptSections,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
-import { parseCodexJsonl, isCodexUnknownSessionError } from "./parse.js";
+import { detectCodexAuthRequired, parseCodexJsonl, isCodexUnknownSessionError } from "./parse.js";
 import { pathExists, prepareManagedCodexHome, resolveManagedCodexHomeDir } from "./codex-home.js";
 import { resolveCodexDesiredSkillNames } from "./skills.js";
 import { buildWindowsUtf8JsonHelperNote } from "../shared/encoding.js";
@@ -576,12 +576,19 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     attempt: { proc: { exitCode: number | null; signal: string | null; timedOut: boolean; stdout: string; stderr: string }; rawStderr: string; parsed: ReturnType<typeof parseCodexJsonl> },
     clearSessionOnMissingSession = false,
   ): AdapterExecutionResult => {
+    const authMeta = detectCodexAuthRequired({
+      parsed: attempt.parsed,
+      stdout: attempt.proc.stdout,
+      stderr: attempt.proc.stderr,
+    });
+
     if (attempt.proc.timedOut) {
       return {
         exitCode: attempt.proc.exitCode,
         signal: attempt.proc.signal,
         timedOut: true,
         errorMessage: `Timed out after ${timeoutSec}s`,
+        errorCode: authMeta.requiresAuth ? "codex_auth_required" : null,
         clearSession: clearSessionOnMissingSession,
       };
     }
@@ -611,6 +618,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         (attempt.proc.exitCode ?? 0) === 0
           ? null
           : fallbackErrorMessage,
+      errorCode: (attempt.proc.exitCode ?? 0) !== 0 && authMeta.requiresAuth ? "codex_auth_required" : null,
       usage: attempt.parsed.usage,
       sessionId: resolvedSessionId,
       sessionParams: resolvedSessionParams,

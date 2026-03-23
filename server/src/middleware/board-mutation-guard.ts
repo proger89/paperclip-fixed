@@ -1,6 +1,8 @@
 import type { Request, RequestHandler } from "express";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+const TRUSTED_FETCH_SITE_VALUES = new Set(["same-origin", "same-site", "none"]);
+const XML_HTTP_REQUEST = "xmlhttprequest";
 const DEFAULT_DEV_ORIGINS = [
   "http://localhost:3100",
   "http://127.0.0.1:3100",
@@ -33,6 +35,12 @@ function isTrustedBoardMutationRequest(req: Request) {
 
   const refererOrigin = parseOrigin(req.header("referer"));
   if (refererOrigin && allowedOrigins.has(refererOrigin)) return true;
+
+  const requestedWith = req.header("x-requested-with")?.trim().toLowerCase();
+  if (requestedWith === XML_HTTP_REQUEST) return true;
+
+  const fetchSite = req.header("sec-fetch-site")?.trim().toLowerCase();
+  if (fetchSite && TRUSTED_FETCH_SITE_VALUES.has(fetchSite)) return true;
 
   return false;
 }

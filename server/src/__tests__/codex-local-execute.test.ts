@@ -45,6 +45,18 @@ console.log(JSON.stringify({ type: "turn.completed", usage: { input_tokens: 1, c
   await fs.chmod(commandPath, 0o755);
 }
 
+async function writeFakeCodexAuthFailureCommand(commandPath: string): Promise<void> {
+  const script = `#!/usr/bin/env node
+console.log(JSON.stringify({
+  type: "error",
+  message: "Authentication required. Please run codex login.",
+}));
+process.exit(1);
+`;
+  await fs.writeFile(commandPath, script, "utf8");
+  await fs.chmod(commandPath, 0o755);
+}
+
 type CapturePayload = {
   argv: string[];
   prompt: string;
@@ -572,6 +584,56 @@ describe("codex execute", () => {
       expect(result.errorMessage).toBeNull();
       expect(result.resultJson?.stderr).toBe("");
       expect(logs.some((entry) => entry.chunk.includes("shell_snapshot"))).toBe(false);
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+      if (previousUserProfile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = previousUserProfile;
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("returns codex_auth_required when Codex asks for login", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-codex-execute-auth-"));
+    const workspace = path.join(root, "workspace");
+    const commandPath = path.join(root, "codex");
+    await fs.mkdir(workspace, { recursive: true });
+    await writeFakeCodexAuthFailureCommand(commandPath);
+
+    const previousHome = process.env.HOME;
+    const previousUserProfile = process.env.USERPROFILE;
+    process.env.HOME = root;
+    process.env.USERPROFILE = root;
+
+    try {
+      const result = await execute({
+        runId: "run-auth",
+        agent: {
+          id: "agent-1",
+          companyId: "company-1",
+          name: "Codex Coder",
+          adapterType: "codex_local",
+          adapterConfig: {},
+        },
+        runtime: {
+          sessionId: null,
+          sessionParams: null,
+          sessionDisplayId: null,
+          taskKey: null,
+        },
+        config: {
+          command: commandPath,
+          cwd: workspace,
+          promptTemplate: "Follow the paperclip heartbeat.",
+        },
+        context: {},
+        authToken: "run-jwt-token",
+        onLog: async () => {},
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.errorCode).toBe("codex_auth_required");
+      expect(result.errorMessage).toContain("codex login");
     } finally {
       if (previousHome === undefined) delete process.env.HOME;
       else process.env.HOME = previousHome;

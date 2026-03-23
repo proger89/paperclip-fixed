@@ -69,4 +69,4 @@ export {
   ensureOpenCodeModelConfiguredAndAvailable,
   resetOpenCodeModelsCacheForTests,
 } from "./models.js";
-export { parseOpenCodeJsonl, isOpenCodeUnknownSessionError } from "./parse.js";
+export { parseOpenCodeJsonl, isOpenCodeUnknownSessionError, detectOpenCodeAuthRequired } from "./parse.js";

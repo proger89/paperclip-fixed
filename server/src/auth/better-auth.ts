@@ -11,6 +11,7 @@ import {
   authVerifications,
 } from "@paperclipai/db";
 import type { Config } from "../config.js";
+import { logger } from "../middleware/logger.js";
 
 export type BetterAuthSessionUser = {
   id: string;
@@ -90,6 +91,16 @@ export function createBetterAuthInstance(db: Db, config: Config, trustedOrigins?
       enabled: true,
       requireEmailVerification: false,
       disableSignUp: config.authDisableSignUp,
+      sendResetPassword: async ({ user, url, token }: { user: BetterAuthSessionUser; url: string; token: string }) => {
+        logger.info(
+          {
+            email: user.email ?? null,
+            resetUrl: url,
+            token,
+          },
+          "Generated password reset link",
+        );
+      },
     },
     ...(isHttpOnly ? { advanced: { useSecureCookies: false } } : {}),
   };

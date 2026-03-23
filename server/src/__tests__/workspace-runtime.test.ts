@@ -28,8 +28,10 @@ async function createTempRepo() {
   await runGit(repoRoot, ["init"]);
   await runGit(repoRoot, ["config", "user.email", "paperclip@example.com"]);
   await runGit(repoRoot, ["config", "user.name", "Paperclip Test"]);
+  await runGit(repoRoot, ["config", "core.autocrlf", "false"]);
+  await fs.writeFile(path.join(repoRoot, ".gitattributes"), "*.sh text eol=lf\n", "utf8");
   await fs.writeFile(path.join(repoRoot, "README.md"), "hello\n", "utf8");
-  await runGit(repoRoot, ["add", "README.md"]);
+  await runGit(repoRoot, ["add", ".gitattributes", "README.md"]);
   await runGit(repoRoot, ["commit", "-m", "Initial commit"]);
   await runGit(repoRoot, ["checkout", "-B", "main"]);
   return repoRoot;
@@ -200,17 +202,16 @@ describe("realizeExecutionWorkspace", () => {
     const repoRoot = await createTempRepo();
     await fs.mkdir(path.join(repoRoot, "scripts"), { recursive: true });
     await fs.writeFile(
-      path.join(repoRoot, "scripts", "provision.sh"),
+      path.join(repoRoot, "scripts", "provision.js"),
       [
-        "#!/usr/bin/env bash",
-        "set -euo pipefail",
-        "printf '%s\\n' \"$PAPERCLIP_WORKSPACE_BRANCH\" > .paperclip-provision-branch",
-        "printf '%s\\n' \"$PAPERCLIP_WORKSPACE_BASE_CWD\" > .paperclip-provision-base",
-        "printf '%s\\n' \"$PAPERCLIP_WORKSPACE_CREATED\" > .paperclip-provision-created",
+        "const fs = require('node:fs');",
+        "fs.writeFileSync('.paperclip-provision-branch', `${process.env.PAPERCLIP_WORKSPACE_BRANCH ?? ''}\\n`);",
+        "fs.writeFileSync('.paperclip-provision-base', `${process.env.PAPERCLIP_WORKSPACE_BASE_CWD ?? ''}\\n`);",
+        "fs.writeFileSync('.paperclip-provision-created', `${process.env.PAPERCLIP_WORKSPACE_CREATED ?? ''}\\n`);",
       ].join("\n"),
       "utf8",
     );
-    await runGit(repoRoot, ["add", "scripts/provision.sh"]);
+    await runGit(repoRoot, ["add", "scripts/provision.js"]);
     await runGit(repoRoot, ["commit", "-m", "Add worktree provision script"]);
 
     const workspace = await realizeExecutionWorkspace({
@@ -226,7 +227,7 @@ describe("realizeExecutionWorkspace", () => {
         workspaceStrategy: {
           type: "git_worktree",
           branchTemplate: "{{issue.identifier}}-{{slug}}",
-          provisionCommand: "bash ./scripts/provision.sh",
+          provisionCommand: "node ./scripts/provision.js",
         },
       },
       issue: {
@@ -264,7 +265,7 @@ describe("realizeExecutionWorkspace", () => {
         workspaceStrategy: {
           type: "git_worktree",
           branchTemplate: "{{issue.identifier}}-{{slug}}",
-          provisionCommand: "bash ./scripts/provision.sh",
+          provisionCommand: "node ./scripts/provision.js",
         },
       },
       issue: {
@@ -288,15 +289,13 @@ describe("realizeExecutionWorkspace", () => {
 
     await fs.mkdir(path.join(repoRoot, "scripts"), { recursive: true });
     await fs.writeFile(
-      path.join(repoRoot, "scripts", "provision.sh"),
+      path.join(repoRoot, "scripts", "provision.js"),
       [
-        "#!/usr/bin/env bash",
-        "set -euo pipefail",
-        "printf 'provisioned\\n'",
+        "process.stdout.write('provisioned\\n');",
       ].join("\n"),
       "utf8",
     );
-    await runGit(repoRoot, ["add", "scripts/provision.sh"]);
+    await runGit(repoRoot, ["add", "scripts/provision.js"]);
     await runGit(repoRoot, ["commit", "-m", "Add recorder provision script"]);
 
     await realizeExecutionWorkspace({
@@ -312,7 +311,7 @@ describe("realizeExecutionWorkspace", () => {
         workspaceStrategy: {
           type: "git_worktree",
           branchTemplate: "{{issue.identifier}}-{{slug}}",
-          provisionCommand: "bash ./scripts/provision.sh",
+          provisionCommand: "node ./scripts/provision.js",
         },
       },
       issue: {
@@ -337,7 +336,7 @@ describe("realizeExecutionWorkspace", () => {
       branchName: "PAP-540-record-workspace-operations",
       created: true,
     });
-    expect(operations[1]?.command).toBe("bash ./scripts/provision.sh");
+    expect(operations[1]?.command).toBe("node ./scripts/provision.js");
   });
 
   it("reuses an existing branch without resetting it when recreating a missing worktree", async () => {
@@ -379,7 +378,9 @@ describe("realizeExecutionWorkspace", () => {
     });
 
     expect(workspace.branchName).toBe(branchName);
-    await expect(fs.readFile(path.join(workspace.cwd, "feature.txt"), "utf8")).resolves.toBe("preserve me\n");
+    await expect(fs.readFile(path.join(workspace.cwd, "feature.txt"), "utf8")).resolves.toSatisfy(
+      (value: string) => value.replace(/\r\n/g, "\n") === "preserve me\n",
+    );
     const actualHead = (await execFileAsync("git", ["rev-parse", "HEAD"], { cwd: workspace.cwd })).stdout.trim();
     expect(actualHead).toBe(expectedHead);
   });
@@ -685,23 +686,26 @@ describe("ensureRuntimeServicesForRun", () => {
     const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-runtime-env-"));
     const workspace = buildWorkspace(workspaceRoot);
     const envCapturePath = path.join(workspaceRoot, "captured-env.json");
-    const serviceCommand = [
-      "node -e",
-      JSON.stringify(
-        [
-          "const fs = require('node:fs');",
-          `fs.writeFileSync(${JSON.stringify(envCapturePath)}, JSON.stringify({`,
-          "paperclipConfig: process.env.PAPERCLIP_CONFIG ?? null,",
-          "paperclipHome: process.env.PAPERCLIP_HOME ?? null,",
-          "paperclipInstanceId: process.env.PAPERCLIP_INSTANCE_ID ?? null,",
-          "databaseUrl: process.env.DATABASE_URL ?? null,",
-          "customEnv: process.env.RUNTIME_CUSTOM_ENV ?? null,",
-          "port: process.env.PORT ?? null,",
-          "}));",
-          "require('node:http').createServer((req, res) => res.end('ok')).listen(Number(process.env.PORT), '127.0.0.1');",
-        ].join(" "),
-      ),
-    ].join(" ");
+    const serviceScriptPath = path.join(workspaceRoot, "capture-env-service.js");
+    await fs.writeFile(
+      serviceScriptPath,
+      [
+        "const fs = require('node:fs');",
+        "const http = require('node:http');",
+        `fs.writeFileSync(${JSON.stringify(envCapturePath)}, JSON.stringify({`,
+        "  paperclipConfig: process.env.PAPERCLIP_CONFIG ?? null,",
+        "  paperclipHome: process.env.PAPERCLIP_HOME ?? null,",
+        "  paperclipInstanceId: process.env.PAPERCLIP_INSTANCE_ID ?? null,",
+        "  databaseUrl: process.env.DATABASE_URL ?? null,",
+        "  customEnv: process.env.RUNTIME_CUSTOM_ENV ?? null,",
+        "  port: process.env.PORT ?? null,",
+        "}));",
+        "http.createServer((req, res) => res.end('ok')).listen(Number(process.env.PORT), '127.0.0.1');",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    const serviceCommand = `node ${JSON.stringify(serviceScriptPath)}`;
 
     process.env.PAPERCLIP_CONFIG = "/tmp/base-paperclip-config.json";
     process.env.PAPERCLIP_HOME = "/tmp/base-paperclip-home";

@@ -50,6 +50,7 @@ In agent runtime settings, configure heartbeat policy:
 - `wakeOnAssignment`: wake when assigned work
 - `wakeOnOnDemand`: allow ping-style on-demand wakeups
 - `wakeOnAutomation`: allow system automation wakeups
+- `circuitBreaker.maxConsecutiveFailures`: auto-pause the agent after this many failed/timed-out runs in a row (default `3`)
 
 ## 3.3 Working directory and execution limits
 
@@ -139,7 +140,7 @@ If runs fail repeatedly:
 3. Inspect run error + stderr excerpt, then full log.
 4. Confirm timeout is not too low.
 5. Reset session and retry.
-6. Pause agent if it is causing repeated bad updates.
+6. If Paperclip auto-paused the agent after repeated failures, fix the root cause and resume it manually.
 
 Typical failure causes:
 

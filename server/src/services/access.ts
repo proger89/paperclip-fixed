@@ -1,6 +1,7 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import {
+  agents,
   companyMemberships,
   instanceUserRoles,
   principalPermissionGrants,
@@ -14,17 +15,7 @@ type GrantInput = {
 };
 
 export function accessService(db: Db) {
-  async function isInstanceAdmin(userId: string | null | undefined): Promise<boolean> {
-    if (!userId) return false;
-    const row = await db
-      .select({ id: instanceUserRoles.id })
-      .from(instanceUserRoles)
-      .where(and(eq(instanceUserRoles.userId, userId), eq(instanceUserRoles.role, "instance_admin")))
-      .then((rows) => rows[0] ?? null);
-    return Boolean(row);
-  }
-
-  async function getMembership(
+  async function lookupMembership(
     companyId: string,
     principalType: PrincipalType,
     principalId: string,
@@ -40,6 +31,68 @@ export function accessService(db: Db) {
         ),
       )
       .then((rows) => rows[0] ?? null);
+  }
+
+  async function repairMissingAgentMembership(
+    companyId: string,
+    principalId: string,
+  ): Promise<MembershipRow | null> {
+    const agent = await db
+      .select({ id: agents.id })
+      .from(agents)
+      .where(and(eq(agents.companyId, companyId), eq(agents.id, principalId)))
+      .then((rows) => rows[0] ?? null);
+    if (!agent) return null;
+
+    return ensureMembership(companyId, "agent", principalId, "member", "active");
+  }
+
+  async function backfillMissingAgentMemberships(companyId: string) {
+    const [companyAgents, memberships] = await Promise.all([
+      db
+        .select({ id: agents.id })
+        .from(agents)
+        .where(eq(agents.companyId, companyId)),
+      db
+        .select({ principalId: companyMemberships.principalId })
+        .from(companyMemberships)
+        .where(
+          and(
+            eq(companyMemberships.companyId, companyId),
+            eq(companyMemberships.principalType, "agent"),
+          ),
+        ),
+    ]);
+
+    const memberAgentIds = new Set(memberships.map((membership) => membership.principalId));
+    for (const agent of companyAgents) {
+      if (memberAgentIds.has(agent.id)) continue;
+      await ensureMembership(companyId, "agent", agent.id, "member", "active");
+    }
+  }
+
+  async function isInstanceAdmin(userId: string | null | undefined): Promise<boolean> {
+    if (!userId) return false;
+    const row = await db
+      .select({ id: instanceUserRoles.id })
+      .from(instanceUserRoles)
+      .where(and(eq(instanceUserRoles.userId, userId), eq(instanceUserRoles.role, "instance_admin")))
+      .then((rows) => rows[0] ?? null);
+    return Boolean(row);
+  }
+
+  async function getMembership(
+    companyId: string,
+    principalType: PrincipalType,
+    principalId: string,
+  ): Promise<MembershipRow | null> {
+    const membership = await lookupMembership(companyId, principalType, principalId);
+
+    if (membership || principalType !== "agent") {
+      return membership;
+    }
+
+    return repairMissingAgentMembership(companyId, principalId);
   }
 
   async function hasPermission(
@@ -76,6 +129,7 @@ export function accessService(db: Db) {
   }
 
   async function listMembers(companyId: string) {
+    await backfillMissingAgentMemberships(companyId);
     return db
       .select()
       .from(companyMemberships)
@@ -205,7 +259,7 @@ export function accessService(db: Db) {
     membershipRole: string | null = "member",
     status: "pending" | "active" | "suspended" = "active",
   ) {
-    const existing = await getMembership(companyId, principalType, principalId);
+    const existing = await lookupMembership(companyId, principalType, principalId);
     if (existing) {
       if (existing.status !== status || existing.membershipRole !== membershipRole) {
         const updated = await db

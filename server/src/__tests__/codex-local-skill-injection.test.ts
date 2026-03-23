@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { ensureCodexSkillsInjected } from "@paperclipai/adapter-codex-local/server";
+import { createPaperclipSkillLink } from "@paperclipai/adapter-utils/server-utils";
 
 async function makeTempDir(prefix: string): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), prefix));
@@ -49,7 +50,7 @@ describe("codex local adapter skill injection", () => {
 
     await createPaperclipRepoSkill(currentRepo, "paperclip");
     await createPaperclipRepoSkill(oldRepo, "paperclip");
-    await fs.symlink(path.join(oldRepo, "skills", "paperclip"), path.join(skillsHome, "paperclip"));
+    await createPaperclipSkillLink(path.join(oldRepo, "skills", "paperclip"), path.join(skillsHome, "paperclip"));
 
     const logs: Array<{ stream: "stdout" | "stderr"; chunk: string }> = [];
     await ensureCodexSkillsInjected(
@@ -87,7 +88,7 @@ describe("codex local adapter skill injection", () => {
 
     await createPaperclipRepoSkill(currentRepo, "paperclip");
     await createCustomSkill(customRoot, "paperclip");
-    await fs.symlink(path.join(customRoot, "custom", "paperclip"), path.join(skillsHome, "paperclip"));
+    await createPaperclipSkillLink(path.join(customRoot, "custom", "paperclip"), path.join(skillsHome, "paperclip"));
 
     await ensureCodexSkillsInjected(async () => {}, {
       skillsHome,
@@ -114,7 +115,7 @@ describe("codex local adapter skill injection", () => {
     await createPaperclipRepoSkill(currentRepo, "paperclip");
     await createPaperclipRepoSkill(oldRepo, "agent-browser");
     const staleTarget = path.join(oldRepo, "skills", "agent-browser");
-    await fs.symlink(staleTarget, path.join(skillsHome, "agent-browser"));
+    await createPaperclipSkillLink(staleTarget, path.join(skillsHome, "agent-browser"));
     await fs.rm(staleTarget, { recursive: true, force: true });
 
     const logs: Array<{ stream: "stdout" | "stderr"; chunk: string }> = [];
@@ -151,7 +152,7 @@ describe("codex local adapter skill injection", () => {
 
     await createPaperclipRepoSkill(currentRepo, "paperclip");
     await createPaperclipRepoSkill(currentRepo, "agent-browser");
-    await fs.symlink(
+    await createPaperclipSkillLink(
       path.join(currentRepo, "skills", "agent-browser"),
       path.join(skillsHome, "agent-browser"),
     );

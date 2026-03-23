@@ -60,6 +60,24 @@ describe("boardMutationGuard", () => {
     expect(res.status).toBe(204);
   });
 
+  it("allows board mutations from same-origin xhr without origin headers", async () => {
+    const app = createApp("board");
+    const res = await request(app)
+      .post("/mutate")
+      .set("X-Requested-With", "XMLHttpRequest")
+      .send({ ok: true });
+    expect(res.status).toBe(204);
+  });
+
+  it("allows board mutations when fetch metadata reports same-origin", async () => {
+    const app = createApp("board");
+    const res = await request(app)
+      .post("/mutate")
+      .set("Sec-Fetch-Site", "same-origin")
+      .send({ ok: true });
+    expect(res.status).toBe(204);
+  });
+
   it("does not block authenticated agent mutations", async () => {
     const middleware = boardMutationGuard();
     const req = {

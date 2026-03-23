@@ -106,6 +106,7 @@ A lightweight scheduler/worker in the server process handles:
 - heartbeat trigger checks
 - stuck run detection
 - budget threshold checks
+- repeated heartbeat failure circuit breaking (auto-pause after consecutive failures)
 
 Separate queue infrastructure is not required for V1.
 
@@ -828,9 +829,10 @@ V1 is complete only when all criteria are true:
 4. Agents can update tasks/comments and report costs with API keys only.
 5. Board can approve/reject hire and CEO strategy requests in UI.
 6. Budget hard limit auto-pauses an agent and prevents new invocations.
-7. Dashboard shows accurate counts/spend from live DB data.
-8. Every mutation is auditable in activity log.
-9. App runs with embedded PostgreSQL by default and with external Postgres via `DATABASE_URL`.
+7. Repeated heartbeat failures auto-pause the affected agent and cancel queued work.
+8. Dashboard shows accurate counts/spend from live DB data.
+9. Every mutation is auditable in activity log.
+10. App runs with embedded PostgreSQL by default and with external Postgres via `DATABASE_URL`.
 
 ## 20. Post-V1 Backlog (Explicitly Deferred)
 

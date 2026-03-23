@@ -1,0 +1,53 @@
+{
+  "$meta": {
+    "version": 1,
+    "updatedAt": "2026-03-23T11:01:29.023Z",
+    "source": "onboard"
+  },
+  "database": {
+    "mode": "embedded-postgres",
+    "embeddedPostgresDataDir": "D:\\new-projects\\paperclip\\tests\\e2e\\.paperclip-home\\instances\\default\\db",
+    "embeddedPostgresPort": 54329,
+    "backup": {
+      "enabled": true,
+      "intervalMinutes": 60,
+      "retentionDays": 30,
+      "dir": "D:\\new-projects\\paperclip\\tests\\e2e\\.paperclip-home\\instances\\default\\data\\backups"
+    }
+  },
+  "logging": {
+    "mode": "file",
+    "logDir": "D:\\new-projects\\paperclip\\tests\\e2e\\.paperclip-home\\instances\\default\\logs"
+  },
+  "server": {
+    "deploymentMode": "local_trusted",
+    "exposure": "private",
+    "host": "127.0.0.1",
+    "port": 3100,
+    "allowedHostnames": [],
+    "serveUi": true
+  },
+  "auth": {
+    "baseUrlMode": "auto",
+    "disableSignUp": false
+  },
+  "storage": {
+    "provider": "local_disk",
+    "localDisk": {
+      "baseDir": "D:\\new-projects\\paperclip\\tests\\e2e\\.paperclip-home\\instances\\default\\data\\storage"
+    },
+    "s3": {
+      "bucket": "paperclip",
+      "region": "us-east-1",
+      "prefix": "",
+      "forcePathStyle": false
+    }
+  },
+  "secrets": {
+    "provider": "local_encrypted",
+    "strictMode": false,
+    "localEncrypted": {
+      "keyFilePath": "D:\\new-projects\\paperclip\\tests\\e2e\\.paperclip-home\\instances\\default\\secrets\\master.key"
+    }
+  }
+}

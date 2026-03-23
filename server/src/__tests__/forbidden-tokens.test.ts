@@ -1,10 +1,20 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-
-const {
+import {
   resolveDynamicForbiddenTokens,
   resolveForbiddenTokens,
   runForbiddenTokenCheck,
-} = await import("../../../scripts/check-forbidden-tokens.mjs");
+} from "../../../scripts/check-forbidden-tokens-lib.mjs";
+
+type RunForbiddenTokenCheckInput = {
+  repoRoot: string;
+  tokens: string[];
+  exec: (command: string) => string;
+  log: (message: string) => void;
+  error: (message: string) => void;
+};
 
 describe("forbidden token check", () => {
   it("derives username tokens without relying on whoami", () => {
@@ -32,10 +42,6 @@ describe("forbidden token check", () => {
   });
 
   it("merges dynamic and file-based forbidden tokens", async () => {
-    const fs = await import("node:fs");
-    const os = await import("node:os");
-    const path = await import("node:path");
-
     const tokensFile = path.join(os.tmpdir(), `forbidden-tokens-${Date.now()}.txt`);
     fs.writeFileSync(tokensFile, "# comment\npaperclip\ncustom-token\n");
 
@@ -66,7 +72,7 @@ describe("forbidden token check", () => {
       exec,
       log,
       error,
-    });
+    } satisfies RunForbiddenTokenCheckInput);
 
     expect(exitCode).toBe(1);
     expect(exec).toHaveBeenCalledTimes(2);

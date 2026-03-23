@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { ensureCursorSkillsInjected } from "@paperclipai/adapter-cursor-local/server";
+import { createPaperclipSkillLink } from "@paperclipai/adapter-utils/server-utils";
 
 async function makeTempDir(prefix: string): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), prefix));
@@ -91,7 +92,7 @@ describe("cursor local adapter skill injection", () => {
           if (target.endsWith(`${path.sep}fail-skill`)) {
             throw new Error("simulated link failure");
           }
-          await fs.symlink(source, target);
+          await createPaperclipSkillLink(source, target);
         },
       },
     );

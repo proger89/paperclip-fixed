@@ -23,7 +23,7 @@ import {
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
 import { DEFAULT_CURSOR_LOCAL_MODEL } from "../index.js";
-import { parseCursorJsonl, isCursorUnknownSessionError } from "./parse.js";
+import { detectCursorAuthRequired, parseCursorJsonl, isCursorUnknownSessionError } from "./parse.js";
 import { normalizeCursorStreamLine } from "../shared/stream.js";
 import { hasCursorTrustBypassArg } from "../shared/trust.js";
 
@@ -461,12 +461,19 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     },
     clearSessionOnMissingSession = false,
   ): AdapterExecutionResult => {
+    const authMeta = detectCursorAuthRequired({
+      parsed: attempt.parsed,
+      stdout: attempt.proc.stdout,
+      stderr: attempt.proc.stderr,
+    });
+
     if (attempt.proc.timedOut) {
       return {
         exitCode: attempt.proc.exitCode,
         signal: attempt.proc.signal,
         timedOut: true,
         errorMessage: `Timed out after ${timeoutSec}s`,
+        errorCode: authMeta.requiresAuth ? "cursor_auth_required" : null,
         clearSession: clearSessionOnMissingSession,
       };
     }
@@ -496,6 +503,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         (attempt.proc.exitCode ?? 0) === 0
           ? null
           : fallbackErrorMessage,
+      errorCode: (attempt.proc.exitCode ?? 0) !== 0 && authMeta.requiresAuth ? "cursor_auth_required" : null,
       usage: attempt.parsed.usage,
       sessionId: resolvedSessionId,
       sessionParams: resolvedSessionParams,

@@ -40,6 +40,18 @@ console.log(JSON.stringify({
   await fs.chmod(commandPath, 0o755);
 }
 
+async function writeFakeCursorAuthFailureCommand(commandPath: string): Promise<void> {
+  const script = `#!/usr/bin/env node
+console.log(JSON.stringify({
+  type: "error",
+  message: "Authentication required. Run agent login first.",
+}));
+process.exit(1);
+`;
+  await fs.writeFile(commandPath, script, "utf8");
+  await fs.chmod(commandPath, 0o755);
+}
+
 type CapturePayload = {
   argv: string[];
   prompt: string;
@@ -266,6 +278,62 @@ describe("cursor execute", () => {
       expect(await fs.realpath(path.join(root, ".cursor", "skills", "ascii-heart"))).toBe(
         await fs.realpath(asciiHeartDir),
       );
+    } finally {
+      if (previousHome === undefined) {
+        delete process.env.HOME;
+      } else {
+        process.env.HOME = previousHome;
+      }
+      if (previousUserProfile === undefined) {
+        delete process.env.USERPROFILE;
+      } else {
+        process.env.USERPROFILE = previousUserProfile;
+      }
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("returns cursor_auth_required when Cursor asks for login", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-cursor-execute-auth-"));
+    const workspace = path.join(root, "workspace");
+    const commandPath = path.join(root, "agent");
+    await fs.mkdir(workspace, { recursive: true });
+    await writeFakeCursorAuthFailureCommand(commandPath);
+
+    const previousHome = process.env.HOME;
+    const previousUserProfile = process.env.USERPROFILE;
+    process.env.HOME = root;
+    process.env.USERPROFILE = root;
+
+    try {
+      const result = await execute({
+        runId: "run-auth",
+        agent: {
+          id: "agent-1",
+          companyId: "company-1",
+          name: "Cursor Coder",
+          adapterType: "cursor",
+          adapterConfig: {},
+        },
+        runtime: {
+          sessionId: null,
+          sessionParams: null,
+          sessionDisplayId: null,
+          taskKey: null,
+        },
+        config: {
+          command: commandPath,
+          cwd: workspace,
+          promptTemplate: "Follow the paperclip heartbeat.",
+        },
+        context: {},
+        authToken: "run-jwt-token",
+        onLog: async () => {},
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.errorCode).toBe("cursor_auth_required");
+      expect(result.errorMessage).toContain("agent login");
     } finally {
       if (previousHome === undefined) {
         delete process.env.HOME;

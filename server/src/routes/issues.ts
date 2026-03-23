@@ -191,6 +191,53 @@ export function issueRoutes(db: Db, storage: StorageService) {
     }
   });
 
+  router.param("taskId", async (req, res, next, rawId) => {
+    try {
+      req.params.taskId = await normalizeIssueIdentifier(rawId);
+      next();
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  async function sendIssueDetailResponse(req: Request, res: Response, id: string) {
+    const issue = await svc.getById(id);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+    const [ancestors, project, goal, mentionedProjectIds, documentPayload] = await Promise.all([
+      svc.getAncestors(issue.id),
+      issue.projectId ? projectsSvc.getById(issue.projectId) : null,
+      issue.goalId
+        ? goalsSvc.getById(issue.goalId)
+        : !issue.projectId
+          ? goalsSvc.getDefaultCompanyGoal(issue.companyId)
+          : null,
+      svc.findMentionedProjectIds(issue.id),
+      documentsSvc.getIssueDocumentPayload(issue),
+    ]);
+    const mentionedProjects = mentionedProjectIds.length > 0
+      ? await projectsSvc.listByIds(issue.companyId, mentionedProjectIds)
+      : [];
+    const currentExecutionWorkspace = issue.executionWorkspaceId
+      ? await executionWorkspacesSvc.getById(issue.executionWorkspaceId)
+      : null;
+    const workProducts = await workProductsSvc.listForIssue(issue.id);
+    res.json({
+      ...issue,
+      goalId: goal?.id ?? issue.goalId,
+      ancestors,
+      ...documentPayload,
+      project: project ?? null,
+      goal: goal ?? null,
+      mentionedProjects,
+      currentExecutionWorkspace,
+      workProducts,
+    });
+  }
+
   // Common malformed path when companyId is empty in "/api/companies/{companyId}/issues".
   router.get("/issues", (_req, res) => {
     res.status(400).json({
@@ -303,42 +350,13 @@ export function issueRoutes(db: Db, storage: StorageService) {
   });
 
   router.get("/issues/:id", async (req, res) => {
-    const id = req.params.id as string;
-    const issue = await svc.getById(id);
-    if (!issue) {
-      res.status(404).json({ error: "Issue not found" });
-      return;
-    }
-    assertCompanyAccess(req, issue.companyId);
-    const [ancestors, project, goal, mentionedProjectIds, documentPayload] = await Promise.all([
-      svc.getAncestors(issue.id),
-      issue.projectId ? projectsSvc.getById(issue.projectId) : null,
-      issue.goalId
-        ? goalsSvc.getById(issue.goalId)
-        : !issue.projectId
-          ? goalsSvc.getDefaultCompanyGoal(issue.companyId)
-          : null,
-      svc.findMentionedProjectIds(issue.id),
-      documentsSvc.getIssueDocumentPayload(issue),
-    ]);
-    const mentionedProjects = mentionedProjectIds.length > 0
-      ? await projectsSvc.listByIds(issue.companyId, mentionedProjectIds)
-      : [];
-    const currentExecutionWorkspace = issue.executionWorkspaceId
-      ? await executionWorkspacesSvc.getById(issue.executionWorkspaceId)
-      : null;
-    const workProducts = await workProductsSvc.listForIssue(issue.id);
-    res.json({
-      ...issue,
-      goalId: goal?.id ?? issue.goalId,
-      ancestors,
-      ...documentPayload,
-      project: project ?? null,
-      goal: goal ?? null,
-      mentionedProjects,
-      currentExecutionWorkspace,
-      workProducts,
-    });
+    await sendIssueDetailResponse(req, res, req.params.id as string);
+  });
+
+  // Backward-compatible alias for older adapters/prompts that still fetch
+  // task details from the pre-V1 path used before issues became the canonical term.
+  router.get("/v1/tasks/:taskId", async (req, res) => {
+    await sendIssueDetailResponse(req, res, req.params.taskId as string);
   });
 
   router.get("/issues/:id/heartbeat-context", async (req, res) => {

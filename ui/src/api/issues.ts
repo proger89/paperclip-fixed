@@ -84,12 +84,17 @@ export const issuesApi = {
     file: File,
     issueCommentId?: string | null,
   ) => {
-    const form = new FormData();
-    form.append("file", file);
-    if (issueCommentId) {
-      form.append("issueCommentId", issueCommentId);
-    }
-    return api.postForm<IssueAttachment>(`/companies/${companyId}/issues/${issueId}/attachments`, form);
+    return (async () => {
+      const buffer = await file.arrayBuffer();
+      const safeFile = new File([buffer], file.name, { type: file.type });
+
+      const form = new FormData();
+      form.append("file", safeFile);
+      if (issueCommentId) {
+        form.append("issueCommentId", issueCommentId);
+      }
+      return api.postForm<IssueAttachment>(`/companies/${companyId}/issues/${issueId}/attachments`, form);
+    })();
   },
   deleteAttachment: (id: string) => api.delete<{ ok: true }>(`/attachments/${id}`),
   listApprovals: (id: string) => api.get<Approval[]>(`/issues/${id}/approvals`),

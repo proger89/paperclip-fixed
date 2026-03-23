@@ -1,0 +1,1 @@
+D:/new-projects/paperclip/node_modules/.pnpm/@embedded-postgres+windows-x64@18.1.0-beta.16/node_modules/@embedded-postgres/windows-x64/native/bin/postgres.exe "-D" "D:\new-projects\paperclip\tests\e2e\.paperclip-home\instances\default\db" "-p" "54329"

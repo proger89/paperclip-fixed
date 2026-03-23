@@ -20,6 +20,7 @@ import {
 import { conflict, notFound } from "../errors.js";
 import { logger } from "../middleware/logger.js";
 import { publishLiveEvent } from "./live-events.js";
+import { logActivity } from "./activity-log.js";
 import { getRunLogStore, type RunLogHandle } from "./run-log-store.js";
 import { getServerAdapter, runningProcesses } from "../adapters/index.js";
 import type { AdapterExecutionResult, AdapterInvocationMeta, AdapterSessionCodec, UsageSummary } from "../adapters/index.js";
@@ -61,8 +62,11 @@ import {
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_MAX = 10;
+const HEARTBEAT_CIRCUIT_BREAKER_MAX_CONSECUTIVE_FAILURES_DEFAULT = 3;
+const HEARTBEAT_CIRCUIT_BREAKER_MAX_CONSECUTIVE_FAILURES_MAX = 20;
 const NON_INVOKABLE_AGENT_STATUSES = new Set(["paused", "terminated", "pending_approval"]);
 const INACTIVE_COMPANY_STATUSES = new Set(["paused", "archived"]);
+const AUTH_REQUIRED_ERROR_CODE_SUFFIX = "_auth_required";
 const STALE_QUEUED_ISSUE_EXECUTION_IDLE_MS = 30_000;
 const DEFERRED_WAKE_CONTEXT_KEY = "_paperclipWakeContext";
 const DETACHED_PROCESS_ERROR_CODE = "process_detached";
@@ -188,6 +192,14 @@ function normalizeMaxConcurrentRuns(value: unknown) {
   return Math.max(HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT, Math.min(HEARTBEAT_MAX_CONCURRENT_RUNS_MAX, parsed));
 }
 
+function normalizeMaxConsecutiveFailures(value: unknown) {
+  const parsed = Math.floor(
+    asNumber(value, HEARTBEAT_CIRCUIT_BREAKER_MAX_CONSECUTIVE_FAILURES_DEFAULT),
+  );
+  if (!Number.isFinite(parsed)) return HEARTBEAT_CIRCUIT_BREAKER_MAX_CONSECUTIVE_FAILURES_DEFAULT;
+  return Math.max(0, Math.min(HEARTBEAT_CIRCUIT_BREAKER_MAX_CONSECUTIVE_FAILURES_MAX, parsed));
+}
+
 async function withAgentStartLock<T>(agentId: string, fn: () => Promise<T>) {
   const previous = startLocksByAgent.get(agentId) ?? Promise.resolve();
   const run = previous.then(fn);
@@ -229,6 +241,21 @@ type SessionCompactionDecision = {
   previousRunId: string | null;
 };
 
+type HeartbeatCircuitBreakerPolicy = {
+  enabled: boolean;
+  maxConsecutiveFailures: number;
+};
+
+type CircuitBreakerRuntimeState = {
+  consecutiveFailures: number;
+  lastFailureAt: string | null;
+  lastOutcome: "succeeded" | "failed" | "cancelled" | "timed_out" | null;
+  lastRunId: string | null;
+  lastTriggeredAt: string | null;
+  lastTriggeredRunId: string | null;
+  lastTriggeredStreak: number;
+};
+
 interface ParsedIssueAssigneeAdapterOverrides {
   adapterConfig: Record<string, unknown> | null;
   useProjectWorkspace: boolean | null;
@@ -266,6 +293,44 @@ export function prioritizeProjectWorkspaceCandidatesForRun<T extends ProjectWork
 
 function readNonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function parseCircuitBreakerRuntimeState(value: unknown): CircuitBreakerRuntimeState {
+  const parsed = parseObject(value);
+  return {
+    consecutiveFailures: Math.max(0, Math.floor(asNumber(parsed.consecutiveFailures, 0))),
+    lastFailureAt: readNonEmptyString(parsed.lastFailureAt),
+    lastOutcome:
+      parsed.lastOutcome === "succeeded" ||
+      parsed.lastOutcome === "failed" ||
+      parsed.lastOutcome === "cancelled" ||
+      parsed.lastOutcome === "timed_out"
+        ? parsed.lastOutcome
+        : null,
+    lastRunId: readNonEmptyString(parsed.lastRunId),
+    lastTriggeredAt: readNonEmptyString(parsed.lastTriggeredAt),
+    lastTriggeredRunId: readNonEmptyString(parsed.lastTriggeredRunId),
+    lastTriggeredStreak: Math.max(0, Math.floor(asNumber(parsed.lastTriggeredStreak, 0))),
+  };
+}
+
+function writeCircuitBreakerRuntimeState(
+  value: unknown,
+  state: CircuitBreakerRuntimeState,
+): Record<string, unknown> {
+  const parsed = parseObject(value);
+  return {
+    ...parsed,
+    circuitBreaker: {
+      consecutiveFailures: state.consecutiveFailures,
+      lastFailureAt: state.lastFailureAt,
+      lastOutcome: state.lastOutcome,
+      lastRunId: state.lastRunId,
+      lastTriggeredAt: state.lastTriggeredAt,
+      lastTriggeredRunId: state.lastTriggeredRunId,
+      lastTriggeredStreak: state.lastTriggeredStreak,
+    },
+  };
 }
 
 function normalizeLedgerBillingType(value: unknown): BillingType {
@@ -1531,12 +1596,24 @@ export function heartbeatService(db: Db) {
   function parseHeartbeatPolicy(agent: typeof agents.$inferSelect) {
     const runtimeConfig = parseObject(agent.runtimeConfig);
     const heartbeat = parseObject(runtimeConfig.heartbeat);
+    const circuitBreaker = parseObject(heartbeat.circuitBreaker);
+    const maxConsecutiveFailures = normalizeMaxConsecutiveFailures(
+      circuitBreaker.maxConsecutiveFailures ?? heartbeat.maxConsecutiveFailures,
+    );
 
     return {
       enabled: asBoolean(heartbeat.enabled, true),
       intervalSec: Math.max(0, asNumber(heartbeat.intervalSec, 0)),
       wakeOnDemand: asBoolean(heartbeat.wakeOnDemand ?? heartbeat.wakeOnAssignment ?? heartbeat.wakeOnOnDemand ?? heartbeat.wakeOnAutomation, true),
       maxConcurrentRuns: normalizeMaxConcurrentRuns(heartbeat.maxConcurrentRuns),
+      circuitBreaker: {
+        enabled:
+          asBoolean(
+            circuitBreaker.enabled ?? heartbeat.circuitBreakerEnabled,
+            true,
+          ) && maxConsecutiveFailures > 0,
+        maxConsecutiveFailures,
+      } satisfies HeartbeatCircuitBreakerPolicy,
     };
   }
 
@@ -1546,6 +1623,120 @@ export function heartbeatService(db: Db) {
       .from(heartbeatRuns)
       .where(and(eq(heartbeatRuns.agentId, agentId), eq(heartbeatRuns.status, "running")));
     return Number(count ?? 0);
+  }
+
+  function isAdapterAuthRequiredErrorCode(errorCode: string | null | undefined): boolean {
+    return typeof errorCode === "string" && errorCode.endsWith(AUTH_REQUIRED_ERROR_CODE_SUFFIX);
+  }
+
+  async function pauseAgentForSystemGuard(
+    run: typeof heartbeatRuns.$inferSelect,
+    input: {
+      eventReason: string;
+      activityActorId: string;
+      activityReason: string;
+      errorCode?: string | null;
+      message?: string | null;
+      cancelReason: string;
+    },
+  ): Promise<boolean> {
+    const existing = await getAgent(run.agentId);
+    if (!existing || existing.status === "terminated") return false;
+
+    const now = new Date();
+    const updated =
+      existing.status === "paused"
+        ? existing
+        : await db
+            .update(agents)
+            .set({
+              status: "paused",
+              pauseReason: "system",
+              pausedAt: now,
+              lastHeartbeatAt: now,
+              updatedAt: now,
+            })
+            .where(eq(agents.id, run.agentId))
+            .returning()
+            .then((rows) => rows[0] ?? null);
+    if (!updated) return false;
+
+    if (existing.status !== "paused") {
+      publishLiveEvent({
+        companyId: updated.companyId,
+        type: "agent.status",
+        payload: {
+          agentId: updated.id,
+          status: updated.status,
+          lastHeartbeatAt: updated.lastHeartbeatAt
+            ? new Date(updated.lastHeartbeatAt).toISOString()
+            : null,
+          outcome: "failed",
+          reason: input.eventReason,
+          errorCode: input.errorCode ?? null,
+        },
+      });
+
+      try {
+        await logActivity(db, {
+          companyId: updated.companyId,
+          actorType: "system",
+          actorId: input.activityActorId,
+          action: "agent.paused",
+          entityType: "agent",
+          entityId: updated.id,
+          agentId: updated.id,
+          runId: run.id,
+          details: {
+            reason: input.activityReason,
+            errorCode: input.errorCode ?? null,
+            message: input.message ?? null,
+          },
+        });
+      } catch (err) {
+        logger.warn(
+          { err, runId: run.id, agentId: run.agentId, reason: input.activityReason },
+          "failed to record system guard pause activity",
+        );
+      }
+    }
+
+    for (let pass = 0; pass < 5; pass += 1) {
+      const cancelled = await cancelActiveForAgentInternal(run.agentId, input.cancelReason);
+      if (cancelled === 0) break;
+    }
+
+    const pendingWakeupIds = await db
+      .select({ id: agentWakeupRequests.id })
+      .from(agentWakeupRequests)
+      .where(
+        and(
+          eq(agentWakeupRequests.companyId, updated.companyId),
+          eq(agentWakeupRequests.agentId, updated.id),
+          inArray(agentWakeupRequests.status, ["queued", "deferred_issue_execution"]),
+          sql`${agentWakeupRequests.runId} is null`,
+        ),
+      )
+      .then((rows) => rows.map((row) => row.id));
+    await cancelPendingWakeupsByIds(pendingWakeupIds, input.cancelReason);
+
+    return true;
+  }
+
+  async function pauseAgentForAuthFailure(
+    run: typeof heartbeatRuns.$inferSelect,
+    errorCode: string | null | undefined,
+    errorMessage: string | null | undefined,
+  ): Promise<boolean> {
+    if (!isAdapterAuthRequiredErrorCode(errorCode)) return false;
+    return pauseAgentForSystemGuard(run, {
+      eventReason: "auth_required",
+      activityActorId: "heartbeat_auth_failure",
+      activityReason: "auth_required",
+      errorCode,
+      message: errorMessage ?? null,
+      cancelReason: "Cancelled because the agent was paused after adapter authentication failed",
+    });
   }
 
   async function claimQueuedRun(run: typeof heartbeatRuns.$inferSelect) {
@@ -1830,6 +2021,78 @@ export function heartbeatService(db: Db) {
         occurredAt: new Date(),
       });
     }
+  }
+
+  async function evaluateFailureCircuitBreaker(
+    agent: typeof agents.$inferSelect,
+    run: typeof heartbeatRuns.$inferSelect,
+  ): Promise<{ paused: boolean; streak: number }> {
+    const policy = parseHeartbeatPolicy(agent).circuitBreaker;
+    const outcome = run.status;
+    const trackedFailure = outcome === "failed" || outcome === "timed_out";
+    const trackedReset = outcome === "succeeded" || outcome === "cancelled";
+
+    if (!policy.enabled || (!trackedFailure && !trackedReset)) {
+      return { paused: false, streak: 0 };
+    }
+
+    await ensureRuntimeState(agent);
+    const now = new Date();
+    const { shouldPause, streak } = await db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select agent_id from agent_runtime_state where agent_id = ${agent.id} for update`,
+      );
+
+      const runtime = await tx
+        .select()
+        .from(agentRuntimeState)
+        .where(eq(agentRuntimeState.agentId, agent.id))
+        .then((rows) => rows[0] ?? null);
+
+      const previous = parseCircuitBreakerRuntimeState(runtime?.stateJson?.circuitBreaker);
+      const nextStreak = trackedFailure ? previous.consecutiveFailures + 1 : 0;
+      const shouldPause = trackedFailure && nextStreak >= policy.maxConsecutiveFailures;
+      const nextState: CircuitBreakerRuntimeState = {
+        consecutiveFailures: shouldPause ? 0 : nextStreak,
+        lastFailureAt: trackedFailure ? now.toISOString() : previous.lastFailureAt,
+        lastOutcome:
+          outcome === "succeeded" ||
+          outcome === "failed" ||
+          outcome === "cancelled" ||
+          outcome === "timed_out"
+            ? outcome
+            : previous.lastOutcome,
+        lastRunId: run.id,
+        lastTriggeredAt: shouldPause ? now.toISOString() : previous.lastTriggeredAt,
+        lastTriggeredRunId: shouldPause ? run.id : previous.lastTriggeredRunId,
+        lastTriggeredStreak: shouldPause ? nextStreak : previous.lastTriggeredStreak,
+      };
+
+      await tx
+        .update(agentRuntimeState)
+        .set({
+          stateJson: writeCircuitBreakerRuntimeState(runtime?.stateJson, nextState),
+          updatedAt: now,
+        })
+        .where(eq(agentRuntimeState.agentId, agent.id));
+
+      return { shouldPause, streak: nextStreak };
+    });
+
+    if (!shouldPause) return { paused: false, streak };
+
+    const paused = await pauseAgentForSystemGuard(run, {
+      eventReason: "failure_circuit_breaker",
+      activityActorId: "heartbeat_failure_circuit_breaker",
+      activityReason: "failure_circuit_breaker",
+      errorCode: run.errorCode ?? null,
+      message:
+        run.error ??
+        `Paused after ${streak} consecutive failed heartbeat runs`,
+      cancelReason: `Cancelled because the agent tripped the heartbeat failure circuit breaker after ${streak} consecutive failures`,
+    });
+
+    return { paused, streak };
   }
 
   async function startNextQueuedRunForAgent(agentId: string) {
@@ -2602,6 +2865,26 @@ export function heartbeatService(db: Db) {
         await releaseIssueExecutionAndPromote(finalizedRun);
       }
 
+      const authFailurePaused =
+        finalizedRun
+          ? await pauseAgentForAuthFailure(
+              finalizedRun,
+              adapterResult.errorCode ?? null,
+              adapterResult.errorMessage ?? null,
+            )
+          : false;
+      if (finalizedRun && authFailurePaused) {
+        await appendRunEvent(finalizedRun, seq++, {
+          eventType: "lifecycle",
+          stream: "system",
+          level: "warn",
+          message: "agent paused after adapter authentication failure",
+          payload: {
+            errorCode: adapterResult.errorCode ?? null,
+          },
+        });
+      }
+
       if (finalizedRun) {
         await updateRuntimeState(agent, finalizedRun, adapterResult, {
           legacySessionId: nextSessionState.legacySessionId,
@@ -2625,6 +2908,22 @@ export function heartbeatService(db: Db) {
             });
           }
         }
+      }
+      const circuitBreakerEvaluation =
+        finalizedRun && !authFailurePaused
+          ? await evaluateFailureCircuitBreaker(agent, finalizedRun)
+          : { paused: false, streak: 0 };
+      if (finalizedRun && circuitBreakerEvaluation.paused) {
+        await appendRunEvent(finalizedRun, seq++, {
+          eventType: "lifecycle",
+          stream: "system",
+          level: "warn",
+          message: "agent paused after heartbeat failure circuit breaker tripped",
+          payload: {
+            consecutiveFailures: circuitBreakerEvaluation.streak,
+            errorCode: finalizedRun.errorCode ?? null,
+          },
+        });
       }
       await finalizeAgentStatus(agent.id, outcome);
     } catch (err) {
@@ -2688,6 +2987,20 @@ export function heartbeatService(db: Db) {
             lastError: message,
           });
         }
+
+        const circuitBreakerEvaluation = await evaluateFailureCircuitBreaker(agent, failedRun);
+        if (circuitBreakerEvaluation.paused) {
+          await appendRunEvent(failedRun, seq++, {
+            eventType: "lifecycle",
+            stream: "system",
+            level: "warn",
+            message: "agent paused after heartbeat failure circuit breaker tripped",
+            payload: {
+              consecutiveFailures: circuitBreakerEvaluation.streak,
+              errorCode: failedRun.errorCode ?? null,
+            },
+          });
+        }
       }
 
       await finalizeAgentStatus(agent.id, "failed");
@@ -2717,6 +3030,24 @@ export function heartbeatService(db: Db) {
               message,
             }).catch(() => undefined);
             await releaseIssueExecutionAndPromote(failedRun).catch(() => undefined);
+            const agent = await getAgent(run.agentId).catch(() => null);
+            if (agent) {
+              const circuitBreakerEvaluation = await evaluateFailureCircuitBreaker(agent, failedRun).catch(
+                () => ({ paused: false, streak: 0 }),
+              );
+              if (circuitBreakerEvaluation.paused) {
+                await appendRunEvent(failedRun, 2, {
+                  eventType: "lifecycle",
+                  stream: "system",
+                  level: "warn",
+                  message: "agent paused after heartbeat failure circuit breaker tripped",
+                  payload: {
+                    consecutiveFailures: circuitBreakerEvaluation.streak,
+                    errorCode: failedRun.errorCode ?? null,
+                  },
+                }).catch(() => undefined);
+              }
+            }
           }
           // Ensure the agent is not left stuck in "running" if the inner catch handler's
           // DB calls threw (e.g. a transient DB error in finalizeAgentStatus).

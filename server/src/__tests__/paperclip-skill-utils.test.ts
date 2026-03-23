@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  createPaperclipSkillLink,
   listPaperclipSkillEntries,
   removeMaintainerOnlySkillSymlinks,
 } from "@paperclipai/adapter-utils/server-utils";
@@ -48,9 +49,9 @@ describe("paperclip skill utils", () => {
     await fs.mkdir(runtimeSkill, { recursive: true });
     await fs.mkdir(customSkill, { recursive: true });
 
-    await fs.symlink(runtimeSkill, path.join(skillsHome, "paperclip"));
-    await fs.symlink(customSkill, path.join(skillsHome, "release-notes"));
-    await fs.symlink(staleMaintainerSkill, path.join(skillsHome, "release"));
+    await createPaperclipSkillLink(runtimeSkill, path.join(skillsHome, "paperclip"));
+    await createPaperclipSkillLink(customSkill, path.join(skillsHome, "release-notes"));
+    await createPaperclipSkillLink(staleMaintainerSkill, path.join(skillsHome, "release"));
 
     const removed = await removeMaintainerOnlySkillSymlinks(skillsHome, ["paperclip"]);
 

@@ -15,6 +15,7 @@ import {
 import { isUuidLike, normalizeAgentUrlKey } from "@paperclipai/shared";
 import { conflict, notFound, unprocessable } from "../errors.js";
 import { normalizeAgentPermissions } from "./agent-permissions.js";
+import { accessService } from "./access.js";
 import { REDACTED_EVENT_VALUE, sanitizeRecord } from "../redaction.js";
 
 function hashToken(token: string) {
@@ -183,6 +184,8 @@ export function deduplicateAgentName(
 }
 
 export function agentService(db: Db) {
+  const access = accessService(db);
+
   function currentUtcMonthWindow(now = new Date()) {
     const year = now.getUTCFullYear();
     const month = now.getUTCMonth();
@@ -399,6 +402,8 @@ export function agentService(db: Db) {
         .values({ ...data, name: uniqueName, companyId, role, permissions: normalizedPermissions })
         .returning()
         .then((rows) => rows[0]);
+
+      await access.ensureMembership(companyId, "agent", created.id, "member", "active");
 
       return normalizeAgentRow(created);
     },

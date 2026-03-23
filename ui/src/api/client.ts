@@ -1,4 +1,5 @@
 const BASE = "/api";
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 export class ApiError extends Error {
   status: number;
@@ -14,9 +15,13 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers ?? undefined);
+  const method = (init?.method ?? "GET").toUpperCase();
   const body = init?.body;
   if (!(body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
+  }
+  if (!SAFE_METHODS.has(method) && !headers.has("X-Requested-With")) {
+    headers.set("X-Requested-With", "XMLHttpRequest");
   }
 
   const res = await fetch(`${BASE}${path}`, {

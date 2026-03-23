@@ -1,5 +1,8 @@
 import { asNumber, asString, parseJson, parseObject } from "@paperclipai/adapter-utils/server-utils";
 
+const OPENCODE_AUTH_REQUIRED_RE =
+  /(?:auth(?:entication)?\s+required|api\s*key|invalid\s*api\s*key|not\s+logged\s+in|opencode\s+auth\s+login|free\s+usage\s+exceeded)/i;
+
 function errorText(value: unknown): string {
   if (typeof value === "string") return value;
   const rec = parseObject(value);
@@ -96,4 +99,20 @@ export function isOpenCodeUnknownSessionError(stdout: string, stderr: string): b
   return /unknown\s+session|session\b.*\bnot\s+found|resource\s+not\s+found:.*[\\/]session[\\/].*\.json|notfounderror|no session/i.test(
     haystack,
   );
+}
+
+export function detectOpenCodeAuthRequired(input: {
+  parsed: { errorMessage: string | null } | null;
+  stdout: string;
+  stderr: string;
+}): { requiresAuth: boolean } {
+  const messages = [input.parsed?.errorMessage ?? "", input.stdout, input.stderr]
+    .join("\n")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  return {
+    requiresAuth: messages.some((line) => OPENCODE_AUTH_REQUIRED_RE.test(line)),
+  };
 }

@@ -20,6 +20,12 @@ const COMPANY_NAME = `E2E-Test-${Date.now()}`;
 const AGENT_NAME = "CEO";
 const TASK_TITLE = "E2E test task";
 
+type HeartbeatRunSummary = {
+  agentId: string;
+  invocationSource: string;
+  status: string;
+};
+
 test.describe("Onboarding wizard", () => {
   test("completes full wizard flow", async ({ page }) => {
     await page.goto("/");
@@ -128,6 +134,45 @@ test.describe("Onboarding wizard", () => {
       "You are the CEO. You set the direction for the company."
     );
     expect(task.description).not.toContain("github.com/paperclipai/companies");
+
+    const legacyTaskRes = await page.request.get(
+      `${baseUrl}/api/v1/tasks/${task.id}`
+    );
+    expect(legacyTaskRes.ok()).toBe(true);
+    const legacyTask = await legacyTaskRes.json();
+    expect(legacyTask).toMatchObject({
+      id: task.id,
+      title: TASK_TITLE,
+      assigneeAgentId: ceoAgent.id,
+    });
+
+    await expect
+      .poll(
+        async () => {
+          const runsRes = await page.request.get(
+            `${baseUrl}/api/companies/${company.id}/heartbeat-runs?agentId=${ceoAgent.id}`
+          );
+          expect(runsRes.ok()).toBe(true);
+          const runs = (await runsRes.json()) as HeartbeatRunSummary[];
+          const latestRun = runs.find((run) => run.agentId === ceoAgent.id);
+          return latestRun
+            ? {
+                invocationSource: latestRun.invocationSource,
+                status: latestRun.status,
+              }
+            : null;
+        },
+        {
+          timeout: 30_000,
+          intervals: [1_000, 2_000, 5_000],
+        }
+      )
+      .toEqual(
+        expect.objectContaining({
+          invocationSource: expect.stringMatching(/^(assignment|manual|timer|resume|recovery|on_demand)$/),
+          status: expect.stringMatching(/^(queued|running|succeeded|failed)$/),
+        })
+      );
 
     if (!SKIP_LLM) {
       await expect(async () => {

@@ -1,6 +1,9 @@
 import { asString, asNumber, parseObject, parseJson } from "@paperclipai/adapter-utils/server-utils";
 import { normalizeCursorStreamLine } from "../shared/stream.js";
 
+const CURSOR_AUTH_REQUIRED_RE =
+  /(?:authentication\s+required|not\s+authenticated|not\s+logged\s+in|unauthorized|invalid(?:\s+or\s+missing)?\s+api(?:[_\s-]?key)?|cursor[_\s-]?api[_\s-]?key|run\s+'?agent\s+login'?\s+first|api(?:[_\s-]?key)?(?:\s+is)?\s+required)/i;
+
 function asErrorText(value: unknown): string {
   if (typeof value === "string") return value;
   const rec = parseObject(value);
@@ -159,4 +162,20 @@ export function isCursorUnknownSessionError(stdout: string, stderr: string): boo
   return /unknown\s+(session|chat)|session\s+.*\s+not\s+found|chat\s+.*\s+not\s+found|resume\s+.*\s+not\s+found|could\s+not\s+resume/i.test(
     haystack,
   );
+}
+
+export function detectCursorAuthRequired(input: {
+  parsed: { errorMessage: string | null } | null;
+  stdout: string;
+  stderr: string;
+}): { requiresAuth: boolean } {
+  const messages = [input.parsed?.errorMessage ?? "", input.stdout, input.stderr]
+    .join("\n")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  return {
+    requiresAuth: messages.some((line) => CURSOR_AUTH_REQUIRED_RE.test(line)),
+  };
 }

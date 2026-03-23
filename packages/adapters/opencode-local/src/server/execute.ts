@@ -20,7 +20,7 @@ import {
   readPaperclipRuntimeSkillEntries,
   resolvePaperclipDesiredSkillNames,
 } from "@paperclipai/adapter-utils/server-utils";
-import { isOpenCodeUnknownSessionError, parseOpenCodeJsonl } from "./parse.js";
+import { detectOpenCodeAuthRequired, isOpenCodeUnknownSessionError, parseOpenCodeJsonl } from "./parse.js";
 import { ensureOpenCodeModelConfiguredAndAvailable } from "./models.js";
 import { removeMaintainerOnlySkillSymlinks } from "@paperclipai/adapter-utils/server-utils";
 
@@ -326,12 +326,19 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     },
     clearSessionOnMissingSession = false,
   ): AdapterExecutionResult => {
+    const authMeta = detectOpenCodeAuthRequired({
+      parsed: attempt.parsed,
+      stdout: attempt.proc.stdout,
+      stderr: attempt.proc.stderr,
+    });
+
     if (attempt.proc.timedOut) {
       return {
         exitCode: attempt.proc.exitCode,
         signal: attempt.proc.signal,
         timedOut: true,
         errorMessage: `Timed out after ${timeoutSec}s`,
+        errorCode: authMeta.requiresAuth ? "opencode_auth_required" : null,
         clearSession: clearSessionOnMissingSession,
       };
     }
@@ -364,6 +371,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       signal: attempt.proc.signal,
       timedOut: false,
       errorMessage: (synthesizedExitCode ?? 0) === 0 ? null : fallbackErrorMessage,
+      errorCode: (synthesizedExitCode ?? 0) !== 0 && authMeta.requiresAuth ? "opencode_auth_required" : null,
       usage: {
         inputTokens: attempt.parsed.usage.inputTokens,
         outputTokens: attempt.parsed.usage.outputTokens,

@@ -108,6 +108,17 @@ test.describe("Docker authenticated onboarding smoke", () => {
     expect(issue).toBeTruthy();
     expect(issue!.assigneeAgentId).toBe(ceoAgent!.id);
 
+    const legacyTaskRes = await page.request.get(
+      `${baseUrl}/api/v1/tasks/${issue!.id}`
+    );
+    expect(legacyTaskRes.ok()).toBe(true);
+    const legacyTask = await legacyTaskRes.json();
+    expect(legacyTask).toMatchObject({
+      id: issue!.id,
+      title: TASK_TITLE,
+      assigneeAgentId: ceoAgent!.id,
+    });
+
     await expect.poll(
       async () => {
         const runsRes = await page.request.get(
