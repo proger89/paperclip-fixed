@@ -487,6 +487,8 @@ describe("codex execute", () => {
       expect(capture.lcAll).toBe("C.UTF-8");
       expect(capture.prompt).toContain("Windows PowerShell 5.1 JSON write rule:");
       expect(capture.prompt).toContain("Invoke-Utf8Json");
+      expect(capture.prompt).toContain("Get-Content -Encoding utf8");
+      expect(capture.prompt).toContain("Avoid bare `Get-Content`, `Set-Content`, `Add-Content`, or `Out-File`");
       expect(logs).toContainEqual(
         expect.objectContaining({
           stream: "stdout",

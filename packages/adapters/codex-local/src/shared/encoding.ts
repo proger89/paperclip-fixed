@@ -135,6 +135,8 @@ export function buildWindowsUtf8JsonHelperNote(): string {
     "- Do not use `Invoke-RestMethod -Body $jsonString` for issue, comment, or document mutations.",
     "- Use a UTF-8 byte body helper instead:",
     "  `function Invoke-Utf8Json($method, $uri, $obj, $headers) { $json = $obj | ConvertTo-Json -Depth 10 -Compress; $bytes = [System.Text.Encoding]::UTF8.GetBytes($json); Invoke-RestMethod -Method $method -Uri $uri -Headers $headers -ContentType 'application/json; charset=utf-8' -Body $bytes }`",
+    "- For file reads and writes, always force UTF-8 explicitly: `Get-Content -Encoding utf8`, `Set-Content -Encoding utf8`, `Add-Content -Encoding utf8`, or `[System.IO.File]::ReadAllText/WriteAllText(..., [System.Text.Encoding]::UTF8)`.",
+    "- Avoid bare `Get-Content`, `Set-Content`, `Add-Content`, or `Out-File` when touching non-ASCII text; PowerShell 5.1 defaults can corrupt UTF-8 files.",
     "- Prefer UTF-8 files or byte-encoded payloads over pipeline-encoded heredocs.",
   ].join("\n");
 }

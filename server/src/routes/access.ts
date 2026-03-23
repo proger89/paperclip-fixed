@@ -1112,6 +1112,9 @@ export function buildInviteOnboardingTextDocument(
   const diagnostics = Array.isArray(onboarding.connectivity?.diagnostics)
     ? onboarding.connectivity.diagnostics
     : [];
+  const requestUrl = requestBaseUrl(req);
+  const examplePaperclipApiUrl =
+    resolveAgentFacingApiUrl() || requestUrl || "http://127.0.0.1:3100";
 
   const lines: string[] = [];
   const appendBlock = (block: string) => {

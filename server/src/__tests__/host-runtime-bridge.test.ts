@@ -38,17 +38,15 @@ describe("host runtime bridge client", () => {
   it("streams logs, meta, spawn, and result events from the host bridge", async () => {
     const seenAuthHeaders: string[] = [];
     const seenPaperclipApiUrls: string[] = [];
-    const { server, baseUrl } = await startBridgeServer((req, res) => {
+    const { server, baseUrl } = await startBridgeServer(async (req, res) => {
       seenAuthHeaders.push(req.headers.authorization ?? "");
       if (req.url === "/v1/execute") {
         let raw = "";
-        req.on("data", (chunk) => {
+        for await (const chunk of req) {
           raw += chunk.toString("utf8");
-        });
-        req.on("end", () => {
-          const payload = JSON.parse(raw) as { paperclipApiUrl?: string };
-          seenPaperclipApiUrls.push(payload.paperclipApiUrl ?? "");
-        });
+        }
+        const payload = JSON.parse(raw) as { paperclipApiUrl?: string };
+        seenPaperclipApiUrls.push(payload.paperclipApiUrl ?? "");
         res.writeHead(200, { "content-type": "application/x-ndjson" });
         res.write(`${JSON.stringify({ type: "log", stream: "stdout", chunk: "hello\n" })}\n`);
         res.write(`${JSON.stringify({ type: "meta", meta: { adapterType: "codex_local", command: "codex" } })}\n`);

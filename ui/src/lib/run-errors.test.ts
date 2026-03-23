@@ -24,4 +24,18 @@ describe("run error presentation", () => {
     expect(getRunStatusLabel("failed", "adapter_failed")).toBe("failed");
     expect(getRunFailureHelper("adapter_failed")).toBeNull();
   });
+
+  it("surfaces control-plane routing failures separately from provider auth/quota", () => {
+    expect(getRunStatusTone("failed", "paperclip_control_plane_unavailable")).toBe("error");
+    expect(getRunStatusLabel("failed", "paperclip_control_plane_unavailable")).toBe("lost control-plane access");
+    expect(getRunStatusBody({ error: null, errorCode: "paperclip_control_plane_auth_failed" })).toContain(
+      "run JWT was rejected",
+    );
+    expect(getRunFailureHelper("paperclip_control_plane_unavailable")?.title).toContain(
+      "Control plane",
+    );
+    expect(getRunFailureHelper("paperclip_control_plane_auth_failed")?.title).toContain(
+      "Wrong Paperclip instance",
+    );
+  });
 });

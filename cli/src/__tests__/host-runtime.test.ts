@@ -1,5 +1,5 @@
 import net from "node:net";
-import { createServer, type Server } from "node:http";
+import { createServer, type RequestListener, type Server } from "node:http";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -28,7 +28,7 @@ afterEach(() => {
   delete process.env.DATABASE_URL;
 });
 
-async function startJsonServer(handler: Parameters<typeof createServer>[0]) {
+async function startJsonServer(handler: RequestListener) {
   const server = createServer(handler);
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
@@ -148,6 +148,21 @@ describe("host-runtime serve", () => {
     process.env.PAPERCLIP_HOST_BRIDGE_TOKEN = "server-host-bridge-token";
     process.env.PAPERCLIP_HOST_BRIDGE_URL = "http://host.docker.internal:4243";
     process.env.DATABASE_URL = "postgres://server-db.example.com/paperclip";
+    const controlPlane = await startJsonServer((req, res) => {
+      if (req.url === "/api/health") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+        return;
+      }
+      if (req.url === "/api/agents/me") {
+        expect(req.headers.authorization).toBe("Bearer bridge-run-jwt");
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ id: "agent-1" }));
+        return;
+      }
+      res.writeHead(404, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "Not found" }));
+    });
 
     const server = await hostRuntimeServe({
       listen: `127.0.0.1:${port}`,
@@ -165,7 +180,7 @@ describe("host-runtime serve", () => {
         },
         body: JSON.stringify({
           adapterType: "codex_local",
-          paperclipApiUrl: "http://127.0.0.1:3100",
+          paperclipApiUrl: controlPlane.baseUrl,
           ctx: {
             runId: "run-bridge-env",
             agent: {
@@ -212,6 +227,7 @@ describe("host-runtime serve", () => {
       await new Promise<void>((resolve, reject) => {
         server.close((err?: Error | null) => (err ? reject(err) : resolve()));
       });
+      await stopServer(controlPlane.server);
       if (previousBetterAuthSecret === undefined) delete process.env.BETTER_AUTH_SECRET;
       else process.env.BETTER_AUTH_SECRET = previousBetterAuthSecret;
       if (previousAgentJwtSecret === undefined) delete process.env.PAPERCLIP_AGENT_JWT_SECRET;
@@ -222,6 +238,114 @@ describe("host-runtime serve", () => {
       else process.env.PAPERCLIP_HOST_BRIDGE_URL = previousHostBridgeUrl;
       if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
       else process.env.DATABASE_URL = previousDatabaseUrl;
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not terminate a long-running host child just because the request body finished uploading", async () => {
+    const containerRoot = "/paperclip-test";
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-host-runtime-long-run-"));
+    const workspace = path.join(root, "workspace");
+    const commandPath = path.join(root, "codex");
+    const containerWorkspace = `${containerRoot}/workspace`;
+    const containerCommandPath = `${containerRoot}/codex`;
+    await fs.mkdir(workspace, { recursive: true });
+    await fs.writeFile(
+      commandPath,
+      [
+        "#!/usr/bin/env node",
+        "process.on('SIGTERM', () => {",
+        "  console.error('terminated');",
+        "  process.exit(143);",
+        "});",
+        "setTimeout(() => {",
+        "  console.log(JSON.stringify({ type: 'thread.started', thread_id: 'codex-session-long' }));",
+        "  console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'long run ok' } }));",
+        "  console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 1, cached_input_tokens: 0, output_tokens: 1 } }));",
+        "  setTimeout(() => process.exit(0), 150);",
+        "}, 150);",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    await fs.chmod(commandPath, 0o755);
+
+    const controlPlane = await startJsonServer((req, res) => {
+      if (req.url === "/api/health") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+        return;
+      }
+      if (req.url === "/api/agents/me") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ id: "agent-1" }));
+        return;
+      }
+      res.writeHead(404, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "Not found" }));
+    });
+
+    const port = await allocatePort();
+    const server = await hostRuntimeServe({
+      listen: `127.0.0.1:${port}`,
+      token: "bridge-token",
+      capability: ["codex"],
+      pathMap: [`${containerRoot}=${root}`],
+    });
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/v1/execute`, {
+        method: "POST",
+        headers: {
+          authorization: "Bearer bridge-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          adapterType: "codex_local",
+          paperclipApiUrl: controlPlane.baseUrl,
+          ctx: {
+            runId: "run-long-host-child",
+            agent: {
+              id: "agent-1",
+              companyId: "company-1",
+              name: "Host Codex",
+              adapterType: "codex_local",
+              adapterConfig: {},
+            },
+            runtime: {
+              sessionId: null,
+              sessionParams: null,
+              sessionDisplayId: null,
+              taskKey: null,
+            },
+            config: {
+              command: containerCommandPath,
+              cwd: containerWorkspace,
+              promptTemplate: "Continue your Paperclip work.",
+            },
+            context: {},
+            authToken: "bridge-run-jwt",
+          },
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      const body = await response.text();
+      const events = parseNdjsonResult(body);
+      const resultEvent = events.find((event) => event.type === "result") as
+        | { type: "result"; result: Record<string, unknown> }
+        | undefined;
+
+      expect(resultEvent).toBeDefined();
+      expect(resultEvent?.result.errorMessage ?? null).toBeNull();
+      expect(resultEvent?.result.errorCode ?? null).toBeNull();
+      expect(resultEvent?.result.exitCode ?? null).toBe(0);
+      expect(resultEvent?.result.signal ?? null).toBeNull();
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((err?: Error | null) => (err ? reject(err) : resolve()));
+      });
+      await stopServer(controlPlane.server);
       await fs.rm(root, { recursive: true, force: true });
     }
   });

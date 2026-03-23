@@ -1087,6 +1087,119 @@ describe("heartbeat orphaned process recovery", () => {
     20_000,
   );
 
+  it(
+    "does not auto-pause the agent when host mode loses the Paperclip control-plane contract",
+    async () => {
+      const { server, baseUrl } = await startHostBridgeDouble((req, res) => {
+        if (req.headers.authorization !== "Bearer bridge-token") {
+          res.writeHead(401, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "bad token" }));
+          return;
+        }
+        if (req.url !== "/v1/execute") {
+          res.writeHead(404, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "Not found" }));
+          return;
+        }
+        res.writeHead(200, { "content-type": "application/x-ndjson" });
+        res.end(`${JSON.stringify({
+          type: "result",
+          result: {
+            exitCode: null,
+            signal: null,
+            timedOut: false,
+            errorCode: "paperclip_control_plane_auth_failed",
+            errorMessage: "Paperclip control plane rejected the run JWT.",
+          },
+        })}\n`);
+      });
+
+      const previousBridgeUrl = process.env.PAPERCLIP_HOST_BRIDGE_URL;
+      const previousBridgeToken = process.env.PAPERCLIP_HOST_BRIDGE_TOKEN;
+      process.env.PAPERCLIP_HOST_BRIDGE_URL = baseUrl;
+      process.env.PAPERCLIP_HOST_BRIDGE_TOKEN = "bridge-token";
+
+      try {
+        const companyId = randomUUID();
+        const agentId = randomUUID();
+        const issueId = randomUUID();
+        const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+        const heartbeat = heartbeatService(db);
+
+        await db.insert(companies).values({
+          id: companyId,
+          name: "Paperclip",
+          issuePrefix,
+          requireBoardApprovalForNewAgents: false,
+        });
+
+        await db.insert(agents).values({
+          id: agentId,
+          companyId,
+          name: "Host Contract Agent",
+          role: "engineer",
+          status: "active",
+          adapterType: "codex_local",
+          adapterConfig: {
+            executionLocation: "host",
+            promptTemplate: "Continue your work.",
+          },
+          runtimeConfig: {
+            heartbeat: {
+              enabled: true,
+              intervalSec: 1,
+            },
+          },
+          permissions: {},
+        });
+
+        await db.insert(issues).values({
+          id: issueId,
+          companyId,
+          title: "Host control-plane contract failure",
+          status: "in_progress",
+          priority: "medium",
+          assigneeAgentId: agentId,
+          issueNumber: 1,
+          identifier: `${issuePrefix}-1`,
+        });
+
+        const queuedRun = await heartbeat.invoke(
+          agentId,
+          "assignment",
+          { issueId },
+          "system",
+          { actorType: "system", actorId: "host-contract-auth-test" },
+        );
+        expect(queuedRun).not.toBeNull();
+
+        const finalizedRun = await waitForRunToFinish(heartbeat, queuedRun!.id);
+        expect(finalizedRun.status).toBe("failed");
+        expect(finalizedRun.errorCode).toBe("paperclip_control_plane_auth_failed");
+
+        const latestAgent = await db
+          .select()
+          .from(agents)
+          .where(eq(agents.id, agentId))
+          .then((rows) => rows[0] ?? null);
+        expect(latestAgent?.status).not.toBe("paused");
+        expect(latestAgent?.pauseReason).toBeNull();
+        expect(latestAgent?.pausedAt).toBeNull();
+
+        const releasedIssue = await waitForIssueExecutionRelease(db, issueId);
+        expect(releasedIssue.executionRunId).toBeNull();
+        expect(releasedIssue.executionLockedAt).toBeNull();
+      } finally {
+        if (previousBridgeUrl === undefined) delete process.env.PAPERCLIP_HOST_BRIDGE_URL;
+        else process.env.PAPERCLIP_HOST_BRIDGE_URL = previousBridgeUrl;
+        if (previousBridgeToken === undefined) delete process.env.PAPERCLIP_HOST_BRIDGE_TOKEN;
+        else process.env.PAPERCLIP_HOST_BRIDGE_TOKEN = previousBridgeToken;
+        await stopHostBridgeDouble(server);
+      }
+    },
+    20_000,
+  );
+
   it("auto-pauses the agent after three consecutive heartbeat failures", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "paperclip-heartbeat-breaker-"));
     const workspace = path.join(root, "workspace");

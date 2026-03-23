@@ -38,6 +38,11 @@ describe("instance settings routes", () => {
     delete process.env.PAPERCLIP_HOST_BRIDGE_TOKEN;
     delete process.env.PAPERCLIP_AGENT_API_URL;
     delete process.env.PAPERCLIP_PUBLIC_URL;
+    delete process.env.PAPERCLIP_API_URL;
+    delete process.env.PAPERCLIP_LISTEN_HOST;
+    delete process.env.PAPERCLIP_LISTEN_PORT;
+    delete process.env.HOST;
+    delete process.env.PORT;
     mockInstanceSettingsService.getGeneral.mockResolvedValue({
       censorUsernameInLogs: false,
     });

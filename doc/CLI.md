@@ -124,6 +124,7 @@ pnpm paperclipai agent local-cli <agent-id-or-shortname> --company-id <company-i
 - creates a new long-lived agent API key
 - installs missing Paperclip skills into `~/.codex/skills` and `~/.claude/skills`
 - prints `export ...` lines for `PAPERCLIP_API_URL`, `PAPERCLIP_COMPANY_ID`, `PAPERCLIP_AGENT_ID`, and `PAPERCLIP_API_KEY`
+- the printed `PAPERCLIP_API_URL` uses the server's agent-facing URL contract: `PAPERCLIP_AGENT_API_URL` if set, otherwise `PAPERCLIP_PUBLIC_URL`, otherwise the server's internal listen URL
 
 Example for shortname-based local setup:
 

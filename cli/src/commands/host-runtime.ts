@@ -45,7 +45,6 @@ type BrowserSessionRecord = {
   close: (() => Promise<void>) | null;
 };
 
-const executionClientClosed = new Set<string>();
 const CONTROL_PLANE_PREFLIGHT_TIMEOUT_MS = 15_000;
 
 function parseListenAddress(raw: string | undefined) {
@@ -551,10 +550,11 @@ export async function hostRuntimeServe(opts: HostRuntimeServeOptions): Promise<S
         const payload = await readJsonBody(req) as unknown as HostRuntimeExecuteRequest;
         res.statusCode = 200;
         res.setHeader("content-type", "application/x-ndjson; charset=utf-8");
-        req.on("close", () => {
-          executionClientClosed.add(payload.ctx.runId);
+        const handleResponseClose = () => {
+          if (res.writableEnded || res.writableFinished) return;
           void cancelHostedRun(payload.ctx.runId);
-        });
+        };
+        res.on("close", handleResponseClose);
         try {
           await executeOnHost(payload, pathMaps, capabilities, res);
         } catch (err) {
@@ -564,8 +564,10 @@ export async function hostRuntimeServe(opts: HostRuntimeServeOptions): Promise<S
             message: err instanceof Error ? err.message : String(err),
           });
         } finally {
-          executionClientClosed.delete(payload.ctx.runId);
-          res.end();
+          res.off("close", handleResponseClose);
+          if (!res.writableEnded) {
+            res.end();
+          }
         }
         return;
       }

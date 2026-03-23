@@ -64,6 +64,7 @@ PAPERCLIP_PORT=3200 PAPERCLIP_DATA_DIR=./data/pc PAPERCLIP_POSTGRES_DATA_DIR=./d
 ```
 
 If you change host port or use a non-local domain, set `PAPERCLIP_PUBLIC_URL` to the external URL you will use in browser/auth flows.
+If host-executed agents must reach Paperclip at a different base URL than the browser uses, also set `PAPERCLIP_AGENT_API_URL`. Otherwise Paperclip falls back from `PAPERCLIP_AGENT_API_URL` to `PAPERCLIP_PUBLIC_URL`.
 
 Persistence notes:
 
@@ -128,6 +129,7 @@ Hybrid mode requirements:
 - `docker-compose.hybrid.yml` defaults `PAPERCLIP_HOST_BRIDGE_TOKEN` to `paperclip-hybrid-dev-token` for local private use. Override it for any shared or non-local deployment.
 - `docker-compose.hybrid.yml` also defaults `PAPERCLIP_LOCAL_ADAPTER_DEFAULT_EXECUTION_LOCATION=host`, so newly created local CLI agents use the host bridge unless you explicitly set `executionLocation`.
 - Set `PAPERCLIP_HOST_BRIDGE_URL` if you do not want the default `http://host.docker.internal:4243`.
+- Host-executed agents use the agent-facing URL contract: `PAPERCLIP_AGENT_API_URL` if set, otherwise `PAPERCLIP_PUBLIC_URL`, otherwise the internal listen URL. Set `PAPERCLIP_AGENT_API_URL` whenever the host bridge must reach Paperclip through a different hostname or port than the browser.
 - Every path the host-executed adapter needs must be covered by a `--path-map` entry.
 - Absolute `command`, `cwd`, env path values, and absolute path-like `extraArgs` entries are translated through the configured path maps before the host process starts.
 - On Linux, `docker-compose.hybrid.yml` already adds `host.docker.internal:host-gateway`.
@@ -228,6 +230,12 @@ services:
 - Better Auth base URL defaults
 - invite URL defaults
 - hostname allowlist defaults (hostname extracted from URL)
+
+Managed agent URL note:
+
+- `PAPERCLIP_AGENT_API_URL` overrides the control-plane base URL injected into host/external agents.
+- If `PAPERCLIP_AGENT_API_URL` is unset, managed agents fall back to `PAPERCLIP_PUBLIC_URL`.
+- Use this when the browser/public URL and the agent-reachable URL differ.
 
 Granular overrides remain available if needed (`PAPERCLIP_AUTH_PUBLIC_BASE_URL`, `BETTER_AUTH_URL`, `BETTER_AUTH_TRUSTED_ORIGINS`, `PAPERCLIP_ALLOWED_HOSTNAMES`).
 
