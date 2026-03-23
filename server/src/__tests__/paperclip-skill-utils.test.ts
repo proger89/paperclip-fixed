@@ -99,4 +99,23 @@ describe("paperclip skill utils", () => {
     expect(result).toBe("created");
     await expect(fs.realpath(target)).resolves.toBe(path.resolve(runtimeSkill));
   });
+
+  it("repairs a broken Windows junction that still points at a container path", async () => {
+    if (process.platform !== "win32") return;
+
+    const root = await makeTempDir("paperclip-skill-broken-junction-");
+    cleanupDirs.add(root);
+
+    const runtimeSkill = path.join(root, "skills", "paperclip");
+    const skillsHome = path.join(root, "skills-home");
+    const target = path.join(skillsHome, "paperclip");
+    await fs.mkdir(runtimeSkill, { recursive: true });
+    await fs.mkdir(skillsHome, { recursive: true });
+    await fs.symlink("/app/skills/paperclip", target, "junction");
+
+    const result = await ensurePaperclipSkillSymlink(runtimeSkill, target);
+
+    expect(result).toBe("repaired");
+    await expect(fs.realpath(target)).resolves.toBe(path.resolve(runtimeSkill));
+  });
 });

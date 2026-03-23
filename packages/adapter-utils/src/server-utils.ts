@@ -894,21 +894,31 @@ export async function ensurePaperclipSkillSymlink(
   linkSkill: (source: string, target: string) => Promise<void> = createPaperclipSkillLink,
 ): Promise<"created" | "repaired" | "skipped"> {
   const resolvedSource = path.resolve(source);
-  const existing = await fs.lstat(target).catch(() => null);
-  if (!existing) {
+  const existingState = await getExistingSkillLinkState(target);
+  if (existingState === "missing") {
     await linkSkill(source, target);
     return "created";
   }
 
-  if (!existing.isSymbolicLink()) {
+  if (existingState === "non_symlink") {
     return "skipped";
   }
 
   const linkedPath = await fs.readlink(target).catch(() => null);
-  if (!linkedPath) return "skipped";
+  const existingRealPath = await fs.realpath(target).catch(() => null);
+  if (!linkedPath) {
+    if (existingRealPath && path.resolve(existingRealPath) === resolvedSource) {
+      return "skipped";
+    }
+    if (existingRealPath) {
+      return "skipped";
+    }
+    await removeExistingSkillLink(target);
+    await linkSkill(source, target);
+    return "repaired";
+  }
 
   const resolvedLinkedPath = path.resolve(path.dirname(target), linkedPath);
-  const existingRealPath = await fs.realpath(target).catch(() => null);
   if (resolvedLinkedPath === resolvedSource || (existingRealPath && path.resolve(existingRealPath) === resolvedSource)) {
     return "skipped";
   }
@@ -918,7 +928,7 @@ export async function ensurePaperclipSkillSymlink(
     return "skipped";
   }
 
-  await fs.unlink(target);
+  await removeExistingSkillLink(target);
   await linkSkill(source, target);
   return "repaired";
 }
@@ -939,6 +949,38 @@ async function resolveExistingSkillTargetRealPath(target: string): Promise<strin
   if (!existing?.isSymbolicLink()) return null;
   const resolved = await fs.realpath(target).catch(() => null);
   return resolved ? path.resolve(resolved) : null;
+}
+
+async function getExistingSkillLinkState(target: string): Promise<"missing" | "non_symlink" | "symlink"> {
+  try {
+    const existing = await fs.lstat(target);
+    return existing.isSymbolicLink() ? "symlink" : "non_symlink";
+  } catch (error) {
+    const code = getErrnoCode(error);
+    if (code === "ENOENT") return "missing";
+    if (code === "EACCES" || code === "EPERM") return "symlink";
+    return "missing";
+  }
+}
+
+async function removeExistingSkillLink(target: string): Promise<void> {
+  try {
+    await fs.unlink(target);
+  } catch (error) {
+    const code = getErrnoCode(error);
+    if (code !== "EPERM" && code !== "EACCES" && code !== "EISDIR") {
+      throw error;
+    }
+    await fs.rm(target, { recursive: true, force: true });
+  }
+
+  if (await fs.lstat(target).catch(() => null)) {
+    await fs.rm(target, { recursive: true, force: true });
+  }
+
+  if (await fs.lstat(target).catch(() => null)) {
+    throw new Error(`Failed to remove existing skill link "${target}" before repair.`);
+  }
 }
 
 export async function createPaperclipSkillLink(source: string, target: string): Promise<void> {

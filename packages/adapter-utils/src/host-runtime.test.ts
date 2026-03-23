@@ -89,4 +89,35 @@ describe("host runtime path mapping", () => {
       ],
     });
   });
+
+  it("translates paperclip runtime skill source paths for host execution", () => {
+    const maps = [parseHostRuntimePathMap("/app=D:\\new-projects\\paperclip")];
+    const translated = translatePathBearingValue(
+      {
+        paperclipRuntimeSkills: [
+          {
+            key: "paperclipai/paperclip/paperclip",
+            runtimeName: "paperclip",
+            source: "/app/skills/paperclip",
+          },
+        ],
+      },
+      maps,
+      "container_to_host",
+      {
+        throwOnUnmapped: true,
+        platform: "win32",
+      },
+    );
+
+    expect(translated).toEqual({
+      paperclipRuntimeSkills: [
+        {
+          key: "paperclipai/paperclip/paperclip",
+          runtimeName: "paperclip",
+          source: "D:\\new-projects\\paperclip\\skills\\paperclip",
+        },
+      ],
+    });
+  });
 });

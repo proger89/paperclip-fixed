@@ -31,13 +31,66 @@ import {
   workProductService,
 } from "../services/index.js";
 import { logger } from "../middleware/logger.js";
-import { forbidden, HttpError, unauthorized } from "../errors.js";
+import { forbidden, HttpError, unauthorized, unprocessable } from "../errors.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
 import { shouldWakeAssigneeOnCheckout } from "./issues-checkout-wakeup.js";
 import { isAllowedContentType, MAX_ATTACHMENT_BYTES } from "../attachment-types.js";
 import { queueIssueAssignmentWakeup } from "../services/issue-assignment-wakeup.js";
 
 const MAX_ISSUE_COMMENT_LIMIT = 500;
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function firstNonEmptyString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string") {
+      const normalized = value.trim();
+      if (normalized.length > 0) return normalized;
+    }
+  }
+  return null;
+}
+
+function getPublicationMetadata(metadata: Record<string, unknown> | null | undefined) {
+  const root = asRecord(metadata);
+  const publication = asRecord(root?.publication);
+  const channel = firstNonEmptyString(publication?.channel, root?.channel);
+  const approvalId = firstNonEmptyString(publication?.approvalId, root?.approvalId);
+  const destinationLabel = firstNonEmptyString(
+    publication?.destinationLabel,
+    root?.destinationLabel,
+    publication?.target,
+    root?.target,
+  );
+
+  if (!channel && !approvalId && !destinationLabel) {
+    return null;
+  }
+
+  return { channel, approvalId, destinationLabel };
+}
+
+function isGovernedPublicationWorkProduct(input: {
+  provider?: string | null;
+  metadata?: Record<string, unknown> | null;
+}) {
+  const provider = firstNonEmptyString(input.provider)?.toLowerCase() ?? null;
+  const publication = getPublicationMetadata(input.metadata);
+  return provider === "telegram" || publication !== null;
+}
+
+function isPublishResultAttempt(input: {
+  url?: string | null;
+  externalId?: string | null;
+  status?: string | null;
+}) {
+  const status = firstNonEmptyString(input.status)?.toLowerCase() ?? null;
+  return Boolean(firstNonEmptyString(input.url, input.externalId)) || (status !== null && status !== "draft");
+}
 
 export function issueRoutes(db: Db, storage: StorageService) {
   const router = Router();
@@ -159,6 +212,36 @@ export function issueRoutes(db: Db, storage: StorageService) {
       });
     }
     return true;
+  }
+
+  async function assertCanRecordGovernedPublication(
+    req: Request,
+    issueId: string,
+    workProduct: {
+      provider?: string | null;
+      metadata?: Record<string, unknown> | null;
+      url?: string | null;
+      externalId?: string | null;
+      status?: string | null;
+    },
+  ) {
+    if (req.actor.type !== "agent") return;
+    if (!isGovernedPublicationWorkProduct(workProduct)) return;
+    if (!isPublishResultAttempt(workProduct)) return;
+
+    const publication = getPublicationMetadata(workProduct.metadata);
+    const linkedApprovals = await issueApprovalsSvc.listApprovalsForIssue(issueId);
+    const hasApprovedPublishApproval = linkedApprovals.some((approval) => (
+      approval.type === "publish_content"
+      && approval.status === "approved"
+      && (!publication?.approvalId || approval.id === publication.approvalId)
+    ));
+
+    if (!hasApprovedPublishApproval) {
+      throw unprocessable(
+        "Publishing work products require an approved linked publish_content approval",
+      );
+    }
   }
 
   async function normalizeIssueIdentifier(rawId: string): Promise<string> {
@@ -593,6 +676,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
       return;
     }
     assertCompanyAccess(req, issue.companyId);
+    await assertCanRecordGovernedPublication(req, issue.id, req.body);
     const product = await workProductsSvc.createForIssue(issue.id, issue.companyId, {
       ...req.body,
       projectId: req.body.projectId ?? issue.projectId ?? null,
@@ -624,6 +708,13 @@ export function issueRoutes(db: Db, storage: StorageService) {
       return;
     }
     assertCompanyAccess(req, existing.companyId);
+    await assertCanRecordGovernedPublication(req, existing.issueId, {
+      provider: req.body.provider ?? existing.provider,
+      metadata: req.body.metadata ?? existing.metadata,
+      url: req.body.url ?? existing.url,
+      externalId: req.body.externalId ?? existing.externalId,
+      status: req.body.status ?? existing.status,
+    });
     const product = await workProductsSvc.update(id, req.body);
     if (!product) {
       res.status(404).json({ error: "Work product not found" });

@@ -94,7 +94,7 @@ type TranslateStructureOptions = TranslatePathOptions & {
 
 const JSON_KEY_RE = /json$/i;
 const PATH_KEY_RE =
-  /(cwd|path|paths|root|roots|dir|dirs|home|workspace|worktree|instructionsfile|instructionsroot|agentsmd|code(x)?_home|claude_home|command|executable|script)/i;
+  /(cwd|path|paths|root|roots|dir|dirs|home|workspace|worktree|instructionsfile|instructionsroot|agentsmd|code(x)?_home|claude_home|command|executable|script|source|target)/i;
 const ARG_PATH_KEY_RE = /^(?:args|extraArgs|commandArgs)$/i;
 const PATH_ENV_KEY_RE =
   /^(?:PATH|PWD|HOME|TMPDIR|TEMP|TMP|CODEX_HOME|CLAUDE_HOME|AGENT_HOME|PAPERCLIP_.*(?:CWD|PATH|DIR|HOME|ROOT))$/i;
