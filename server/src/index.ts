@@ -70,6 +70,18 @@ export interface StartedServer {
 
 export async function startServer(): Promise<StartedServer> {
   const config = loadConfig();
+  if (
+    config.serveUi &&
+    !config.uiDevMiddleware &&
+    config.uiDevMiddlewareSource === "env" &&
+    config.repoLocalDevServerInvocation &&
+    config.repoLocalUiSourcePath
+  ) {
+    logger.warn(
+      { uiSourcePath: config.repoLocalUiSourcePath },
+      "Repo-local dev server invocation is using static UI because PAPERCLIP_UI_DEV_MIDDLEWARE is explicitly disabled",
+    );
+  }
   if (process.env.PAPERCLIP_SECRETS_PROVIDER === undefined) {
     process.env.PAPERCLIP_SECRETS_PROVIDER = config.secretsProvider;
   }

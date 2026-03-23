@@ -41,6 +41,8 @@ This starts:
 
 `pnpm dev:once` now tracks backend-relevant file changes and pending migrations. When the current boot is stale, the board UI shows a `Restart required` banner. You can also enable guarded auto-restart in `Instance Settings > Experimental`, which waits for queued/running local agent runs to finish before restarting the dev server.
 
+Direct repo-local server source runs such as `pnpm dev:server` (or `pnpm --filter @paperclipai/server dev`) now auto-enable Vite UI middleware when the local `ui/` source tree is present. Production-style runs that do not boot from `src/index.ts` still serve static `ui-dist`.
+
 Tailscale/private-auth dev mode:
 
 ```sh

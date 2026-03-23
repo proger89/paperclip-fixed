@@ -37,6 +37,71 @@ if (!isSameFile && existsSync(CWD_ENV_PATH)) {
 }
 
 type DatabaseMode = "embedded-postgres" | "postgres";
+export type UiDevMiddlewareSource = "env" | "auto" | "default";
+
+export interface UiDevMiddlewareResolution {
+  enabled: boolean;
+  source: UiDevMiddlewareSource;
+  repoLocalDevServerInvocation: boolean;
+  repoLocalUiSourcePath: string | null;
+}
+
+type ResolveUiDevMiddlewareOptions = {
+  envValue?: string | undefined;
+  argv?: string[];
+  cwd?: string;
+  fileExists?: (absolutePath: string) => boolean;
+};
+
+function normalizeArgPath(value: string): string {
+  return value.replace(/\\/g, "/");
+}
+
+function isSourceDevServerArg(value: string): boolean {
+  const normalized = normalizeArgPath(value).replace(/^\.\//, "");
+  return normalized === "src/index.ts" || normalized.endsWith("/src/index.ts");
+}
+
+export function resolveUiDevMiddleware(
+  options: ResolveUiDevMiddlewareOptions = {},
+): UiDevMiddlewareResolution {
+  const envValue = options.envValue ?? process.env.PAPERCLIP_UI_DEV_MIDDLEWARE;
+  const argv = options.argv ?? process.argv;
+  const cwd = resolve(options.cwd ?? process.cwd());
+  const fileExists = options.fileExists ?? existsSync;
+
+  const repoLocalDevServerInvocation = argv.some(isSourceDevServerArg);
+  const repoLocalUiSourcePath =
+    [
+      resolve(cwd, "ui", "index.html"),
+      resolve(cwd, "..", "ui", "index.html"),
+    ].find((candidate) => fileExists(candidate)) ?? null;
+
+  if (envValue !== undefined) {
+    return {
+      enabled: envValue === "true",
+      source: "env",
+      repoLocalDevServerInvocation,
+      repoLocalUiSourcePath,
+    };
+  }
+
+  if (repoLocalDevServerInvocation && repoLocalUiSourcePath) {
+    return {
+      enabled: true,
+      source: "auto",
+      repoLocalDevServerInvocation,
+      repoLocalUiSourcePath,
+    };
+  }
+
+  return {
+    enabled: false,
+    source: "default",
+    repoLocalDevServerInvocation,
+    repoLocalUiSourcePath,
+  };
+}
 
 export interface Config {
   deploymentMode: DeploymentMode;
@@ -57,6 +122,9 @@ export interface Config {
   databaseBackupDir: string;
   serveUi: boolean;
   uiDevMiddleware: boolean;
+  uiDevMiddlewareSource: UiDevMiddlewareSource;
+  repoLocalDevServerInvocation: boolean;
+  repoLocalUiSourcePath: string | null;
   secretsProvider: SecretProvider;
   secretsStrictMode: boolean;
   secretsMasterKeyFilePath: string;
@@ -74,6 +142,7 @@ export interface Config {
 
 export function loadConfig(): Config {
   const fileConfig = readConfigFile();
+  const uiDevMiddleware = resolveUiDevMiddleware();
   const fileDatabaseMode =
     (fileConfig?.database.mode === "postgres" ? "postgres" : "embedded-postgres") as DatabaseMode;
 
@@ -233,7 +302,10 @@ export function loadConfig(): Config {
       process.env.SERVE_UI !== undefined
         ? process.env.SERVE_UI === "true"
         : fileConfig?.server.serveUi ?? true,
-    uiDevMiddleware: process.env.PAPERCLIP_UI_DEV_MIDDLEWARE === "true",
+    uiDevMiddleware: uiDevMiddleware.enabled,
+    uiDevMiddlewareSource: uiDevMiddleware.source,
+    repoLocalDevServerInvocation: uiDevMiddleware.repoLocalDevServerInvocation,
+    repoLocalUiSourcePath: uiDevMiddleware.repoLocalUiSourcePath,
     secretsProvider,
     secretsStrictMode,
     secretsMasterKeyFilePath:

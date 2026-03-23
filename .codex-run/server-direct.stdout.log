@@ -652,3 +652,56 @@ ew-projects\paperclip\.paperclip\config.json
 [06:52:12] [32mINFO[39m: [36mGET /agents/me 200[39m
 [06:52:12] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
 [06:52:26] [32mINFO[39m: [36mPOST /issues/3add1662-7610-4294-8d26-4929f23ae8f1/checkout 200[39m
+[06:52:34] [32mINFO[39m: [36mGET / 200[39m
+[06:52:37] [32mINFO[39m: [36mGET /issues/3add1662-7610-4294-8d26-4929f23ae8f1/comments 200[39m
+[06:52:37] [32mINFO[39m: [36mGET /issues/3add1662-7610-4294-8d26-4929f23ae8f1/heartbeat-context 200[39m
+[06:52:47] [32mINFO[39m: [36mGET /CMP/dashboard 200[39m
+[06:52:47] [32mINFO[39m: [36mGET /assets/index-DMKgkynP.css 200[39m
+[06:52:47] [32mINFO[39m: [36mGET /site.webmanifest 200[39m
+[06:52:47] [32mINFO[39m: [36mGET /assets/index-dW_Co4rW.js 200[39m
+[06:52:47] [32mINFO[39m: [36mGET / 200[39m
+[06:52:47] [32mINFO[39m: [36mGET /api/auth/get-session 200[39m
+[06:52:47] [32mINFO[39m: [36mGET / 200[39m
+[06:52:47] [32mINFO[39m: [36mGET /sw.js 200[39m
+[06:52:47] [32mINFO[39m: [36mGET /plugins/ui-contributions 200[39m
+[06:52:47] [32mINFO[39m: [36mGET /android-chrome-192x192.png 200[39m
+[06:52:47] [32mINFO[39m: [36mGET /companies/0acc2154-a891-4d7e-9b07-269b8b245d15/live-runs 200[39m
+[06:52:47] [32mINFO[39m: [36mGET /companies/0acc2154-a891-4d7e-9b07-269b8b245d15/projects 200[39m
+[06:52:47] [32mINFO[39m: [36mGET /companies/0acc2154-a891-4d7e-9b07-269b8b245d15/approvals 200[39m
+[06:52:47] [32mINFO[39m: [36mGET /companies/0acc2154-a891-4d7e-9b07-269b8b245d15/join-requests?status=pending_approval 200[39m
+[06:52:47] [32mINFO[39m: [36mGET /companies/0acc2154-a891-4d7e-9b07-269b8b245d15/agents 200[39m
+[06:52:47] [32mINFO[39m: [36mGET /companies/0acc2154-a891-4d7e-9b07-269b8b245d15/heartbeat-runs 200[39m
+[06:52:47] [32mINFO[39m: [36mGET /companies/0acc2154-a891-4d7e-9b07-269b8b245d15/activity 200[39m
+[06:52:47] [32mINFO[39m: [36mGET /companies/0acc2154-a891-4d7e-9b07-269b8b245d15/issues 200[39m
+[06:52:47] [32mINFO[39m: [36mGET /companies/0acc2154-a891-4d7e-9b07-269b8b245d15/issues?status=backlog%2Ctodo%2Cin_progress%2Cin_review%2Cblocked%2Cdone&touchedByUserId=me 200[39m
+[06:52:47] [32mINFO[39m: [36mGET /companies/0acc2154-a891-4d7e-9b07-269b8b245d15/dashboard 200[39m
+[06:52:47] [32mINFO[39m: [36mGET /companies/0acc2154-a891-4d7e-9b07-269b8b245d15/sidebar-badges 200[39m
+[06:52:47] [32mINFO[39m: [36mGET /instance/settings/general 200[39m
+[06:52:47] [32mINFO[39m: [36mGET /companies/0acc2154-a891-4d7e-9b07-269b8b245d15/live-runs?minCount=4 200[39m
+[06:52:47] [32mINFO[39m: [36mGET /heartbeat-runs/4574de01-58c1-4a0b-b3b3-fa215f90962c/log?offset=0&limitBytes=256000 200[39m
+[06:53:01] [32mINFO[39m: [36mGET /companies/0acc2154-a891-4d7e-9b07-269b8b245d15/issues?goalId=a84d48c2-6cf8-43f0-88f8-78e3d53c1178 200[39m
+[06:53:01] [32mINFO[39m: [36mGET /companies/0acc2154-a891-4d7e-9b07-269b8b245d15/agents 200[39m
+[06:53:01] [32mINFO[39m: [36mGET /goals/a84d48c2-6cf8-43f0-88f8-78e3d53c1178 200[39m
+[06:53:26] [32mINFO[39m: [36mGET /llms/agent-configuration/codex_local.txt 200[39m
+[06:53:26] [32mINFO[39m: [36mGET /llms/agent-configuration.txt 200[39m
+[06:53:26] [32mINFO[39m: [36mGET /llms/agent-icons.txt 200[39m
+[06:53:26] [32mINFO[39m: [36mGET /companies/0acc2154-a891-4d7e-9b07-269b8b245d15/agent-configurations 200[39m
+[06:55:25] [33mWARN[39m: [36mPOST /api/companies/0acc2154-a891-4d7e-9b07-269b8b245d15/agent-hires 400[39m [90m{"reqBody":{"adapterType":"codex_local","runtimeConfig":{"heartbeat":{"wakeOnDemand":true,"intervalSec":600,"maxConcurrentRuns":1,"enabled":true}},"capabilities":"Отвечает за MVP автоматизации AI Telegram-канала: сбор источников, рерайт под голос автора, генерацию медиа и публикацию.","reportsTo":"eb1c777a-2e3e-44a4-8cbc-67f7a68ad4af","icon":"rocket","role":"founding_engineer","name":"Первый инженер","adapterConfig":{"search":false,"dangerouslyBypassApprovalsAndSandbox":true,"graceSec":15,"promptTemplate":"Ты первый инженер компании. Отвечай и веди задачи только на русском.\n\nТвоя цель: быстро довести до MVP систему, которая мониторит AI Telegram-каналы, переформулирует новости под голос автора, добавляет картинку или видео и публикует посты в целевой Telegram-канал.\n\nРаботай через Paperclip короткими heartbeat-циклами. Для координации используй skill paperclip. Для памяти и планов используй para-memory-files. Ставь на первое место практичный MVP, быстрые итерации и прозрачные блокеры. Если уперся в решение или доступы, сразу фиксируй blocker и эскалируй CEO.","model":"gpt-5.4","cwd":"C:\Users\test\.paperclip-worktrees\instances\repo-local\workspaces\eb1c777a-2e3e-44a4-8cbc-67f7a68ad4af","timeoutSec":0},"budgetMonthlyCents":0,"title":"Первый инженер по AI-автоматизации","sourceIssueIds":["3add1662-7610-4294-8d26-4929f23ae8f1"],"sourceIssueId":"3add1662-7610-4294-8d26-4929f23ae8f1"},"routePath":"/companies/:companyId/agent-hires"}[39m
+[06:55:40] [32mINFO[39m: [36mPOST /companies/0acc2154-a891-4d7e-9b07-269b8b245d15/agent-hires 201[39m
+[06:56:04] [33mWARN[39m: [36mPOST /api/companies/0acc2154-a891-4d7e-9b07-269b8b245d15/issues 409[39m [90m{"reqBody":{"goalId":"a84d48c2-6cf8-43f0-88f8-78e3d53c1178","parentId":"3add1662-7610-4294-8d26-4929f23ae8f1","title":"Собрать источники и спроектировать ingestion-пайплайн для AI Telegram-каналов","description":"## Результат\n\nНужно собрать стартовый список источников и описать MVP-пайплайн сбора новостей.\n\n- определить 15-20 релевантных AI Telegram-каналов и правила приоритизации\n- описать, какие данные нужно забирать из источников и как дедуплицировать новости\n- предложить архитектуру мониторинга для первого релиза\n- зафиксировать риски по доступам, rate limits и качеству данных","status":"todo","priority":"high","assigneeAgentId":"31ae16a8-026b-4c35-a291-a18a9ddb6d4c","requestDepth":0},"routePath":"/companies/:companyId/issues"}[39m
+[06:56:04] [33mWARN[39m: [36mPOST /api/companies/0acc2154-a891-4d7e-9b07-269b8b245d15/issues 409[39m [90m{"reqBody":{"goalId":"a84d48c2-6cf8-43f0-88f8-78e3d53c1178","parentId":"3add1662-7610-4294-8d26-4929f23ae8f1","title":"Спроектировать рерайт новостей под голос автора","description":"## Результат\n\nНужно описать рабочий контур переформулирования новостей под стиль автора.\n\n- сформулировать требования к тону и структуре постов\n- предложить промпт-цепочку или workflow для рерайта\n- предусмотреть фактчекинг и защиту от галлюцинаций\n- определить, где нужен ручной контроль автора в MVP","status":"todo","priority":"medium","assigneeAgentId":"31ae16a8-026b-4c35-a291-a18a9ddb6d4c","requestDepth":0},"routePath":"/companies/:companyId/issues"}[39m
+[06:56:04] [33mWARN[39m: [36mPOST /api/companies/0acc2154-a891-4d7e-9b07-269b8b245d15/issues 409[39m [90m{"reqBody":{"goalId":"a84d48c2-6cf8-43f0-88f8-78e3d53c1178","parentId":"3add1662-7610-4294-8d26-4929f23ae8f1","title":"Спроектировать медиа-пайплайн и публикацию в целевой Telegram-канал","description":"## Результат\n\nНужно описать MVP-процесс генерации картинки или видео и публикации готового поста.\n\n- определить варианты генерации media asset для каждого поста\n- описать pipeline сборки поста и публикации в Telegram\n- предусмотреть fallback, если медиа не сгенерировалось вовремя\n- определить минимальную аналитику и мониторинг после публикации","status":"todo","priority":"medium","assigneeAgentId":"31ae16a8-026b-4c35-a291-a18a9ddb6d4c","requestDepth":0},"routePath":"/companies/:companyId/issues"}[39m
+[06:56:26] [32mINFO[39m: [36mPOST /companies/0acc2154-a891-4d7e-9b07-269b8b245d15/issues 201[39m
+[06:56:26] [32mINFO[39m: [36mPOST /companies/0acc2154-a891-4d7e-9b07-269b8b245d15/issues 201[39m
+[06:56:26] [32mINFO[39m: [36mPOST /companies/0acc2154-a891-4d7e-9b07-269b8b245d15/issues 201[39m
+[07:00:02] [33mWARN[39m: [36mGET /issues/3add1662-7610-4294-8d26-4929f23ae8f1/documents/plan 404[39m [90m{"reqParams":{"id":"3add1662-7610-4294-8d26-4929f23ae8f1","key":"plan"},"routePath":"/issues/:id/documents/:key"}[39m
+[07:00:02] [33mWARN[39m: [36mGET /issues/3add1662-7610-4294-8d26-4929f23ae8f1/documents/plan 404[39m [90m{"reqParams":{"id":"3add1662-7610-4294-8d26-4929f23ae8f1","key":"plan"},"routePath":"/issues/:id/documents/:key"}[39m
+[07:00:53] [32mINFO[39m: [36mPUT /issues/3add1662-7610-4294-8d26-4929f23ae8f1/documents/plan 201[39m
+[07:01:10] [32mINFO[39m: [36mGET /issues/3add1662-7610-4294-8d26-4929f23ae8f1/documents/plan 200[39m
+[07:02:06] [32mINFO[39m: [36mGET /issues/3add1662-7610-4294-8d26-4929f23ae8f1/documents/plan 200[39m
+[07:02:06] [32mINFO[39m: [36mPUT /issues/3add1662-7610-4294-8d26-4929f23ae8f1/documents/plan 200[39m
+[07:02:27] [32mINFO[39m: [36mGET /issues/3add1662-7610-4294-8d26-4929f23ae8f1/documents/plan 200[39m
+[07:02:27] [32mINFO[39m: [36mPUT /issues/3add1662-7610-4294-8d26-4929f23ae8f1/documents/plan 200[39m
+[07:03:19] [32mINFO[39m: [36mPATCH /issues/3add1662-7610-4294-8d26-4929f23ae8f1 200[39m
+[07:03:42] [32mINFO[39m: [36mPOST /approvals/41476b68-0071-46db-845c-f93dbc330a47/comments 201[39m
+[07:20:38] [32mINFO[39m: [36mGET / 200[39m
