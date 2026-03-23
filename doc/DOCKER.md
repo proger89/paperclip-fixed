@@ -87,7 +87,9 @@ Hybrid mode requirements:
 - Set `PAPERCLIP_HOST_BRIDGE_TOKEN` on both the container and the host bridge.
 - Set `PAPERCLIP_HOST_BRIDGE_URL` if you do not want the default `http://host.docker.internal:4243`.
 - Every path the host-executed adapter needs must be covered by a `--path-map` entry.
+- Absolute `command`, `cwd`, env path values, and absolute path-like `extraArgs` entries are translated through the configured path maps before the host process starts.
 - On Linux, `docker-compose.hybrid.yml` already adds `host.docker.internal:host-gateway`.
+- If you want the host bridge to launch Playwright-managed browsers, install browser binaries on the host first with `npx playwright install chromium`.
 
 Agent config for host-executed Codex or Claude:
 
@@ -120,6 +122,47 @@ Paperclip injects these env vars into the adapter when a browser runtime is pres
 - `PAPERCLIP_BROWSER_CDP_URL`
 
 If the host bridge is down, Paperclip still boots normally. Only host-mode environment tests and host-mode runs fail.
+
+### Hybrid Smoke Harness
+
+Use the dedicated smoke harness when you want to validate the hybrid topology end to end from this repo:
+
+```sh
+bash ./scripts/docker-hybrid-smoke.sh
+```
+
+It does all of the following:
+
+- starts `paperclipai host-runtime serve` on the host unless `HYBRID_SMOKE_START_BRIDGE=false`
+- brings up `docker-compose.hybrid.yml`
+- bootstraps authenticated mode
+- prepares a shared `/paperclip/hybrid-smoke` workspace for host-executed agent checks
+
+Detached mode for Playwright or CI:
+
+```sh
+SMOKE_DETACH=true SMOKE_METADATA_FILE=/tmp/paperclip-hybrid.env bash ./scripts/docker-hybrid-smoke.sh
+```
+
+Then run the hybrid smoke spec:
+
+```sh
+set -a && source /tmp/paperclip-hybrid.env && set +a
+PAPERCLIP_RELEASE_SMOKE_BASE_URL="$SMOKE_BASE_URL" \
+PAPERCLIP_RELEASE_SMOKE_EMAIL="$SMOKE_ADMIN_EMAIL" \
+PAPERCLIP_RELEASE_SMOKE_PASSWORD="$SMOKE_ADMIN_PASSWORD" \
+PAPERCLIP_RELEASE_SMOKE_DATA_DIR="$SMOKE_DATA_DIR" \
+PAPERCLIP_HYBRID_SMOKE_MODE="$SMOKE_HYBRID_MODE" \
+pnpm run test:release-smoke:hybrid
+```
+
+To validate safe degradation without the host companion:
+
+```sh
+HYBRID_SMOKE_START_BRIDGE=false bash ./scripts/docker-hybrid-smoke.sh
+```
+
+In that mode the board should still boot and authenticated flows should still work, while host-mode adapter environment tests report `host_bridge_unavailable`.
 
 ## Authenticated Compose (Single Public URL)
 

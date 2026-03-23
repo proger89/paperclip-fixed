@@ -60,4 +60,33 @@ describe("host runtime path mapping", () => {
       },
     });
   });
+
+  it("translates absolute command paths and extraArgs path values", () => {
+    const maps = [parseHostRuntimePathMap("/paperclip=C:\\paperclip-data")];
+    const translated = translatePathBearingValue(
+      {
+        command: "/paperclip/hybrid-smoke/fake-codex.mjs",
+        extraArgs: [
+          "/paperclip/hybrid-smoke/fake-codex.mjs",
+          "--json",
+          "/c",
+        ],
+      },
+      maps,
+      "container_to_host",
+      {
+        throwOnUnmapped: true,
+        platform: "win32",
+      },
+    );
+
+    expect(translated).toEqual({
+      command: "C:\\paperclip-data\\hybrid-smoke\\fake-codex.mjs",
+      extraArgs: [
+        "C:\\paperclip-data\\hybrid-smoke\\fake-codex.mjs",
+        "--json",
+        "/c",
+      ],
+    });
+  });
 });

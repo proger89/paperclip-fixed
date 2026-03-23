@@ -94,7 +94,8 @@ type TranslateStructureOptions = TranslatePathOptions & {
 
 const JSON_KEY_RE = /json$/i;
 const PATH_KEY_RE =
-  /(cwd|path|paths|root|roots|dir|dirs|home|workspace|worktree|instructionsfile|instructionsroot|agentsmd|code(x)?_home|claude_home)/i;
+  /(cwd|path|paths|root|roots|dir|dirs|home|workspace|worktree|instructionsfile|instructionsroot|agentsmd|code(x)?_home|claude_home|command|executable|script)/i;
+const ARG_PATH_KEY_RE = /^(?:args|extraArgs|commandArgs)$/i;
 const PATH_ENV_KEY_RE =
   /^(?:PATH|PWD|HOME|TMPDIR|TEMP|TMP|CODEX_HOME|CLAUDE_HOME|AGENT_HOME|PAPERCLIP_.*(?:CWD|PATH|DIR|HOME|ROOT))$/i;
 const URL_LIKE_RE = /^[a-z][a-z0-9+.-]*:\/\//i;
@@ -126,9 +127,16 @@ function looksLikeAbsolutePath(value: string) {
   return value.startsWith("/") || value.startsWith("~/") || WINDOWS_ABS_RE.test(value) || WINDOWS_UNC_RE.test(value);
 }
 
+function looksLikeAbsolutePathArg(value: string) {
+  if (WINDOWS_ABS_RE.test(value) || WINDOWS_UNC_RE.test(value) || value.startsWith("~/")) return true;
+  if (!value.startsWith("/")) return false;
+  return value.includes("/", 1);
+}
+
 function shouldTranslateString(key: string | null | undefined, value: string) {
-  if (!looksLikeAbsolutePath(value)) return false;
   if (!key) return false;
+  if (ARG_PATH_KEY_RE.test(key)) return looksLikeAbsolutePathArg(value);
+  if (!looksLikeAbsolutePath(value)) return false;
   if (PATH_ENV_KEY_RE.test(key)) return true;
   if (PATH_KEY_RE.test(key)) return true;
   return false;

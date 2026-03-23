@@ -1,0 +1,113 @@
+name: Hybrid Docker Smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        bridge_mode:
+          - available
+          - missing
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Launch hybrid Docker smoke harness
+        run: |
+          metadata_file="$RUNNER_TEMP/hybrid-smoke.env"
+          HOST_PORT=3242 \
+          HOST_BRIDGE_PORT=4243 \
+          DATA_DIR="$RUNNER_TEMP/hybrid-smoke-data-${{ matrix.bridge_mode }}" \
+          HYBRID_SMOKE_START_BRIDGE="$([[ '${{ matrix.bridge_mode }}' == 'available' ]] && echo true || echo false)" \
+          SMOKE_DETACH=true \
+          SMOKE_METADATA_FILE="$metadata_file" \
+          bash ./scripts/docker-hybrid-smoke.sh
+          set -a
+          source "$metadata_file"
+          set +a
+          {
+            echo "SMOKE_BASE_URL=$SMOKE_BASE_URL"
+            echo "SMOKE_ADMIN_EMAIL=$SMOKE_ADMIN_EMAIL"
+            echo "SMOKE_ADMIN_PASSWORD=$SMOKE_ADMIN_PASSWORD"
+            echo "SMOKE_DATA_DIR=$SMOKE_DATA_DIR"
+            echo "SMOKE_COMPOSE_PROJECT=$SMOKE_COMPOSE_PROJECT"
+            echo "SMOKE_HOST_BRIDGE_PORT=$SMOKE_HOST_BRIDGE_PORT"
+            echo "SMOKE_HOST_BRIDGE_TOKEN=$SMOKE_HOST_BRIDGE_TOKEN"
+            echo "SMOKE_HOST_BRIDGE_LOG_FILE=$SMOKE_HOST_BRIDGE_LOG_FILE"
+            echo "SMOKE_HYBRID_MODE=$SMOKE_HYBRID_MODE"
+            echo "SMOKE_BRIDGE_PID=$SMOKE_BRIDGE_PID"
+            echo "SMOKE_METADATA_FILE=$metadata_file"
+          } >> "$GITHUB_ENV"
+
+      - name: Run hybrid release-smoke Playwright suite
+        env:
+          PAPERCLIP_RELEASE_SMOKE_BASE_URL: ${{ env.SMOKE_BASE_URL }}
+          PAPERCLIP_RELEASE_SMOKE_EMAIL: ${{ env.SMOKE_ADMIN_EMAIL }}
+          PAPERCLIP_RELEASE_SMOKE_PASSWORD: ${{ env.SMOKE_ADMIN_PASSWORD }}
+          PAPERCLIP_RELEASE_SMOKE_DATA_DIR: ${{ env.SMOKE_DATA_DIR }}
+          PAPERCLIP_HYBRID_SMOKE_MODE: ${{ env.SMOKE_HYBRID_MODE }}
+        run: npx playwright test tests/release-smoke/docker-hybrid-runtime.spec.ts --config tests/release-smoke/playwright.config.ts
+
+      - name: Capture Docker logs
+        if: always()
+        run: |
+          if [[ -n "${SMOKE_COMPOSE_PROJECT:-}" ]]; then
+            docker compose -p "$SMOKE_COMPOSE_PROJECT" -f docker-compose.hybrid.yml logs >"$RUNNER_TEMP/hybrid-docker-smoke.log" 2>&1 || true
+          fi
+
+      - name: Capture host bridge logs
+        if: always()
+        run: |
+          if [[ -n "${SMOKE_HOST_BRIDGE_LOG_FILE:-}" && -f "${SMOKE_HOST_BRIDGE_LOG_FILE}" ]]; then
+            cp "$SMOKE_HOST_BRIDGE_LOG_FILE" "$RUNNER_TEMP/host-runtime.log"
+          fi
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hybrid-docker-smoke-${{ matrix.bridge_mode }}
+          path: |
+            ${{ runner.temp }}/hybrid-docker-smoke.log
+            ${{ runner.temp }}/host-runtime.log
+            ${{ env.SMOKE_METADATA_FILE }}
+            tests/release-smoke/playwright-report/
+            tests/release-smoke/test-results/
+          retention-days: 14
+
+      - name: Stop hybrid smoke harness
+        if: always()
+        run: |
+          if [[ -n "${SMOKE_BRIDGE_PID:-}" ]]; then
+            kill "$SMOKE_BRIDGE_PID" >/dev/null 2>&1 || true
+            wait "$SMOKE_BRIDGE_PID" >/dev/null 2>&1 || true
+          fi
+          if [[ -n "${SMOKE_COMPOSE_PROJECT:-}" ]]; then
+            docker compose -p "$SMOKE_COMPOSE_PROJECT" -f docker-compose.hybrid.yml down -v >/dev/null 2>&1 || true
+          fi

@@ -33,7 +33,8 @@
     "test:e2e:headed": "npx playwright test --config tests/e2e/playwright.config.ts --headed",
     "evals:smoke": "cd evals/promptfoo && npx promptfoo@0.103.3 eval",
     "test:release-smoke": "npx playwright test --config tests/release-smoke/playwright.config.ts",
-    "test:release-smoke:headed": "npx playwright test --config tests/release-smoke/playwright.config.ts --headed"
+    "test:release-smoke:headed": "npx playwright test --config tests/release-smoke/playwright.config.ts --headed",
+    "test:release-smoke:hybrid": "npx playwright test tests/release-smoke/docker-hybrid-runtime.spec.ts --config tests/release-smoke/playwright.config.ts"
   },
   "devDependencies": {
     "cross-env": "^10.1.0",

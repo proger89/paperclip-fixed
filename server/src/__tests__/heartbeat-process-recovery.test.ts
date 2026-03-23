@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import fsPromises from "node:fs/promises";
+import { createServer, type Server } from "node:http";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -105,6 +106,28 @@ async function removeDirWithRetries(dir: string, attempts = 10): Promise<void> {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
   }
+}
+
+async function startHostBridgeDouble(handler: Parameters<typeof createServer>[0]) {
+  const server = createServer(handler);
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("Could not resolve host bridge test server address.");
+  }
+  return {
+    server,
+    baseUrl: `http://127.0.0.1:${address.port}`,
+  };
+}
+
+async function stopHostBridgeDouble(server: Server) {
+  await new Promise<void>((resolve, reject) => {
+    server.close((err) => (err ? reject(err) : resolve()));
+  });
 }
 
 function isRetriableForeignKeyError(error: unknown): boolean {
@@ -219,6 +242,27 @@ async function waitForCircuitBreakerState(
   throw new Error(`Timed out waiting for circuit breaker state for agent ${agentId}`);
 }
 
+async function waitForIssueExecutionRelease(
+  db: ReturnType<typeof createDb>,
+  issueId: string,
+  timeoutMs = 10_000,
+) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const issue = await db
+      .select()
+      .from(issues)
+      .where(eq(issues.id, issueId))
+      .then((rows) => rows[0] ?? null);
+    if (issue && issue.executionRunId == null && issue.executionLockedAt == null) {
+      return issue;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  throw new Error(`Timed out waiting for issue ${issueId} execution lock release`);
+}
+
 describe("heartbeat orphaned process recovery", () => {
   let db!: ReturnType<typeof createDb>;
   let instance: EmbeddedPostgresInstance | null = null;
@@ -259,6 +303,8 @@ describe("heartbeat orphaned process recovery", () => {
         await new Promise((resolve) => setTimeout(resolve, 50));
       }
     }
+    delete process.env.PAPERCLIP_HOST_BRIDGE_URL;
+    delete process.env.PAPERCLIP_HOST_BRIDGE_TOKEN;
   });
 
   afterAll(async () => {
@@ -594,6 +640,102 @@ describe("heartbeat orphaned process recovery", () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it(
+    "fails a host-executed run cleanly and releases issue execution locks when the bridge disconnects",
+    async () => {
+    const { server, baseUrl } = await startHostBridgeDouble((req, res) => {
+      if (req.headers.authorization !== "Bearer bridge-token") {
+        res.writeHead(401, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "bad token" }));
+        return;
+      }
+      if (req.method === "POST" && req.url === "/v1/execute") {
+        res.writeHead(200, { "content-type": "application/x-ndjson; charset=utf-8" });
+        res.write(
+          `${JSON.stringify({
+            type: "spawn",
+            meta: { pid: 4242, startedAt: "2026-03-23T00:00:00.000Z" },
+          })}\n`,
+        );
+        res.write(`${JSON.stringify({ type: "log", stream: "stdout", chunk: "starting host bridge run\n" })}\n`);
+        res.socket?.destroy();
+        return;
+      }
+      if (req.method === "POST" && req.url?.startsWith("/v1/executions/") && req.url.endsWith("/cancel")) {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true, cancelled: true }));
+        return;
+      }
+      res.writeHead(404).end();
+    });
+
+    process.env.PAPERCLIP_HOST_BRIDGE_URL = baseUrl;
+    process.env.PAPERCLIP_HOST_BRIDGE_TOKEN = "bridge-token";
+
+    try {
+      const companyId = randomUUID();
+      const agentId = randomUUID();
+      const issueId = randomUUID();
+      const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+      const heartbeat = heartbeatService(db);
+
+      await db.insert(companies).values({
+        id: companyId,
+        name: "Paperclip",
+        issuePrefix,
+        requireBoardApprovalForNewAgents: false,
+      });
+
+      await db.insert(agents).values({
+        id: agentId,
+        companyId,
+        name: "Host Bridge Agent",
+        role: "engineer",
+        status: "active",
+        adapterType: "codex_local",
+        adapterConfig: {
+          executionLocation: "host",
+          promptTemplate: "Continue your work.",
+        },
+        runtimeConfig: {},
+        permissions: {},
+      });
+
+      await db.insert(issues).values({
+        id: issueId,
+        companyId,
+        title: "Recover from host bridge disconnect",
+        status: "in_progress",
+        priority: "medium",
+        assigneeAgentId: agentId,
+        issueNumber: 1,
+        identifier: `${issuePrefix}-1`,
+      });
+
+      const queuedRun = await heartbeat.invoke(
+        agentId,
+        "assignment",
+        { issueId },
+        "system",
+        { actorType: "system", actorId: "host-bridge-disconnect-test" },
+      );
+      expect(queuedRun).not.toBeNull();
+
+      const finalizedRun = await waitForRunToFinish(heartbeat, queuedRun!.id);
+      expect(finalizedRun.status).toBe("failed");
+      expect(finalizedRun.errorCode).toBe("host_bridge_unavailable");
+      await waitForAgentStatus(db, agentId, "error");
+
+      const releasedIssue = await waitForIssueExecutionRelease(db, issueId);
+      expect(releasedIssue.executionRunId).toBeNull();
+      expect(releasedIssue.executionLockedAt).toBeNull();
+    } finally {
+      await stopHostBridgeDouble(server);
+    }
+    },
+    20_000,
+  );
 
   it("auto-pauses the agent after three consecutive heartbeat failures", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "paperclip-heartbeat-breaker-"));
