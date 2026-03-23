@@ -8,6 +8,7 @@ import { heartbeatRun } from "./commands/heartbeat-run.js";
 import { runCommand } from "./commands/run.js";
 import { bootstrapCeoInvite } from "./commands/auth-bootstrap-ceo.js";
 import { dbBackupCommand } from "./commands/db-backup.js";
+import { hostRuntimeServe } from "./commands/host-runtime.js";
 import { registerContextCommands } from "./commands/client/context.js";
 import { registerCompanyCommands } from "./commands/client/company.js";
 import { registerIssueCommands } from "./commands/client/issue.js";
@@ -107,6 +108,23 @@ program
   .action(runCommand);
 
 const heartbeat = program.command("heartbeat").description("Heartbeat utilities");
+
+const hostRuntime = program.command("host-runtime").description("Host runtime bridge utilities");
+
+hostRuntime
+  .command("serve")
+  .description("Serve a local bridge so Dockerized Paperclip can use host-installed CLIs and browser runtimes")
+  .option("--listen <host:port>", "Listen address for the bridge", "127.0.0.1:4243")
+  .option("--token <token>", "Shared bearer token (or set PAPERCLIP_HOST_BRIDGE_TOKEN)")
+  .option("--path-map <container=host>", "Map a container path prefix to a host path prefix", (value, acc: string[]) => {
+    acc.push(value);
+    return acc;
+  }, [] as string[])
+  .option("--capability <name>", "Enable host runtime capability (codex, claude, browser)", (value, acc: string[]) => {
+    acc.push(value);
+    return acc;
+  }, [] as string[])
+  .action(hostRuntimeServe);
 
 heartbeat
   .command("run")

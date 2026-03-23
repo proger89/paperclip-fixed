@@ -31,6 +31,18 @@ export type {
   CreateConfigValues,
 } from "./types.js";
 export type {
+  HostRuntimeCapability,
+  HostRuntimePathDirection,
+  HostRuntimePathMap,
+  HostRuntimeExecuteContext,
+  HostRuntimeExecuteRequest,
+  HostRuntimeExecuteEvent,
+  HostRuntimeTestEnvironmentRequest,
+  HostRuntimeBrowserSessionRequest,
+  HostRuntimeBrowserSessionResponse,
+  HostRuntimeHealthResponse,
+} from "./host-runtime.js";
+export type {
   SessionCompactionPolicy,
   NativeContextManagement,
   AdapterSessionManagement,
@@ -50,4 +62,11 @@ export {
   redactHomePathUserSegmentsInValue,
   redactTranscriptEntryPaths,
 } from "./log-redaction.js";
+export {
+  parseHostRuntimePathMap,
+  translateMappedPath,
+  translatePathBearingValue,
+  injectPaperclipApiUrlIntoConfig,
+  buildHostRuntimeUnavailableTestResult,
+} from "./host-runtime.js";
 export { inferOpenAiCompatibleBiller } from "./billing.js";

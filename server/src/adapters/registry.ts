@@ -77,11 +77,44 @@ import {
 } from "hermes-paperclip-adapter";
 import { processAdapter } from "./process/index.js";
 import { httpAdapter } from "./http/index.js";
+import {
+  executeViaHostRuntimeBridge,
+  hostRuntimeExecutionRequested,
+  testEnvironmentViaHostRuntimeBridge,
+} from "../services/host-runtime-bridge.js";
+
+function wrapHybridLocalExecute(
+  adapterType: "claude_local" | "codex_local",
+  execute: typeof claudeExecute,
+) {
+  return async (ctx: Parameters<typeof execute>[0]) => {
+    if (!hostRuntimeExecutionRequested(ctx.config)) {
+      return execute(ctx);
+    }
+    return executeViaHostRuntimeBridge(adapterType, ctx);
+  };
+}
+
+function wrapHybridLocalEnvTest(
+  adapterType: "claude_local" | "codex_local",
+  testEnvironment: typeof claudeTestEnvironment,
+) {
+  return async (ctx: Parameters<typeof testEnvironment>[0]) => {
+    if (!hostRuntimeExecutionRequested(ctx.config)) {
+      return testEnvironment(ctx);
+    }
+    return testEnvironmentViaHostRuntimeBridge({
+      companyId: ctx.companyId,
+      adapterType,
+      config: ctx.config,
+    });
+  };
+}
 
 const claudeLocalAdapter: ServerAdapterModule = {
   type: "claude_local",
-  execute: claudeExecute,
-  testEnvironment: claudeTestEnvironment,
+  execute: wrapHybridLocalExecute("claude_local", claudeExecute),
+  testEnvironment: wrapHybridLocalEnvTest("claude_local", claudeTestEnvironment),
   listSkills: listClaudeSkills,
   syncSkills: syncClaudeSkills,
   sessionCodec: claudeSessionCodec,
@@ -94,8 +127,8 @@ const claudeLocalAdapter: ServerAdapterModule = {
 
 const codexLocalAdapter: ServerAdapterModule = {
   type: "codex_local",
-  execute: codexExecute,
-  testEnvironment: codexTestEnvironment,
+  execute: wrapHybridLocalExecute("codex_local", codexExecute),
+  testEnvironment: wrapHybridLocalEnvTest("codex_local", codexTestEnvironment),
   listSkills: listCodexSkills,
   syncSkills: syncCodexSkills,
   sessionCodec: codexSessionCodec,

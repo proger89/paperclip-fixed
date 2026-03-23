@@ -16,6 +16,10 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { asNumber, asString, parseObject, renderTemplate } from "../adapters/utils.js";
 import { resolveHomeAwarePath } from "../home-paths.js";
 import type { WorkspaceOperationRecorder } from "./workspace-operations.js";
+import {
+  createHostBrowserSession,
+  destroyHostBrowserSession,
+} from "./host-runtime-bridge.js";
 
 export interface ExecutionWorkspaceInput {
   baseCwd: string;
@@ -64,7 +68,7 @@ export interface RuntimeServiceRef {
   cwd: string | null;
   port: number | null;
   url: string | null;
-  provider: "local_process" | "adapter_managed";
+  provider: "local_process" | "adapter_managed" | "host_bridge";
   providerRef: string | null;
   ownerAgentId: string | null;
   startedByRunId: string | null;
@@ -1239,6 +1243,76 @@ async function startLocalRuntimeService(input: {
   };
 }
 
+async function startHostBridgeRuntimeService(input: {
+  db?: Db;
+  runId: string;
+  agent: ExecutionWorkspaceAgentRef;
+  issue: ExecutionWorkspaceIssueRef | null;
+  workspace: RealizedExecutionWorkspace;
+  executionWorkspaceId?: string | null;
+  service: Record<string, unknown>;
+  reuseKey: string | null;
+  scopeType: "project_workspace" | "execution_workspace" | "run" | "agent";
+  scopeId: string | null;
+}): Promise<RuntimeServiceRecord> {
+  const serviceName = asString(input.service.name, "service");
+  if (serviceName !== "browser") {
+    throw new Error(
+      `Runtime service "${serviceName}" uses location=host, but only browser services are supported in host mode.`,
+    );
+  }
+  const browserConfig =
+    input.service.browser && typeof input.service.browser === "object" && !Array.isArray(input.service.browser)
+      ? { ...(input.service.browser as Record<string, unknown>) }
+      : {};
+  const session = await createHostBrowserSession({
+    runId: input.runId,
+    workspaceCwd: input.workspace.cwd,
+    browserConfig,
+  });
+  const lifecycle = asString(input.service.lifecycle, "shared") === "ephemeral" ? "ephemeral" : "shared";
+  const primaryUrl = session.wsEndpoint ?? session.cdpUrl ?? session.url;
+  return {
+    id: randomUUID(),
+    companyId: input.agent.companyId,
+    projectId: input.workspace.projectId,
+    projectWorkspaceId: input.workspace.workspaceId,
+    executionWorkspaceId: input.executionWorkspaceId ?? null,
+    issueId: input.issue?.id ?? null,
+    serviceName,
+    status: "running",
+    lifecycle,
+    scopeType: input.scopeType,
+    scopeId: input.scopeId,
+    reuseKey: input.reuseKey,
+    command: null,
+    cwd: input.workspace.cwd,
+    port: null,
+    url: primaryUrl,
+    provider: "host_bridge",
+    providerRef: session.id,
+    ownerAgentId: input.agent.id,
+    startedByRunId: input.runId,
+    lastUsedAt: new Date().toISOString(),
+    startedAt: new Date().toISOString(),
+    stoppedAt: null,
+    stopPolicy: {
+      ...parseObject(input.service.stopPolicy),
+      managed: session.managed,
+      wsEndpoint: session.wsEndpoint,
+      cdpUrl: session.cdpUrl,
+      url: session.url,
+    },
+    healthStatus: primaryUrl ? "healthy" : "unknown",
+    reused: false,
+    db: input.db,
+    child: null,
+    leaseRunIds: new Set([input.runId]),
+    idleTimer: null,
+    envFingerprint: createHash("sha256").update(stableStringify(browserConfig)).digest("hex"),
+  };
+}
+
 function scheduleIdleStop(record: RuntimeServiceRecord) {
   clearIdleTimer(record);
   const stopType = asString(record.stopPolicy?.type, "manual");
@@ -1256,6 +1330,9 @@ async function stopRuntimeService(serviceId: string) {
   record.status = "stopped";
   record.lastUsedAt = new Date().toISOString();
   record.stoppedAt = new Date().toISOString();
+  if (record.provider === "host_bridge" && record.providerRef) {
+    await destroyHostBrowserSession(record.providerRef).catch(() => undefined);
+  }
   if (record.child && record.child.pid) {
     await terminateChildProcess(record.child);
     await waitForChildExit(record.child, 1_000);
@@ -1338,6 +1415,7 @@ export async function ensureRuntimeServicesForRun(input: {
   try {
     for (const service of rawServices) {
       const lifecycle = asString(service.lifecycle, "shared") === "ephemeral" ? "ephemeral" : "shared";
+      const location = asString(service.location, "container") === "host" ? "host" : "container";
       const { scopeType, scopeId } = resolveServiceScopeId({
         service,
         workspace: input.workspace,
@@ -1346,9 +1424,12 @@ export async function ensureRuntimeServicesForRun(input: {
         runId: input.runId,
         agent: input.agent,
       });
-      const envConfig = parseObject(service.env);
-      const envFingerprint = createHash("sha256").update(stableStringify(envConfig)).digest("hex");
       const serviceName = asString(service.name, "service");
+      const envConfig =
+        location === "host"
+          ? (serviceName === "browser" ? parseObject(service.browser) : parseObject(service))
+          : parseObject(service.env);
+      const envFingerprint = createHash("sha256").update(stableStringify(envConfig)).digest("hex");
       const reuseKey =
         lifecycle === "shared"
           ? [scopeType, scopeId ?? "", serviceName, envFingerprint].join(":")
@@ -1369,20 +1450,34 @@ export async function ensureRuntimeServicesForRun(input: {
         }
       }
 
-      const record = await startLocalRuntimeService({
-        db: input.db,
-        runId: input.runId,
-        agent: input.agent,
-        issue: input.issue,
-        workspace: input.workspace,
-        executionWorkspaceId: input.executionWorkspaceId,
-        adapterEnv: input.adapterEnv,
-        service,
-        onLog: input.onLog,
-        reuseKey,
-        scopeType,
-        scopeId,
-      });
+      const record =
+        location === "host"
+          ? await startHostBridgeRuntimeService({
+              db: input.db,
+              runId: input.runId,
+              agent: input.agent,
+              issue: input.issue,
+              workspace: input.workspace,
+              executionWorkspaceId: input.executionWorkspaceId,
+              service,
+              reuseKey,
+              scopeType,
+              scopeId,
+            })
+          : await startLocalRuntimeService({
+              db: input.db,
+              runId: input.runId,
+              agent: input.agent,
+              issue: input.issue,
+              workspace: input.workspace,
+              executionWorkspaceId: input.executionWorkspaceId,
+              adapterEnv: input.adapterEnv,
+              service,
+              onLog: input.onLog,
+              reuseKey,
+              scopeType,
+              scopeId,
+            });
       registerRuntimeService(input.db, record);
       await persistRuntimeServiceRecord(input.db, record);
       acquiredServiceIds.push(record.id);

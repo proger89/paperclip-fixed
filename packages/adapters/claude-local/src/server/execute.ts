@@ -79,6 +79,25 @@ interface ClaudeRuntimeConfig {
   extraArgs: string[];
 }
 
+function resolveBrowserRuntimeEnv(runtimeServices: Array<Record<string, unknown>>) {
+  for (const service of runtimeServices) {
+    const serviceName = asString(service.serviceName, asString(service.name, "")).trim();
+    if (serviceName !== "browser") continue;
+    const stopPolicy = parseObject(service.stopPolicy);
+    const url = asString(service.url, "").trim();
+    const wsEndpoint = asString(stopPolicy.wsEndpoint, "").trim() || (/^wss?:\/\//i.test(url) ? url : "");
+    const cdpUrl = asString(stopPolicy.cdpUrl, "").trim();
+    return {
+      wsEndpoint: wsEndpoint || null,
+      cdpUrl: cdpUrl || null,
+    };
+  }
+  return {
+    wsEndpoint: null as string | null,
+    cdpUrl: null as string | null,
+  };
+}
+
 function buildLoginResult(input: {
   proc: RunProcessResult;
   loginUrl: string | null;
@@ -222,6 +241,13 @@ async function buildClaudeRuntimeConfig(input: ClaudeExecutionInput): Promise<Cl
   }
   if (runtimeServices.length > 0) {
     env.PAPERCLIP_RUNTIME_SERVICES_JSON = JSON.stringify(runtimeServices);
+  }
+  const browserRuntime = resolveBrowserRuntimeEnv(runtimeServices);
+  if (browserRuntime.wsEndpoint) {
+    env.PAPERCLIP_PLAYWRIGHT_WS_ENDPOINT = browserRuntime.wsEndpoint;
+  }
+  if (browserRuntime.cdpUrl) {
+    env.PAPERCLIP_BROWSER_CDP_URL = browserRuntime.cdpUrl;
   }
   if (runtimePrimaryUrl) {
     env.PAPERCLIP_RUNTIME_PRIMARY_URL = runtimePrimaryUrl;
