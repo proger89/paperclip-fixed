@@ -1,3 +1,5 @@
+import { resolvePaperclipAgentFacingApiUrl } from "@paperclipai/adapter-utils/server-utils";
+
 const LOCAL_ADAPTER_TYPES = new Set([
   "claude_local",
   "codex_local",
@@ -38,6 +40,10 @@ export function resolveDefaultLocalAdapterExecutionLocation(
 
 export function isHostBridgeConfigured(env: NodeJS.ProcessEnv = process.env): boolean {
   return Boolean(env.PAPERCLIP_HOST_BRIDGE_URL?.trim() && env.PAPERCLIP_HOST_BRIDGE_TOKEN?.trim());
+}
+
+export function resolveAgentFacingApiUrl(env: NodeJS.ProcessEnv = process.env): string {
+  return resolvePaperclipAgentFacingApiUrl(env);
 }
 
 export function applyDefaultLocalExecutionLocation(

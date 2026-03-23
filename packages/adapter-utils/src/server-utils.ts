@@ -219,6 +219,21 @@ export function joinPromptSections(
     .join(separator);
 }
 
+export function buildManagedHeartbeatControlPlaneGuardNote() {
+  return [
+    "## Paperclip Control Plane Guard",
+    "",
+    "This is a Paperclip-managed heartbeat run.",
+    "",
+    "- Treat `$PAPERCLIP_API_URL` as the only valid control plane for this run.",
+    "- If the control plane is unreachable or rejects auth, stop and treat it as an infrastructure blocker.",
+    "- Do not start another Paperclip server (`pnpm dev`, `pnpm dev:server`).",
+    "- Do not run `paperclipai worktree init` or `paperclipai auth bootstrap-ceo`.",
+    "- Do not mint your own JWT/API key or switch to browser-cookie/local_trusted fallback.",
+    "- Do not change `PAPERCLIP_API_URL`.",
+  ].join("\n");
+}
+
 export function redactEnvForLogs(env: Record<string, string>): Record<string, string> {
   const redacted: Record<string, string> = {};
   for (const [key, value] of Object.entries(env)) {
@@ -227,22 +242,52 @@ export function redactEnvForLogs(env: Record<string, string>): Record<string, st
   return redacted;
 }
 
-export function buildPaperclipEnv(agent: { id: string; companyId: string }): Record<string, string> {
-  const resolveHostForUrl = (rawHost: string): string => {
-    const host = rawHost.trim();
-    if (!host || host === "0.0.0.0" || host === "::") return "localhost";
-    if (host.includes(":") && !host.startsWith("[") && !host.endsWith("]")) return `[${host}]`;
-    return host;
-  };
+function normalizePaperclipBaseUrl(raw: string | null | undefined): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  return trimmed.replace(/\/+$/, "");
+}
+
+function resolveHostForUrl(rawHost: string): string {
+  const host = rawHost.trim();
+  if (!host || host === "0.0.0.0" || host === "::") return "localhost";
+  if (host.includes(":") && !host.startsWith("[") && !host.endsWith("]")) return `[${host}]`;
+  return host;
+}
+
+export function resolvePaperclipInternalApiUrl(env: NodeJS.ProcessEnv = process.env): string {
+  const runtimeHost = resolveHostForUrl(
+    env.PAPERCLIP_LISTEN_HOST ?? env.HOST ?? "localhost",
+  );
+  const runtimePort = env.PAPERCLIP_LISTEN_PORT ?? env.PORT ?? "3100";
+  return normalizePaperclipBaseUrl(env.PAPERCLIP_API_URL) ?? `http://${runtimeHost}:${runtimePort}`;
+}
+
+export function resolvePaperclipAgentFacingApiUrl(env: NodeJS.ProcessEnv = process.env): string {
+  return (
+    normalizePaperclipBaseUrl(env.PAPERCLIP_AGENT_API_URL)
+    ?? normalizePaperclipBaseUrl(env.PAPERCLIP_PUBLIC_URL)
+    ?? resolvePaperclipInternalApiUrl(env)
+  );
+}
+
+export function buildPaperclipEnv(
+  agent: { id: string; companyId: string },
+  opts: {
+    env?: NodeJS.ProcessEnv;
+    apiTarget?: "internal" | "agent";
+  } = {},
+): Record<string, string> {
+  const env = opts.env ?? process.env;
   const vars: Record<string, string> = {
     PAPERCLIP_AGENT_ID: agent.id,
     PAPERCLIP_COMPANY_ID: agent.companyId,
   };
-  const runtimeHost = resolveHostForUrl(
-    process.env.PAPERCLIP_LISTEN_HOST ?? process.env.HOST ?? "localhost",
-  );
-  const runtimePort = process.env.PAPERCLIP_LISTEN_PORT ?? process.env.PORT ?? "3100";
-  const apiUrl = process.env.PAPERCLIP_API_URL ?? `http://${runtimeHost}:${runtimePort}`;
+  const apiUrl =
+    opts.apiTarget === "agent"
+      ? resolvePaperclipAgentFacingApiUrl(env)
+      : resolvePaperclipInternalApiUrl(env);
   vars.PAPERCLIP_API_URL = apiUrl;
   return vars;
 }

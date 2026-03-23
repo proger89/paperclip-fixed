@@ -18,6 +18,8 @@ export {
   renderTemplate,
   redactEnvForLogs,
   buildPaperclipEnv,
+  resolvePaperclipInternalApiUrl,
+  resolvePaperclipAgentFacingApiUrl,
   defaultPathForPlatform,
   ensurePathInEnv,
   ensureAbsoluteDirectory,

@@ -36,6 +36,8 @@ describe("instance settings routes", () => {
     delete process.env.PAPERCLIP_LOCAL_ADAPTER_DEFAULT_EXECUTION_LOCATION;
     delete process.env.PAPERCLIP_HOST_BRIDGE_URL;
     delete process.env.PAPERCLIP_HOST_BRIDGE_TOKEN;
+    delete process.env.PAPERCLIP_AGENT_API_URL;
+    delete process.env.PAPERCLIP_PUBLIC_URL;
     mockInstanceSettingsService.getGeneral.mockResolvedValue({
       censorUsernameInLogs: false,
     });
@@ -117,6 +119,7 @@ describe("instance settings routes", () => {
       censorUsernameInLogs: false,
       defaultLocalExecutionLocation: "container",
       hostBridgeConfigured: false,
+      agentFacingApiUrl: "http://localhost:3100",
     });
 
     const patchRes = await request(app)
@@ -131,6 +134,7 @@ describe("instance settings routes", () => {
       censorUsernameInLogs: true,
       defaultLocalExecutionLocation: "container",
       hostBridgeConfigured: false,
+      agentFacingApiUrl: "http://localhost:3100",
     });
     expect(mockLogActivity).toHaveBeenCalledTimes(2);
   });
@@ -139,6 +143,8 @@ describe("instance settings routes", () => {
     process.env.PAPERCLIP_LOCAL_ADAPTER_DEFAULT_EXECUTION_LOCATION = "host";
     process.env.PAPERCLIP_HOST_BRIDGE_URL = "http://host.docker.internal:4243";
     process.env.PAPERCLIP_HOST_BRIDGE_TOKEN = "bridge-token";
+    process.env.PAPERCLIP_PUBLIC_URL = "https://desk.example.com";
+    process.env.PAPERCLIP_AGENT_API_URL = "https://agents.example.com/";
 
     const app = createApp({
       type: "board",
@@ -154,6 +160,7 @@ describe("instance settings routes", () => {
       censorUsernameInLogs: false,
       defaultLocalExecutionLocation: "host",
       hostBridgeConfigured: true,
+      agentFacingApiUrl: "https://agents.example.com",
     });
   });
 
@@ -173,6 +180,7 @@ describe("instance settings routes", () => {
       censorUsernameInLogs: false,
       defaultLocalExecutionLocation: "container",
       hostBridgeConfigured: false,
+      agentFacingApiUrl: "http://localhost:3100",
     });
   });
 

@@ -49,6 +49,7 @@ import {
   claimBoardOwnership,
   inspectBoardClaimChallenge
 } from "../board-claim.js";
+import { resolveAgentFacingApiUrl } from "../local-adapter-defaults.js";
 
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -93,6 +94,15 @@ function requestBaseUrl(req: Request) {
     req.header("x-forwarded-host")?.split(",")[0]?.trim() || req.header("host");
   if (!host) return "";
   return `${proto}://${host}`;
+}
+
+function resolveUrlFromBase(baseUrl: string, routePath: string) {
+  if (!baseUrl) return routePath;
+  try {
+    return new URL(routePath, `${baseUrl.replace(/\/+$/, "")}/`).toString();
+  } catch {
+    return routePath;
+  }
 }
 
 function readSkillMarkdown(skillName: string): string | null {
@@ -992,29 +1002,31 @@ function buildInviteOnboardingManifest(
     allowedHostnames: string[];
   }
 ) {
-  const baseUrl = requestBaseUrl(req);
+  const requestUrl = requestBaseUrl(req);
+  const agentFacingBaseUrl = resolveAgentFacingApiUrl();
   const skillPath = "/api/skills/paperclip";
-  const skillUrl = baseUrl ? `${baseUrl}${skillPath}` : skillPath;
+  const skillUrl = resolveUrlFromBase(agentFacingBaseUrl, skillPath);
   const registrationEndpointPath = `/api/invites/${token}/accept`;
-  const registrationEndpointUrl = baseUrl
-    ? `${baseUrl}${registrationEndpointPath}`
-    : registrationEndpointPath;
+  const registrationEndpointUrl = resolveUrlFromBase(
+    agentFacingBaseUrl,
+    registrationEndpointPath,
+  );
   const onboardingTextPath = `/api/invites/${token}/onboarding.txt`;
-  const onboardingTextUrl = baseUrl
-    ? `${baseUrl}${onboardingTextPath}`
-    : onboardingTextPath;
+  const onboardingTextUrl = resolveUrlFromBase(agentFacingBaseUrl, onboardingTextPath);
   const discoveryDiagnostics = buildOnboardingDiscoveryDiagnostics({
-    apiBaseUrl: baseUrl,
+    apiBaseUrl: agentFacingBaseUrl || requestUrl,
     deploymentMode: opts.deploymentMode,
     deploymentExposure: opts.deploymentExposure,
     bindHost: opts.bindHost,
     allowedHostnames: opts.allowedHostnames
   });
   const connectionCandidates = buildOnboardingConnectionCandidates({
-    apiBaseUrl: baseUrl,
+    apiBaseUrl: agentFacingBaseUrl || requestUrl,
     bindHost: opts.bindHost,
     allowedHostnames: opts.allowedHostnames
   });
+
+  const examplePaperclipApiUrl = agentFacingBaseUrl || requestUrl || "http://127.0.0.1:3100";
 
   return {
     invite: toInviteSummaryResponse(req, token, invite),
@@ -1161,7 +1173,7 @@ export function buildInviteOnboardingTextDocument(
         capabilities: "OpenClaw agent adapter",
         agentDefaultsPayload: {
           url: "ws://127.0.0.1:18789",
-          paperclipApiUrl: "http://host.docker.internal:3100",
+          paperclipApiUrl: "${examplePaperclipApiUrl}",
           headers: { "x-openclaw-token": token },
           waitTimeoutMs: 120000,
           sessionKeyStrategy: "issue",

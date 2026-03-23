@@ -8,6 +8,7 @@ import { instanceSettingsService, logActivity } from "../services/index.js";
 import { getActorInfo } from "./authz.js";
 import {
   isHostBridgeConfigured,
+  resolveAgentFacingApiUrl,
   resolveDefaultLocalAdapterExecutionLocation,
 } from "../local-adapter-defaults.js";
 
@@ -32,6 +33,7 @@ function toGeneralView(general: InstanceGeneralSettings): InstanceGeneralSetting
     ...general,
     defaultLocalExecutionLocation: resolveDefaultLocalAdapterExecutionLocation(),
     hostBridgeConfigured: isHostBridgeConfigured(),
+    agentFacingApiUrl: resolveAgentFacingApiUrl(),
   };
 }
 

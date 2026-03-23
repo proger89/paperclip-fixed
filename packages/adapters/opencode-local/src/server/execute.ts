@@ -19,6 +19,7 @@ import {
   runChildProcess,
   readPaperclipRuntimeSkillEntries,
   resolvePaperclipDesiredSkillNames,
+  buildManagedHeartbeatControlPlaneGuardNote,
 } from "@paperclipai/adapter-utils/server-utils";
 import { detectOpenCodeAuthRequired, isOpenCodeUnknownSessionError, parseOpenCodeJsonl } from "./parse.js";
 import { ensureOpenCodeModelConfiguredAndAvailable } from "./models.js";
@@ -263,9 +264,11 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       ? renderTemplate(bootstrapPromptTemplate, templateData).trim()
       : "";
   const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
+  const controlPlaneGuardNote = buildManagedHeartbeatControlPlaneGuardNote();
   const prompt = joinPromptSections([
     instructionsPrefix,
     renderedBootstrapPrompt,
+    controlPlaneGuardNote,
     sessionHandoffNote,
     renderedPrompt,
   ]);

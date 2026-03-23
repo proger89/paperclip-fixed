@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import type { Agent } from "@paperclipai/shared";
+import type { Agent, InstanceGeneralSettingsView } from "@paperclipai/shared";
 import {
   removeMaintainerOnlySkillSymlinks,
   resolvePaperclipSkillsDir,
@@ -262,7 +262,13 @@ export function registerAgentCommands(program: Command): void {
           }
 
           const exportsText = buildAgentEnvExports({
-            apiBase: ctx.api.apiBase,
+            apiBase:
+              (
+                await ctx.api
+                  .get<InstanceGeneralSettingsView>("/api/instance/settings/general")
+                  .then((settings) => settings?.agentFacingApiUrl?.trim() || "")
+                  .catch(() => "")
+              ) || ctx.api.apiBase,
             companyId: agentRow.companyId,
             agentId: agentRow.id,
             apiKey: key.token,

@@ -19,6 +19,7 @@ import {
   resolvePaperclipDesiredSkillNames,
   removeMaintainerOnlySkillSymlinks,
   renderTemplate,
+  buildManagedHeartbeatControlPlaneGuardNote,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
 import { isPiUnknownSessionError, parsePiJsonl } from "./parse.js";
@@ -302,8 +303,10 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       ? renderTemplate(bootstrapPromptTemplate, templateData).trim()
       : "";
   const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
+  const controlPlaneGuardNote = buildManagedHeartbeatControlPlaneGuardNote();
   const userPrompt = joinPromptSections([
     renderedBootstrapPrompt,
+    controlPlaneGuardNote,
     sessionHandoffNote,
     renderedHeartbeatPrompt,
   ]);

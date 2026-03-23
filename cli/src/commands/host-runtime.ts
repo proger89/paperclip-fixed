@@ -46,6 +46,7 @@ type BrowserSessionRecord = {
 };
 
 const executionClientClosed = new Set<string>();
+const CONTROL_PLANE_PREFLIGHT_TIMEOUT_MS = 15_000;
 
 function parseListenAddress(raw: string | undefined) {
   const value = (raw?.trim() || "127.0.0.1:4243").trim();
@@ -203,6 +204,125 @@ function translateInvocationMeta(meta: Record<string, unknown>, maps: HostRuntim
   return translatePathBearingValue(meta, maps, "host_to_container") as Record<string, unknown>;
 }
 
+function normalizeApiBaseUrl(raw: string | null | undefined): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  return trimmed.replace(/\/+$/, "");
+}
+
+function buildControlPlaneFailureResult(
+  errorCode: "paperclip_control_plane_unavailable" | "paperclip_control_plane_auth_failed",
+  errorMessage: string,
+): AdapterExecutionResult {
+  return {
+    exitCode: null,
+    signal: null,
+    timedOut: false,
+    errorCode,
+    errorMessage,
+  };
+}
+
+async function fetchJsonWithTimeout(url: string, init: RequestInit = {}, timeoutMs = CONTROL_PLANE_PREFLIGHT_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    let body: Record<string, unknown> | null = null;
+    if (text.trim()) {
+      try {
+        body = JSON.parse(text) as Record<string, unknown>;
+      } catch {
+        body = { error: text.trim() };
+      }
+    }
+    return { response, body };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function preflightPaperclipControlPlane(
+  payload: HostRuntimeExecuteRequest,
+): Promise<AdapterExecutionResult | null> {
+  const baseUrl = normalizeApiBaseUrl(payload.paperclipApiUrl);
+  if (!baseUrl) {
+    return buildControlPlaneFailureResult(
+      "paperclip_control_plane_unavailable",
+      "Host runtime is missing a Paperclip control-plane URL for this run.",
+    );
+  }
+
+  try {
+    const { response, body } = await fetchJsonWithTimeout(`${baseUrl}/api/health`, {
+      headers: {
+        accept: "application/json",
+      },
+    });
+    if (!response.ok) {
+      const detail =
+        typeof body?.error === "string" && body.error.trim()
+          ? ` ${body.error.trim()}`
+          : "";
+      return buildControlPlaneFailureResult(
+        "paperclip_control_plane_unavailable",
+        `Paperclip control plane health check failed at ${baseUrl}/api/health with HTTP ${response.status}.${detail}`.trim(),
+      );
+    }
+  } catch (err) {
+    const suffix = err instanceof Error ? `: ${err.message}` : "";
+    return buildControlPlaneFailureResult(
+      "paperclip_control_plane_unavailable",
+      `Paperclip control plane is unreachable at ${baseUrl}/api/health${suffix}`,
+    );
+  }
+
+  const authToken = payload.ctx.authToken?.trim();
+  if (!authToken) return null;
+
+  try {
+    const { response, body } = await fetchJsonWithTimeout(`${baseUrl}/api/agents/me`, {
+      headers: {
+        accept: "application/json",
+        authorization: `Bearer ${authToken}`,
+      },
+    });
+    if (response.status === 401 || response.status === 403) {
+      const detail =
+        typeof body?.error === "string" && body.error.trim()
+          ? ` ${body.error.trim()}`
+          : "";
+      return buildControlPlaneFailureResult(
+        "paperclip_control_plane_auth_failed",
+        `Paperclip control plane at ${baseUrl} rejected this run's agent auth. Check PAPERCLIP_AGENT_API_URL/PAPERCLIP_PUBLIC_URL and make sure the host runtime points at the correct Paperclip instance.${detail}`.trim(),
+      );
+    }
+    if (!response.ok) {
+      const detail =
+        typeof body?.error === "string" && body.error.trim()
+          ? ` ${body.error.trim()}`
+          : "";
+      return buildControlPlaneFailureResult(
+        "paperclip_control_plane_unavailable",
+        `Paperclip control plane agent preflight failed at ${baseUrl}/api/agents/me with HTTP ${response.status}.${detail}`.trim(),
+      );
+    }
+  } catch (err) {
+    const suffix = err instanceof Error ? `: ${err.message}` : "";
+    return buildControlPlaneFailureResult(
+      "paperclip_control_plane_unavailable",
+      `Paperclip control plane agent preflight failed at ${baseUrl}/api/agents/me${suffix}`,
+    );
+  }
+
+  return null;
+}
+
 async function runEnvironmentTest(
   payload: HostRuntimeTestEnvironmentRequest,
   maps: HostRuntimePathMap[],
@@ -246,6 +366,12 @@ async function executeOnHost(
   capabilities: Set<HostRuntimeCapability>,
   res: ServerResponse,
 ) {
+  const controlPlanePreflight = await preflightPaperclipControlPlane(payload);
+  if (controlPlanePreflight) {
+    await sendNdjsonEvent(res, { type: "result", result: controlPlanePreflight });
+    return;
+  }
+
   const translatedCtx = translateExecuteContext(payload.ctx, maps, payload.paperclipApiUrl);
   if (payload.adapterType === "codex_local") {
     ensureCapability(capabilities, "codex", "Host runtime codex capability is disabled.");

@@ -21,6 +21,7 @@ import {
   parseObject,
   redactEnvForLogs,
   renderTemplate,
+  buildManagedHeartbeatControlPlaneGuardNote,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
 import { DEFAULT_GEMINI_LOCAL_MODEL } from "../index.js";
@@ -302,9 +303,11 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
   const paperclipEnvNote = renderPaperclipEnvNote(env);
   const apiAccessNote = renderApiAccessNote(env);
+  const controlPlaneGuardNote = buildManagedHeartbeatControlPlaneGuardNote();
   const prompt = joinPromptSections([
     instructionsPrefix,
     renderedBootstrapPrompt,
+    controlPlaneGuardNote,
     sessionHandoffNote,
     paperclipEnvNote,
     apiAccessNote,

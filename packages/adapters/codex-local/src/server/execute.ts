@@ -19,6 +19,7 @@ import {
   resolvePaperclipDesiredSkillNames,
   renderTemplate,
   joinPromptSections,
+  buildManagedHeartbeatControlPlaneGuardNote,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
 import {
@@ -539,9 +540,11 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       ? renderTemplate(bootstrapPromptTemplate, templateData).trim()
       : "";
   const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
+  const controlPlaneGuardNote = buildManagedHeartbeatControlPlaneGuardNote();
   const prompt = joinPromptSections([
     instructionsPrefix,
     renderedBootstrapPrompt,
+    controlPlaneGuardNote,
     sessionHandoffNote,
     buildWindowsShellPromptNote(),
     renderedPrompt,

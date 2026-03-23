@@ -20,6 +20,7 @@ import {
   removeMaintainerOnlySkillSymlinks,
   renderTemplate,
   joinPromptSections,
+  buildManagedHeartbeatControlPlaneGuardNote,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
 import { DEFAULT_CURSOR_LOCAL_MODEL } from "../index.js";
@@ -357,9 +358,11 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       : "";
   const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
   const paperclipEnvNote = renderPaperclipEnvNote(env);
+  const controlPlaneGuardNote = buildManagedHeartbeatControlPlaneGuardNote();
   const prompt = joinPromptSections([
     instructionsPrefix,
     renderedBootstrapPrompt,
+    controlPlaneGuardNote,
     sessionHandoffNote,
     paperclipEnvNote,
     renderedPrompt,

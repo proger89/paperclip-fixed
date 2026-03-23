@@ -96,7 +96,7 @@ async function bridgeFetch(path: string, init: RequestInit = {}) {
 }
 
 function derivePaperclipApiUrl(ctx: Pick<AdapterExecutionContext, "agent">) {
-  return buildPaperclipEnv(ctx.agent).PAPERCLIP_API_URL;
+  return buildPaperclipEnv(ctx.agent, { apiTarget: "agent" }).PAPERCLIP_API_URL;
 }
 
 function buildHostModeFailureResult(error: HostRuntimeBridgeError): AdapterExecutionResult {
@@ -358,7 +358,7 @@ export async function testEnvironmentViaHostRuntimeBridge(input: {
         paperclipApiUrl: buildPaperclipEnv({
           id: "bridge-envtest-agent",
           companyId: input.companyId,
-        }).PAPERCLIP_API_URL,
+        }, { apiTarget: "agent" }).PAPERCLIP_API_URL,
       }),
     });
     if (!response.ok) {

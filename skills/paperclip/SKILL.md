@@ -18,6 +18,13 @@ Env vars auto-injected: `PAPERCLIP_AGENT_ID`, `PAPERCLIP_COMPANY_ID`, `PAPERCLIP
 
 Manual local CLI mode (outside heartbeat runs): use `paperclipai agent local-cli <agent-id-or-shortname> --company-id <company-id>` to install Paperclip skills for Claude/Codex and print/export the required `PAPERCLIP_*` environment variables for that agent identity.
 
+Managed heartbeat restriction:
+
+- Never use `paperclipai agent local-cli` from inside a Paperclip-managed heartbeat run.
+- Never start another Paperclip instance (`pnpm dev`, `pnpm dev:server`, `paperclipai worktree init`, `paperclipai auth bootstrap-ceo`) to "recover" the control plane for a managed heartbeat.
+- Never mint your own JWT/API key, switch to browser-cookie fallback, or change `PAPERCLIP_API_URL`.
+- If `$PAPERCLIP_API_URL` is unreachable or rejects auth during a managed heartbeat, treat that as a blocker and stop.
+
 **Run audit trail:** You MUST include `-H 'X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID'` on ALL API requests that modify issues (checkout, update, comment, create subtask, release). This links your actions to the current heartbeat run for traceability.
 
 ## Windows PowerShell 5.1 JSON Writes (Required)

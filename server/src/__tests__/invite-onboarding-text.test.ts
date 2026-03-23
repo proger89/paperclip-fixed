@@ -1,6 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import type { Request } from "express";
 import { buildInviteOnboardingTextDocument } from "../routes/access.js";
+
+afterEach(() => {
+  delete process.env.PAPERCLIP_AGENT_API_URL;
+  delete process.env.PAPERCLIP_PUBLIC_URL;
+});
 
 function buildReq(host: string): Request {
   return {
@@ -14,6 +19,7 @@ function buildReq(host: string): Request {
 
 describe("buildInviteOnboardingTextDocument", () => {
   it("renders a plain-text onboarding doc with expected endpoint references", () => {
+    process.env.PAPERCLIP_AGENT_API_URL = "https://agents.example.com";
     const req = buildReq("localhost:3100");
     const invite = {
       id: "invite-1",
@@ -42,8 +48,7 @@ describe("buildInviteOnboardingTextDocument", () => {
     expect(text).toContain("/api/join-requests/{requestId}/claim-api-key");
     expect(text).toContain("/api/invites/token-123/onboarding.txt");
     expect(text).toContain("Suggested Paperclip base URLs to try");
-    expect(text).toContain("http://localhost:3100");
-    expect(text).toContain("host.docker.internal");
+    expect(text).toContain("https://agents.example.com");
     expect(text).toContain("paperclipApiUrl");
     expect(text).toContain("adapterType \"openclaw_gateway\"");
     expect(text).toContain("headers.x-openclaw-token");
@@ -56,6 +61,7 @@ describe("buildInviteOnboardingTextDocument", () => {
   });
 
   it("includes loopback diagnostics for authenticated/private onboarding", () => {
+    process.env.PAPERCLIP_PUBLIC_URL = "http://localhost:3100";
     const req = buildReq("localhost:3100");
     const invite = {
       id: "invite-2",

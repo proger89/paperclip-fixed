@@ -1,4 +1,5 @@
 import net from "node:net";
+import { createServer, type Server } from "node:http";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -26,6 +27,36 @@ afterEach(() => {
   delete process.env.PAPERCLIP_HOST_BRIDGE_URL;
   delete process.env.DATABASE_URL;
 });
+
+async function startJsonServer(handler: Parameters<typeof createServer>[0]) {
+  const server = createServer(handler);
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => resolve());
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    throw new Error("Could not resolve JSON server address.");
+  }
+  return {
+    server,
+    baseUrl: `http://127.0.0.1:${address.port}`,
+  };
+}
+
+async function stopServer(server: Server) {
+  await new Promise<void>((resolve, reject) => {
+    server.close((err?: Error | null) => (err ? reject(err) : resolve()));
+  });
+}
+
+function parseNdjsonResult(body: string) {
+  return body
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+}
 
 describe("host-runtime serve", () => {
   it("requires auth for health and reports configured capabilities", async () => {
@@ -192,6 +223,133 @@ describe("host-runtime serve", () => {
       if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
       else process.env.DATABASE_URL = previousDatabaseUrl;
       await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("fails fast when the configured Paperclip control plane is unreachable", async () => {
+    const port = await allocatePort();
+    const server = await hostRuntimeServe({
+      listen: `127.0.0.1:${port}`,
+      token: "bridge-token",
+      capability: ["codex"],
+    });
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/v1/execute`, {
+        method: "POST",
+        headers: {
+          authorization: "Bearer bridge-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          adapterType: "codex_local",
+          paperclipApiUrl: "http://127.0.0.1:9",
+          ctx: {
+            runId: "run-preflight-unavailable",
+            agent: {
+              id: "agent-1",
+              companyId: "company-1",
+              name: "Host Codex",
+              adapterType: "codex_local",
+              adapterConfig: {},
+            },
+            runtime: {
+              sessionId: null,
+              sessionParams: null,
+              sessionDisplayId: null,
+              taskKey: null,
+            },
+            config: {
+              executionLocation: "host",
+            },
+            context: {},
+            authToken: "bridge-run-jwt",
+          },
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      const events = parseNdjsonResult(await response.text());
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        type: "result",
+        result: {
+          errorCode: "paperclip_control_plane_unavailable",
+        },
+      });
+    } finally {
+      await stopServer(server);
+    }
+  });
+
+  it("fails fast when the Paperclip control plane rejects run auth", async () => {
+    const api = await startJsonServer((req, res) => {
+      if (req.url === "/api/health") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+        return;
+      }
+      if (req.url === "/api/agents/me") {
+        res.writeHead(401, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "Agent authentication required" }));
+        return;
+      }
+      res.writeHead(404, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "Not found" }));
+    });
+    const port = await allocatePort();
+    const bridge = await hostRuntimeServe({
+      listen: `127.0.0.1:${port}`,
+      token: "bridge-token",
+      capability: ["codex"],
+    });
+
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/v1/execute`, {
+        method: "POST",
+        headers: {
+          authorization: "Bearer bridge-token",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          adapterType: "codex_local",
+          paperclipApiUrl: api.baseUrl,
+          ctx: {
+            runId: "run-preflight-auth",
+            agent: {
+              id: "agent-1",
+              companyId: "company-1",
+              name: "Host Codex",
+              adapterType: "codex_local",
+              adapterConfig: {},
+            },
+            runtime: {
+              sessionId: null,
+              sessionParams: null,
+              sessionDisplayId: null,
+              taskKey: null,
+            },
+            config: {
+              executionLocation: "host",
+            },
+            context: {},
+            authToken: "bridge-run-jwt",
+          },
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      const events = parseNdjsonResult(await response.text());
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        type: "result",
+        result: {
+          errorCode: "paperclip_control_plane_auth_failed",
+        },
+      });
+    } finally {
+      await stopServer(bridge);
+      await stopServer(api.server);
     }
   });
 });

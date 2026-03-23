@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { buildPaperclipEnv } from "../adapters/utils.js";
+import {
+  buildPaperclipEnv,
+  resolvePaperclipAgentFacingApiUrl,
+  resolvePaperclipInternalApiUrl,
+} from "../adapters/utils.js";
 
 const ORIGINAL_PAPERCLIP_API_URL = process.env.PAPERCLIP_API_URL;
+const ORIGINAL_PAPERCLIP_AGENT_API_URL = process.env.PAPERCLIP_AGENT_API_URL;
+const ORIGINAL_PAPERCLIP_PUBLIC_URL = process.env.PAPERCLIP_PUBLIC_URL;
 const ORIGINAL_PAPERCLIP_LISTEN_HOST = process.env.PAPERCLIP_LISTEN_HOST;
 const ORIGINAL_PAPERCLIP_LISTEN_PORT = process.env.PAPERCLIP_LISTEN_PORT;
 const ORIGINAL_HOST = process.env.HOST;
@@ -10,6 +16,12 @@ const ORIGINAL_PORT = process.env.PORT;
 afterEach(() => {
   if (ORIGINAL_PAPERCLIP_API_URL === undefined) delete process.env.PAPERCLIP_API_URL;
   else process.env.PAPERCLIP_API_URL = ORIGINAL_PAPERCLIP_API_URL;
+
+  if (ORIGINAL_PAPERCLIP_AGENT_API_URL === undefined) delete process.env.PAPERCLIP_AGENT_API_URL;
+  else process.env.PAPERCLIP_AGENT_API_URL = ORIGINAL_PAPERCLIP_AGENT_API_URL;
+
+  if (ORIGINAL_PAPERCLIP_PUBLIC_URL === undefined) delete process.env.PAPERCLIP_PUBLIC_URL;
+  else process.env.PAPERCLIP_PUBLIC_URL = ORIGINAL_PAPERCLIP_PUBLIC_URL;
 
   if (ORIGINAL_PAPERCLIP_LISTEN_HOST === undefined) delete process.env.PAPERCLIP_LISTEN_HOST;
   else process.env.PAPERCLIP_LISTEN_HOST = ORIGINAL_PAPERCLIP_LISTEN_HOST;
@@ -33,6 +45,7 @@ describe("buildPaperclipEnv", () => {
     const env = buildPaperclipEnv({ id: "agent-1", companyId: "company-1" });
 
     expect(env.PAPERCLIP_API_URL).toBe("http://localhost:4100");
+    expect(resolvePaperclipInternalApiUrl()).toBe("http://localhost:4100");
   });
 
   it("uses runtime listen host/port when explicit URL is not set", () => {
@@ -54,5 +67,27 @@ describe("buildPaperclipEnv", () => {
     const env = buildPaperclipEnv({ id: "agent-1", companyId: "company-1" });
 
     expect(env.PAPERCLIP_API_URL).toBe("http://[::1]:3101");
+  });
+
+  it("uses PAPERCLIP_PUBLIC_URL as the default agent-facing URL", () => {
+    delete process.env.PAPERCLIP_AGENT_API_URL;
+    delete process.env.PAPERCLIP_API_URL;
+    process.env.PAPERCLIP_PUBLIC_URL = "https://desk.example.com/";
+    process.env.PAPERCLIP_LISTEN_HOST = "0.0.0.0";
+    process.env.PAPERCLIP_LISTEN_PORT = "3101";
+
+    expect(resolvePaperclipAgentFacingApiUrl()).toBe("https://desk.example.com");
+    expect(buildPaperclipEnv({ id: "agent-1", companyId: "company-1" }, { apiTarget: "agent" }).PAPERCLIP_API_URL)
+      .toBe("https://desk.example.com");
+  });
+
+  it("prefers PAPERCLIP_AGENT_API_URL over PAPERCLIP_PUBLIC_URL for agent-facing runs", () => {
+    delete process.env.PAPERCLIP_API_URL;
+    process.env.PAPERCLIP_PUBLIC_URL = "https://desk.example.com";
+    process.env.PAPERCLIP_AGENT_API_URL = "https://agents.example.com/";
+
+    expect(resolvePaperclipAgentFacingApiUrl()).toBe("https://agents.example.com");
+    expect(buildPaperclipEnv({ id: "agent-1", companyId: "company-1" }, { apiTarget: "agent" }).PAPERCLIP_API_URL)
+      .toBe("https://agents.example.com");
   });
 });

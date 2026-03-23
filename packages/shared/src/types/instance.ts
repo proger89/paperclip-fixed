@@ -7,6 +7,7 @@ export type LocalAdapterExecutionLocation = "container" | "host";
 export interface InstanceGeneralSettingsView extends InstanceGeneralSettings {
   defaultLocalExecutionLocation: LocalAdapterExecutionLocation;
   hostBridgeConfigured: boolean;
+  agentFacingApiUrl: string;
 }
 
 export interface InstanceExperimentalSettings {
