@@ -2,11 +2,13 @@ import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs/promises";
 import net from "node:net";
 import { createHash, randomUUID } from "node:crypto";
+import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import type { AdapterRuntimeServiceReport } from "@paperclipai/adapter-utils";
 import {
   defaultShellForPlatform,
+  resolveSpawnTarget,
   resolveShellCommandTarget,
   withWindowsUtf8EnvDefaults,
 } from "@paperclipai/adapter-utils/server-utils";
@@ -86,6 +88,7 @@ interface RuntimeServiceRecord extends RuntimeServiceRef {
   leaseRunIds: Set<string>;
   idleTimer: ReturnType<typeof globalThis.setTimeout> | null;
   envFingerprint: string;
+  launcherPath: string | null;
 }
 
 const runtimeServicesById = new Map<string, RuntimeServiceRecord>();
@@ -326,6 +329,35 @@ async function waitForChildExit(child: ChildProcess, timeoutMs: number) {
     }),
     delay(timeoutMs).then(() => undefined),
   ]);
+}
+
+function isWindowsCmdShell(shell: string | null | undefined) {
+  if (process.platform !== "win32" || !shell) return false;
+  const base = path.win32.basename(shell).toLowerCase();
+  return base === "cmd" || base === "cmd.exe";
+}
+
+async function createWindowsCmdLauncher(input: {
+  command: string;
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+}) {
+  const launcherDir = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-runtime-service-"));
+  const launcherPath = path.join(launcherDir, "launch.cmd");
+  await fs.writeFile(
+    launcherPath,
+    `@echo off\r\nchcp 65001>nul\r\n${input.command}\r\n`,
+    "utf8",
+  );
+  const target = await resolveSpawnTarget(launcherPath, [], input.cwd, input.env, {
+    platform: process.platform,
+  });
+  return { target, launcherPath: launcherDir };
+}
+
+async function cleanupRuntimeServiceLauncher(launcherPath: string | null) {
+  if (!launcherPath) return;
+  await fs.rm(launcherPath, { recursive: true, force: true }).catch(() => undefined);
 }
 
 function buildWorkspaceCommandEnv(input: {
@@ -1166,10 +1198,21 @@ async function startLocalRuntimeService(input: {
     const portEnvKey = asString(portConfig.envKey, "PORT");
     env[portEnvKey] = String(port);
   }
-  const shellTarget = resolveShellCommandTarget(command, {
-    env,
-    shell: defaultShellForPlatform(env),
-  });
+  const shell = defaultShellForPlatform(env);
+  const launcher =
+    isWindowsCmdShell(shell)
+      ? await createWindowsCmdLauncher({
+          command,
+          cwd: serviceCwd,
+          env,
+        })
+      : null;
+  const shellTarget =
+    launcher?.target ??
+    resolveShellCommandTarget(command, {
+      env,
+      shell,
+    });
   const child = spawn(shellTarget.command, shellTarget.args, {
     cwd: serviceCwd,
     env: withWindowsUtf8EnvDefaults(env),
@@ -1202,6 +1245,7 @@ async function startLocalRuntimeService(input: {
     await waitForReadiness({ service: input.service, url });
   } catch (err) {
     await terminateChildProcess(child);
+    await cleanupRuntimeServiceLauncher(launcher?.launcherPath ?? null);
     throw new Error(
       `Failed to start runtime service "${serviceName}": ${err instanceof Error ? err.message : String(err)}${stderrExcerpt ? ` | stderr: ${stderrExcerpt.trim()}` : ""}`,
     );
@@ -1240,6 +1284,7 @@ async function startLocalRuntimeService(input: {
     leaseRunIds: new Set([input.runId]),
     idleTimer: null,
     envFingerprint,
+    launcherPath: launcher?.launcherPath ?? null,
   };
 }
 
@@ -1310,6 +1355,7 @@ async function startHostBridgeRuntimeService(input: {
     leaseRunIds: new Set([input.runId]),
     idleTimer: null,
     envFingerprint: createHash("sha256").update(stableStringify(browserConfig)).digest("hex"),
+    launcherPath: null,
   };
 }
 
@@ -1378,6 +1424,7 @@ async function startExternalBrowserRuntimeService(input: {
     leaseRunIds: new Set([input.runId]),
     idleTimer: null,
     envFingerprint: createHash("sha256").update(stableStringify(browserConfig)).digest("hex"),
+    launcherPath: null,
   };
 }
 
@@ -1413,6 +1460,7 @@ async function stopRuntimeService(serviceId: string) {
   if (record.reuseKey) {
     runtimeServicesByReuseKey.delete(record.reuseKey);
   }
+  await cleanupRuntimeServiceLauncher(record.launcherPath);
   await persistRuntimeServiceRecord(record.db, record);
 }
 
@@ -1457,6 +1505,7 @@ function registerRuntimeService(db: Db | undefined, record: RuntimeServiceRecord
     if (current.reuseKey && runtimeServicesByReuseKey.get(current.reuseKey) === current.id) {
       runtimeServicesByReuseKey.delete(current.reuseKey);
     }
+    void cleanupRuntimeServiceLauncher(current.launcherPath);
     void persistRuntimeServiceRecord(db, current);
   });
 }

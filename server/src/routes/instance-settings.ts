@@ -1,10 +1,15 @@
 import { Router, type Request } from "express";
 import type { Db } from "@paperclipai/db";
+import type { InstanceGeneralSettings, InstanceGeneralSettingsView } from "@paperclipai/shared";
 import { patchInstanceExperimentalSettingsSchema, patchInstanceGeneralSettingsSchema } from "@paperclipai/shared";
 import { forbidden } from "../errors.js";
 import { validate } from "../middleware/validate.js";
 import { instanceSettingsService, logActivity } from "../services/index.js";
 import { getActorInfo } from "./authz.js";
+import {
+  isHostBridgeConfigured,
+  resolveDefaultLocalAdapterExecutionLocation,
+} from "../local-adapter-defaults.js";
 
 function assertCanManageInstanceSettings(req: Request) {
   if (req.actor.type !== "board") {
@@ -16,13 +21,27 @@ function assertCanManageInstanceSettings(req: Request) {
   throw forbidden("Instance admin access required");
 }
 
+function assertCanReadGeneralInstanceSettings(req: Request) {
+  if (req.actor.type !== "board") {
+    throw forbidden("Board access required");
+  }
+}
+
+function toGeneralView(general: InstanceGeneralSettings): InstanceGeneralSettingsView {
+  return {
+    ...general,
+    defaultLocalExecutionLocation: resolveDefaultLocalAdapterExecutionLocation(),
+    hostBridgeConfigured: isHostBridgeConfigured(),
+  };
+}
+
 export function instanceSettingsRoutes(db: Db) {
   const router = Router();
   const svc = instanceSettingsService(db);
 
   router.get("/instance/settings/general", async (req, res) => {
-    assertCanManageInstanceSettings(req);
-    res.json(await svc.getGeneral());
+    assertCanReadGeneralInstanceSettings(req);
+    res.json(toGeneralView(await svc.getGeneral()));
   });
 
   router.patch(
@@ -51,7 +70,7 @@ export function instanceSettingsRoutes(db: Db) {
           }),
         ),
       );
-      res.json(updated.general);
+      res.json(toGeneralView(updated.general));
     },
   );
 

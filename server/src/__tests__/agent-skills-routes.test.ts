@@ -132,6 +132,7 @@ function makeAgent(adapterType: string) {
 describe("agent skill routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.PAPERCLIP_LOCAL_ADAPTER_DEFAULT_EXECUTION_LOCATION;
     mockAgentService.resolveByReference.mockResolvedValue({
       ambiguous: false,
       agent: makeAgent("claude_local"),
@@ -401,6 +402,66 @@ describe("agent skill routes", () => {
     );
   });
 
+  it("defaults new local agents to host execution when configured for hybrid deployment", async () => {
+    const previousExecutionLocation = process.env.PAPERCLIP_LOCAL_ADAPTER_DEFAULT_EXECUTION_LOCATION;
+    process.env.PAPERCLIP_LOCAL_ADAPTER_DEFAULT_EXECUTION_LOCATION = "host";
+
+    try {
+      const res = await request(createApp())
+        .post("/api/companies/company-1/agents")
+        .send({
+          name: "Host Default Agent",
+          role: "engineer",
+          adapterType: "codex_local",
+          adapterConfig: {},
+        });
+
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      expect(mockAgentService.create).toHaveBeenCalledWith(
+        "company-1",
+        expect.objectContaining({
+          adapterConfig: expect.objectContaining({
+            executionLocation: "host",
+          }),
+        }),
+      );
+    } finally {
+      if (previousExecutionLocation === undefined) delete process.env.PAPERCLIP_LOCAL_ADAPTER_DEFAULT_EXECUTION_LOCATION;
+      else process.env.PAPERCLIP_LOCAL_ADAPTER_DEFAULT_EXECUTION_LOCATION = previousExecutionLocation;
+    }
+  });
+
+  it("preserves an explicit container execution location for new local agents", async () => {
+    const previousExecutionLocation = process.env.PAPERCLIP_LOCAL_ADAPTER_DEFAULT_EXECUTION_LOCATION;
+    process.env.PAPERCLIP_LOCAL_ADAPTER_DEFAULT_EXECUTION_LOCATION = "host";
+
+    try {
+      const res = await request(createApp())
+        .post("/api/companies/company-1/agents")
+        .send({
+          name: "Pinned Container Agent",
+          role: "engineer",
+          adapterType: "codex_local",
+          adapterConfig: {
+            executionLocation: "container",
+          },
+        });
+
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      expect(mockAgentService.create).toHaveBeenCalledWith(
+        "company-1",
+        expect.objectContaining({
+          adapterConfig: expect.objectContaining({
+            executionLocation: "container",
+          }),
+        }),
+      );
+    } finally {
+      if (previousExecutionLocation === undefined) delete process.env.PAPERCLIP_LOCAL_ADAPTER_DEFAULT_EXECUTION_LOCATION;
+      else process.env.PAPERCLIP_LOCAL_ADAPTER_DEFAULT_EXECUTION_LOCATION = previousExecutionLocation;
+    }
+  });
+
   it("includes canonical desired skills in hire approvals", async () => {
     const db = createDb(true);
 
@@ -458,5 +519,34 @@ describe("agent skill routes", () => {
       | { payload?: { adapterConfig?: Record<string, unknown> } }
       | undefined;
     expect(approvalInput?.payload?.adapterConfig?.promptTemplate).toBeUndefined();
+  });
+
+  it("defaults new local hire requests to host execution when configured for hybrid deployment", async () => {
+    const previousExecutionLocation = process.env.PAPERCLIP_LOCAL_ADAPTER_DEFAULT_EXECUTION_LOCATION;
+    process.env.PAPERCLIP_LOCAL_ADAPTER_DEFAULT_EXECUTION_LOCATION = "host";
+
+    try {
+      const res = await request(createApp())
+        .post("/api/companies/company-1/agent-hires")
+        .send({
+          name: "Host Hire Agent",
+          role: "engineer",
+          adapterType: "codex_local",
+          adapterConfig: {},
+        });
+
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      expect(mockAgentService.create).toHaveBeenCalledWith(
+        "company-1",
+        expect.objectContaining({
+          adapterConfig: expect.objectContaining({
+            executionLocation: "host",
+          }),
+        }),
+      );
+    } finally {
+      if (previousExecutionLocation === undefined) delete process.env.PAPERCLIP_LOCAL_ADAPTER_DEFAULT_EXECUTION_LOCATION;
+      else process.env.PAPERCLIP_LOCAL_ADAPTER_DEFAULT_EXECUTION_LOCATION = previousExecutionLocation;
+    }
   });
 });

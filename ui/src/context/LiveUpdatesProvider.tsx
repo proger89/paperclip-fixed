@@ -6,6 +6,7 @@ import { useCompany } from "./CompanyContext";
 import type { ToastInput } from "./ToastContext";
 import { useToast } from "./ToastContext";
 import { queryKeys } from "../lib/queryKeys";
+import { getRunStatusBody, getRunStatusLabel, getRunStatusTone } from "../lib/run-errors";
 
 const TOAST_COOLDOWN_WINDOW_MS = 10_000;
 const TOAST_COOLDOWN_MAX = 3;
@@ -301,26 +302,17 @@ function buildRunStatusToast(
   if (!runId || !agentId || !status || !TERMINAL_RUN_STATUSES.has(status)) return null;
 
   const error = readString(payload.error);
+  const errorCode = readString(payload.errorCode);
   const triggerDetail = readString(payload.triggerDetail);
   const name = nameOf(agentId) ?? `Agent ${shortId(agentId)}`;
-  const tone = status === "succeeded" ? "success" : status === "cancelled" ? "warn" : "error";
-  const statusLabel =
-    status === "succeeded" ? "succeeded"
-      : status === "failed" ? "failed"
-        : status === "timed_out" ? "timed out"
-          : "cancelled";
+  const tone = getRunStatusTone(status, errorCode);
+  const statusLabel = getRunStatusLabel(status, errorCode);
   const title = `${name} run ${statusLabel}`;
-
-  let body: string | undefined;
-  if (error) {
-    body = truncate(error, 100);
-  } else if (triggerDetail) {
-    body = `Trigger: ${triggerDetail}`;
-  }
+  const body = getRunStatusBody({ error, errorCode, triggerDetail });
 
   return {
     title,
-    body,
+    body: body ? truncate(body, 100) : undefined,
     tone,
     ttlMs: status === "succeeded" ? 5000 : 7000,
     action: { label: "View run", href: `/agents/${agentId}/runs/${runId}` },

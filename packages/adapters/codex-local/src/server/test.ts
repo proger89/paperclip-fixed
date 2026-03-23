@@ -14,7 +14,7 @@ import {
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
 import path from "node:path";
-import { parseCodexJsonl } from "./parse.js";
+import { detectCodexQuotaExceeded, parseCodexJsonl } from "./parse.js";
 
 function summarizeStatus(checks: AdapterEnvironmentCheck[]): AdapterEnvironmentTestResult["status"] {
   if (checks.some((check) => check.level === "error")) return "fail";
@@ -202,6 +202,20 @@ export async function testEnvironment(
           message: "Codex CLI is installed, but authentication is not ready.",
           ...(detail ? { detail } : {}),
           hint: "Configure OPENAI_API_KEY in adapter env/shell or run `codex login`, then retry the probe.",
+        });
+      } else if (
+        detectCodexQuotaExceeded({
+          parsed,
+          stdout: probe.stdout,
+          stderr: probe.stderr,
+        }).quotaExceeded
+      ) {
+        checks.push({
+          code: "codex_hello_probe_quota_exceeded",
+          level: "warn",
+          message: "Codex CLI is installed, but the provider quota or billing limit has been reached.",
+          ...(detail ? { detail } : {}),
+          hint: "Check your OpenAI/Codex quota and billing status, then retry the probe.",
         });
       } else {
         checks.push({

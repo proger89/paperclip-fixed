@@ -152,6 +152,18 @@ process.exit(1);
   await fsPromises.chmod(commandPath, 0o755);
 }
 
+async function writeFakeCodexQuotaFailureCommand(commandPath: string): Promise<void> {
+  const script = `#!/usr/bin/env node
+console.log(JSON.stringify({
+  type: "error",
+  message: "Quota exceeded. Check your plan and billing details.",
+}));
+process.exit(1);
+`;
+  await fsPromises.writeFile(commandPath, script, "utf8");
+  await fsPromises.chmod(commandPath, 0o755);
+}
+
 async function writeFakeCodexFailureCommand(
   commandPath: string,
   message = "Paperclip forced failure.",
@@ -655,6 +667,93 @@ describe("heartbeat orphaned process recovery", () => {
         .from(heartbeatRuns)
         .where(eq(heartbeatRuns.agentId, agentId));
       expect(agentRuns).toHaveLength(1);
+    } finally {
+      if (previousHome === undefined) {
+        delete process.env.HOME;
+      } else {
+        process.env.HOME = previousHome;
+      }
+      if (previousUserProfile === undefined) {
+        delete process.env.USERPROFILE;
+      } else {
+        process.env.USERPROFILE = previousUserProfile;
+      }
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not pause the agent on codex_quota_exceeded failures", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "paperclip-heartbeat-quota-failure-"));
+    const workspace = path.join(root, "workspace");
+    const commandPath = path.join(root, "codex");
+    await fsPromises.mkdir(workspace, { recursive: true });
+    await writeFakeCodexQuotaFailureCommand(commandPath);
+
+    const previousHome = process.env.HOME;
+    const previousUserProfile = process.env.USERPROFILE;
+    process.env.HOME = root;
+    process.env.USERPROFILE = root;
+
+    try {
+      const companyId = randomUUID();
+      const agentId = randomUUID();
+      const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+      const heartbeat = heartbeatService(db);
+
+      await db.insert(companies).values({
+        id: companyId,
+        name: "Paperclip",
+        issuePrefix,
+        requireBoardApprovalForNewAgents: false,
+      });
+
+      await db.insert(agents).values({
+        id: agentId,
+        companyId,
+        name: "Quota Fail Agent",
+        role: "engineer",
+        status: "active",
+        adapterType: "codex_local",
+        adapterConfig: {
+          command: commandPath,
+          cwd: workspace,
+          promptTemplate: "Continue your work.",
+        },
+        runtimeConfig: {
+          heartbeat: {
+            enabled: true,
+            intervalSec: 1,
+          },
+        },
+        permissions: {},
+        createdAt: new Date("2026-03-19T00:00:00.000Z"),
+        updatedAt: new Date("2026-03-19T00:00:00.000Z"),
+        lastHeartbeatAt: new Date("2026-03-19T00:00:00.000Z"),
+      });
+
+      const queuedRun = await heartbeat.invoke(
+        agentId,
+        "on_demand",
+        {},
+        "manual",
+        { actorType: "system", actorId: "quota-test" },
+      );
+      const finalizedRun = await waitForRunToFinish(heartbeat, queuedRun!.id);
+
+      expect(finalizedRun.status).toBe("failed");
+      expect(finalizedRun.errorCode).toBe("codex_quota_exceeded");
+
+      const latestAgent = await db
+        .select()
+        .from(agents)
+        .where(eq(agents.id, agentId))
+        .then((rows) => rows[0] ?? null);
+      expect(latestAgent?.status).not.toBe("paused");
+      expect(latestAgent?.pausedAt).toBeNull();
+      expect(latestAgent?.pauseReason).toBeNull();
+
+      const timerResult = await heartbeat.tickTimers(new Date("2026-03-19T00:10:00.000Z"));
+      expect(timerResult.checked).toBe(1);
     } finally {
       if (previousHome === undefined) {
         delete process.env.HOME;

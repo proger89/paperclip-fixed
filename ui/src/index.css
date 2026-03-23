@@ -142,6 +142,11 @@
   label {
     touch-action: manipulation;
   }
+  select option,
+  select optgroup {
+    color: var(--foreground);
+    background-color: var(--popover);
+  }
 }
 
 @media (pointer: coarse) {

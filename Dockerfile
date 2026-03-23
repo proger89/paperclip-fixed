@@ -29,14 +29,22 @@ FROM base AS build
 WORKDIR /app
 COPY --from=deps /app /app
 COPY . .
+RUN node scripts/clean-build-artifacts.mjs
+RUN pnpm --filter @paperclipai/server clean
 RUN pnpm --filter @paperclipai/ui build
+RUN pnpm --filter @paperclipai/plugin-sdk build
 RUN pnpm --filter @paperclipai/server build
+RUN node scripts/verify-docker-runtime-build.mjs
 RUN test -f server/dist/index.js || (echo "ERROR: server build output missing" && exit 1)
 
 FROM base AS production
 WORKDIR /app
 COPY --chown=node:node --from=build /app /app
-RUN npm install --global --omit=dev @anthropic-ai/claude-code@latest @openai/codex@latest opencode-ai \
+RUN for attempt in 1 2 3; do \
+    npm install --global --omit=dev @anthropic-ai/claude-code@latest @openai/codex@latest opencode-ai && break; \
+    if [ "$attempt" -eq 3 ]; then exit 1; fi; \
+    sleep 5; \
+  done \
   && mkdir -p /paperclip \
   && chown node:node /paperclip
 

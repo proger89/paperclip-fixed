@@ -94,6 +94,7 @@ import {
   arraysEqual,
   isReadOnlyUnmanagedSkillEntry,
 } from "../lib/agent-skills-state";
+import { getRunFailureHelper } from "../lib/run-errors";
 
 const runStatusIcons: Record<string, { icon: typeof CheckCircle2; color: string }> = {
   succeeded: { icon: CheckCircle2, color: "text-green-600 dark:text-green-400" },
@@ -2822,6 +2823,7 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType }: { run: Heartb
     },
   });
   const canResumeLostRun = run.errorCode === "process_lost" && run.status === "failed";
+  const runFailureHelper = getRunFailureHelper(run.errorCode);
   const resumePayload = useMemo(() => {
     const payload: Record<string, unknown> = {
       resumeFromRunId: run.id,
@@ -3024,6 +3026,19 @@ function RunDetail({ run: initialRun, agentRouteId, adapterType }: { run: Heartb
               <div className="text-xs">
                 <span className="text-red-600 dark:text-red-400">{run.error}</span>
                 {run.errorCode && <span className="text-muted-foreground ml-1">({run.errorCode})</span>}
+              </div>
+            )}
+            {runFailureHelper && (
+              <div
+                className={cn(
+                  "rounded-md border px-3 py-2 text-xs",
+                  runFailureHelper.tone === "warn"
+                    ? "border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200"
+                    : "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
+                )}
+              >
+                <div className="font-medium">{runFailureHelper.title}</div>
+                <div className="mt-1">{runFailureHelper.body}</div>
               </div>
             )}
             {run.errorCode === "claude_auth_required" && adapterType === "claude_local" && (

@@ -8,6 +8,7 @@ import { companiesApi } from "../api/companies";
 import { goalsApi } from "../api/goals";
 import { agentsApi } from "../api/agents";
 import { issuesApi } from "../api/issues";
+import { instanceSettingsApi } from "../api/instanceSettings";
 import { queryKeys } from "../lib/queryKeys";
 import { Dialog, DialogPortal } from "@/components/ui/dialog";
 import {
@@ -259,6 +260,14 @@ export function OnboardingWizard() {
         entries: [...entries].sort((a, b) => a.id.localeCompare(b.id))
       }));
   }, [filteredModels, adapterType]);
+  const generalSettingsQuery = useQuery({
+    queryKey: queryKeys.instance.generalSettings,
+    queryFn: () => instanceSettingsApi.getGeneral(),
+    enabled: effectiveOnboardingOpen,
+    retry: false,
+  });
+  const defaultExecutionLocation =
+    generalSettingsQuery.data?.defaultLocalExecutionLocation ?? defaultCreateValues.executionLocation;
 
   function reset() {
     setStep(1);
@@ -295,6 +304,7 @@ export function OnboardingWizard() {
     const config = adapter.buildAdapterConfig({
       ...defaultCreateValues,
       adapterType,
+      executionLocation: defaultExecutionLocation,
       model:
         adapterType === "codex_local"
           ? model || DEFAULT_CODEX_LOCAL_MODEL

@@ -21,7 +21,12 @@ import {
   joinPromptSections,
   runChildProcess,
 } from "@paperclipai/adapter-utils/server-utils";
-import { detectCodexAuthRequired, parseCodexJsonl, isCodexUnknownSessionError } from "./parse.js";
+import {
+  detectCodexAuthRequired,
+  detectCodexQuotaExceeded,
+  parseCodexJsonl,
+  isCodexUnknownSessionError,
+} from "./parse.js";
 import { pathExists, prepareManagedCodexHome, resolveManagedCodexHomeDir } from "./codex-home.js";
 import { resolveCodexDesiredSkillNames } from "./skills.js";
 import { buildWindowsUtf8JsonHelperNote } from "../shared/encoding.js";
@@ -608,6 +613,16 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       stdout: attempt.proc.stdout,
       stderr: attempt.proc.stderr,
     });
+    const quotaMeta = detectCodexQuotaExceeded({
+      parsed: attempt.parsed,
+      stdout: attempt.proc.stdout,
+      stderr: attempt.proc.stderr,
+    });
+    const derivedErrorCode = authMeta.requiresAuth
+      ? "codex_auth_required"
+      : quotaMeta.quotaExceeded
+        ? "codex_quota_exceeded"
+        : null;
 
     if (attempt.proc.timedOut) {
       return {
@@ -615,7 +630,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         signal: attempt.proc.signal,
         timedOut: true,
         errorMessage: `Timed out after ${timeoutSec}s`,
-        errorCode: authMeta.requiresAuth ? "codex_auth_required" : null,
+        errorCode: derivedErrorCode,
         clearSession: clearSessionOnMissingSession,
       };
     }
@@ -645,7 +660,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         (attempt.proc.exitCode ?? 0) === 0
           ? null
           : fallbackErrorMessage,
-      errorCode: (attempt.proc.exitCode ?? 0) !== 0 && authMeta.requiresAuth ? "codex_auth_required" : null,
+      errorCode: (attempt.proc.exitCode ?? 0) !== 0 ? derivedErrorCode : null,
       usage: attempt.parsed.usage,
       sessionId: resolvedSessionId,
       sessionParams: resolvedSessionParams,

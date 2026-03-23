@@ -33,6 +33,9 @@ function createApp(actor: any) {
 describe("instance settings routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.PAPERCLIP_LOCAL_ADAPTER_DEFAULT_EXECUTION_LOCATION;
+    delete process.env.PAPERCLIP_HOST_BRIDGE_URL;
+    delete process.env.PAPERCLIP_HOST_BRIDGE_TOKEN;
     mockInstanceSettingsService.getGeneral.mockResolvedValue({
       censorUsernameInLogs: false,
     });
@@ -110,7 +113,11 @@ describe("instance settings routes", () => {
 
     const getRes = await request(app).get("/api/instance/settings/general");
     expect(getRes.status).toBe(200);
-    expect(getRes.body).toEqual({ censorUsernameInLogs: false });
+    expect(getRes.body).toEqual({
+      censorUsernameInLogs: false,
+      defaultLocalExecutionLocation: "container",
+      hostBridgeConfigured: false,
+    });
 
     const patchRes = await request(app)
       .patch("/api/instance/settings/general")
@@ -120,10 +127,37 @@ describe("instance settings routes", () => {
     expect(mockInstanceSettingsService.updateGeneral).toHaveBeenCalledWith({
       censorUsernameInLogs: true,
     });
+    expect(patchRes.body).toEqual({
+      censorUsernameInLogs: true,
+      defaultLocalExecutionLocation: "container",
+      hostBridgeConfigured: false,
+    });
     expect(mockLogActivity).toHaveBeenCalledTimes(2);
   });
 
-  it("rejects non-admin board users", async () => {
+  it("includes hybrid execution defaults in general settings responses", async () => {
+    process.env.PAPERCLIP_LOCAL_ADAPTER_DEFAULT_EXECUTION_LOCATION = "host";
+    process.env.PAPERCLIP_HOST_BRIDGE_URL = "http://host.docker.internal:4243";
+    process.env.PAPERCLIP_HOST_BRIDGE_TOKEN = "bridge-token";
+
+    const app = createApp({
+      type: "board",
+      userId: "local-board",
+      source: "local_implicit",
+      isInstanceAdmin: true,
+    });
+
+    const res = await request(app).get("/api/instance/settings/general");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      censorUsernameInLogs: false,
+      defaultLocalExecutionLocation: "host",
+      hostBridgeConfigured: true,
+    });
+  });
+
+  it("allows non-admin board users to read general settings", async () => {
     const app = createApp({
       type: "board",
       userId: "user-1",
@@ -134,8 +168,29 @@ describe("instance settings routes", () => {
 
     const res = await request(app).get("/api/instance/settings/general");
 
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      censorUsernameInLogs: false,
+      defaultLocalExecutionLocation: "container",
+      hostBridgeConfigured: false,
+    });
+  });
+
+  it("still rejects non-admin board users from updating general settings", async () => {
+    const app = createApp({
+      type: "board",
+      userId: "user-1",
+      source: "session",
+      isInstanceAdmin: false,
+      companyIds: ["company-1"],
+    });
+
+    const res = await request(app)
+      .patch("/api/instance/settings/general")
+      .send({ censorUsernameInLogs: true });
+
     expect(res.status).toBe(403);
-    expect(mockInstanceSettingsService.getGeneral).not.toHaveBeenCalled();
+    expect(mockInstanceSettingsService.updateGeneral).not.toHaveBeenCalled();
   });
 
   it("rejects agent callers", async () => {

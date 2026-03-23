@@ -534,7 +534,11 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                   if (isCreate) {
                     // Reset all adapter-specific fields to defaults when switching adapter type
                     const { adapterType: _at, ...defaults } = defaultCreateValues;
-                    const nextValues: CreateConfigValues = { ...defaults, adapterType: t };
+                    const nextValues: CreateConfigValues = {
+                      ...defaults,
+                      adapterType: t,
+                      executionLocation: props.values.executionLocation ?? defaultCreateValues.executionLocation,
+                    };
                     if (t === "codex_local") {
                       nextValues.model = DEFAULT_CODEX_LOCAL_MODEL;
                       nextValues.dangerouslyBypassSandbox =

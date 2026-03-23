@@ -3,6 +3,20 @@ import { normalizeHighConfidenceWindowsMojibakeBlock } from "../shared/encoding.
 
 const CODEX_AUTH_REQUIRED_RE =
   /(?:not\s+logged\s+in|login\s+required|authentication\s+required|unauthorized|invalid(?:\s+or\s+missing)?\s+api(?:[_\s-]?key)?|openai[_\s-]?api[_\s-]?key|api[_\s-]?key.*required|please\s+run\s+`?codex\s+login`?)/i;
+const CODEX_QUOTA_EXCEEDED_RE =
+  /(?:quota exceeded|insufficient_quota|plan and billing details|check your plan and billing details|billing details|you exceeded your current quota|resource_exhausted)/i;
+
+function collectCodexFailureMessages(input: {
+  parsed: { errorMessage: string | null } | null;
+  stdout: string;
+  stderr: string;
+}) {
+  return [input.parsed?.errorMessage ?? "", input.stdout, input.stderr]
+    .join("\n")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
 
 export function parseCodexJsonl(stdout: string) {
   let sessionId: string | null = null;
@@ -81,13 +95,21 @@ export function detectCodexAuthRequired(input: {
   stdout: string;
   stderr: string;
 }): { requiresAuth: boolean } {
-  const messages = [input.parsed?.errorMessage ?? "", input.stdout, input.stderr]
-    .join("\n")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
+  const messages = collectCodexFailureMessages(input);
 
   return {
     requiresAuth: messages.some((line) => CODEX_AUTH_REQUIRED_RE.test(line)),
+  };
+}
+
+export function detectCodexQuotaExceeded(input: {
+  parsed: { errorMessage: string | null } | null;
+  stdout: string;
+  stderr: string;
+}): { quotaExceeded: boolean } {
+  const messages = collectCodexFailureMessages(input);
+
+  return {
+    quotaExceeded: messages.some((line) => CODEX_QUOTA_EXCEEDED_RE.test(line)),
   };
 }

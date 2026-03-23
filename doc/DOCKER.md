@@ -126,6 +126,7 @@ paperclipai host-runtime serve `
 Hybrid mode requirements:
 
 - `docker-compose.hybrid.yml` defaults `PAPERCLIP_HOST_BRIDGE_TOKEN` to `paperclip-hybrid-dev-token` for local private use. Override it for any shared or non-local deployment.
+- `docker-compose.hybrid.yml` also defaults `PAPERCLIP_LOCAL_ADAPTER_DEFAULT_EXECUTION_LOCATION=host`, so newly created local CLI agents use the host bridge unless you explicitly set `executionLocation`.
 - Set `PAPERCLIP_HOST_BRIDGE_URL` if you do not want the default `http://host.docker.internal:4243`.
 - Every path the host-executed adapter needs must be covered by a `--path-map` entry.
 - Absolute `command`, `cwd`, env path values, and absolute path-like `extraArgs` entries are translated through the configured path maps before the host process starts.
@@ -139,6 +140,8 @@ Agent config for host-executed Codex or Claude:
   "executionLocation": "host"
 }
 ```
+
+Existing hybrid local agents with a missing `executionLocation` are backfilled to `host` on container startup. Paperclip does not auto-resume paused agents after this repair; resume them explicitly from the board.
 
 Example browser runtime service for a host-managed browser:
 

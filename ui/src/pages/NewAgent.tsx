@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "@/lib/router";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { agentsApi } from "../api/agents";
 import { companySkillsApi } from "../api/companySkills";
+import { instanceSettingsApi } from "../api/instanceSettings";
 import { queryKeys } from "../lib/queryKeys";
 import { AGENT_ROLES } from "@paperclipai/shared";
 import { Button } from "@/components/ui/button";
@@ -40,9 +41,10 @@ const SUPPORTED_ADVANCED_ADAPTER_TYPES = new Set<CreateConfigValues["adapterType
 
 function createValuesForAdapterType(
   adapterType: CreateConfigValues["adapterType"],
+  executionLocation = defaultCreateValues.executionLocation,
 ): CreateConfigValues {
   const { adapterType: _discard, ...defaults } = defaultCreateValues;
-  const nextValues: CreateConfigValues = { ...defaults, adapterType };
+  const nextValues: CreateConfigValues = { ...defaults, adapterType, executionLocation };
   if (adapterType === "codex_local") {
     nextValues.model = DEFAULT_CODEX_LOCAL_MODEL;
     nextValues.dangerouslyBypassSandbox =
@@ -74,6 +76,7 @@ export function NewAgent() {
   const [roleOpen, setRoleOpen] = useState(false);
   const [reportsToOpen, setReportsToOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const executionLocationTouchedRef = useRef(false);
 
   const { data: agents } = useQuery({
     queryKey: queryKeys.agents.list(selectedCompanyId!),
@@ -100,6 +103,14 @@ export function NewAgent() {
     enabled: Boolean(selectedCompanyId),
   });
 
+  const generalSettingsQuery = useQuery({
+    queryKey: queryKeys.instance.generalSettings,
+    queryFn: () => instanceSettingsApi.getGeneral(),
+    retry: false,
+  });
+  const defaultExecutionLocation =
+    generalSettingsQuery.data?.defaultLocalExecutionLocation ?? defaultCreateValues.executionLocation;
+
   const isFirstAgent = !agents || agents.length === 0;
   const effectiveRole = isFirstAgent ? "ceo" : role;
 
@@ -125,9 +136,21 @@ export function NewAgent() {
     }
     setConfigValues((prev) => {
       if (prev.adapterType === requested) return prev;
-      return createValuesForAdapterType(requested as CreateConfigValues["adapterType"]);
+      return createValuesForAdapterType(
+        requested as CreateConfigValues["adapterType"],
+        prev.executionLocation || defaultExecutionLocation,
+      );
     });
-  }, [presetAdapterType]);
+  }, [defaultExecutionLocation, presetAdapterType]);
+
+  useEffect(() => {
+    if (executionLocationTouchedRef.current) return;
+    setConfigValues((prev) =>
+      prev.executionLocation === defaultExecutionLocation
+        ? prev
+        : { ...prev, executionLocation: defaultExecutionLocation },
+    );
+  }, [defaultExecutionLocation]);
 
   const createAgent = useMutation({
     mutationFn: (data: Record<string, unknown>) =>
@@ -327,7 +350,12 @@ export function NewAgent() {
         <AgentConfigForm
           mode="create"
           values={configValues}
-          onChange={(patch) => setConfigValues((prev) => ({ ...prev, ...patch }))}
+          onChange={(patch) => {
+            if (patch.executionLocation !== undefined) {
+              executionLocationTouchedRef.current = true;
+            }
+            setConfigValues((prev) => ({ ...prev, ...patch }));
+          }}
           adapterModels={adapterModels}
         />
 

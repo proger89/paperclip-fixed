@@ -1,10 +1,11 @@
-import { UserPlus, Lightbulb, ShieldAlert, ShieldCheck } from "lucide-react";
+import { UserPlus, Lightbulb, ShieldAlert, ShieldCheck, Send } from "lucide-react";
 import { formatCents } from "../lib/utils";
 
 export const typeLabel: Record<string, string> = {
   hire_agent: "Hire Agent",
   approve_ceo_strategy: "CEO Strategy",
   budget_override_required: "Budget Override",
+  publish_content: "Content Publication",
 };
 
 /** Build a contextual label for an approval, e.g. "Hire Agent: Designer" */
@@ -13,6 +14,21 @@ export function approvalLabel(type: string, payload?: Record<string, unknown> | 
   if (type === "hire_agent" && payload?.name) {
     return `${base}: ${String(payload.name)}`;
   }
+  if (type === "publish_content") {
+    const channel = typeof payload?.channel === "string" ? payload.channel.trim() : "";
+    const destination =
+      typeof payload?.destinationLabel === "string"
+        ? payload.destinationLabel.trim()
+        : typeof payload?.target === "string"
+          ? payload.target.trim()
+          : "";
+    if (channel && destination) {
+      return `${base}: ${channel} -> ${destination}`;
+    }
+    if (channel) {
+      return `${base}: ${channel}`;
+    }
+  }
   return base;
 }
 
@@ -20,6 +36,7 @@ export const typeIcon: Record<string, typeof UserPlus> = {
   hire_agent: UserPlus,
   approve_ceo_strategy: Lightbulb,
   budget_override_required: ShieldAlert,
+  publish_content: Send,
 };
 
 export const defaultTypeIcon = ShieldCheck;
@@ -49,6 +66,31 @@ function SkillList({ values }: { values: unknown }) {
         {items.map((item) => (
           <span
             key={item}
+            className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground"
+          >
+            {item}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StringList({ label, values }: { label: string; values: unknown }) {
+  if (!Array.isArray(values)) return null;
+  const items = values
+    .filter((value): value is string => typeof value === "string")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (items.length === 0) return null;
+
+  return (
+    <div className="flex items-start gap-2">
+      <span className="text-muted-foreground w-20 sm:w-24 shrink-0 text-xs pt-0.5">{label}</span>
+      <div className="flex flex-wrap gap-1.5">
+        {items.map((item) => (
+          <span
+            key={`${label}:${item}`}
             className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground"
           >
             {item}
@@ -127,8 +169,56 @@ export function BudgetOverridePayload({ payload }: { payload: Record<string, unk
   );
 }
 
+export function PublishContentPayload({ payload }: { payload: Record<string, unknown> }) {
+  const publishAt =
+    typeof payload.publishAt === "string"
+      ? payload.publishAt
+      : typeof payload.scheduledFor === "string"
+        ? payload.scheduledFor
+        : null;
+  const summary =
+    typeof payload.sourceSummary === "string"
+      ? payload.sourceSummary
+      : typeof payload.summary === "string"
+        ? payload.summary
+        : null;
+  const excerpt =
+    typeof payload.draftExcerpt === "string"
+      ? payload.draftExcerpt
+      : typeof payload.finalExcerpt === "string"
+        ? payload.finalExcerpt
+        : typeof payload.body === "string"
+          ? payload.body
+          : null;
+
+  return (
+    <div className="mt-3 space-y-1.5 text-sm">
+      <PayloadField label="Channel" value={payload.channel} />
+      <PayloadField label="Target" value={payload.destinationLabel ?? payload.target} />
+      <PayloadField label="Voice" value={payload.authorVoice ?? payload.styleProfile} />
+      <PayloadField label="Publish at" value={publishAt} />
+      <PayloadField label="Source doc" value={payload.sourceDocumentId} />
+      <PayloadField label="Draft doc" value={payload.draftDocumentId} />
+      <PayloadField label="Final doc" value={payload.finalDocumentId} />
+      {summary ? (
+        <div className="mt-2 rounded-md bg-muted/40 px-3 py-2 text-sm text-muted-foreground whitespace-pre-wrap">
+          {summary}
+        </div>
+      ) : null}
+      {excerpt ? (
+        <div className="mt-2 rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground whitespace-pre-wrap font-mono max-h-48 overflow-y-auto">
+          {excerpt}
+        </div>
+      ) : null}
+      <StringList label="Risks" values={payload.riskFlags} />
+      <StringList label="Checks" values={payload.safetyChecks} />
+    </div>
+  );
+}
+
 export function ApprovalPayloadRenderer({ type, payload }: { type: string; payload: Record<string, unknown> }) {
   if (type === "hire_agent") return <HireAgentPayload payload={payload} />;
   if (type === "budget_override_required") return <BudgetOverridePayload payload={payload} />;
+  if (type === "publish_content") return <PublishContentPayload payload={payload} />;
   return <CeoStrategyPayload payload={payload} />;
 }

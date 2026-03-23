@@ -65,6 +65,18 @@ process.exit(1);
   await fs.chmod(commandPath, 0o755);
 }
 
+async function writeFakeCodexQuotaFailureCommand(commandPath: string): Promise<void> {
+  const script = `#!/usr/bin/env node
+console.log(JSON.stringify({
+  type: "error",
+  message: "Quota exceeded. Check your plan and billing details.",
+}));
+process.exit(1);
+`;
+  await fs.writeFile(commandPath, script, "utf8");
+  await fs.chmod(commandPath, 0o755);
+}
+
 type CapturePayload = {
   argv: string[];
   prompt: string;
@@ -650,6 +662,56 @@ describe("codex execute", () => {
       expect(result.exitCode).toBe(1);
       expect(result.errorCode).toBe("codex_auth_required");
       expect(result.errorMessage).toContain("codex login");
+    } finally {
+      if (previousHome === undefined) delete process.env.HOME;
+      else process.env.HOME = previousHome;
+      if (previousUserProfile === undefined) delete process.env.USERPROFILE;
+      else process.env.USERPROFILE = previousUserProfile;
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("returns codex_quota_exceeded when Codex hits provider quota", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-codex-execute-quota-"));
+    const workspace = path.join(root, "workspace");
+    const commandPath = path.join(root, "codex");
+    await fs.mkdir(workspace, { recursive: true });
+    await writeFakeCodexQuotaFailureCommand(commandPath);
+
+    const previousHome = process.env.HOME;
+    const previousUserProfile = process.env.USERPROFILE;
+    process.env.HOME = root;
+    process.env.USERPROFILE = root;
+
+    try {
+      const result = await execute({
+        runId: "run-quota",
+        agent: {
+          id: "agent-1",
+          companyId: "company-1",
+          name: "Codex Coder",
+          adapterType: "codex_local",
+          adapterConfig: {},
+        },
+        runtime: {
+          sessionId: null,
+          sessionParams: null,
+          sessionDisplayId: null,
+          taskKey: null,
+        },
+        config: {
+          command: commandPath,
+          cwd: workspace,
+          promptTemplate: "Follow the paperclip heartbeat.",
+        },
+        context: {},
+        authToken: "run-jwt-token",
+        onLog: async () => {},
+      });
+
+      expect(result.exitCode).toBe(1);
+      expect(result.errorCode).toBe("codex_quota_exceeded");
+      expect(result.errorMessage).toContain("Quota exceeded");
     } finally {
       if (previousHome === undefined) delete process.env.HOME;
       else process.env.HOME = previousHome;

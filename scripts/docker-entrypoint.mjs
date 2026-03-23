@@ -37,6 +37,64 @@ function maybeAutoLoginCodex() {
   }
 }
 
+async function assertAuthenticatedRuntimeBuild() {
+  const deploymentMode = (process.env.PAPERCLIP_DEPLOYMENT_MODE ?? "").trim();
+  const betterAuthSecret = process.env.BETTER_AUTH_SECRET?.trim() ?? "";
+  const agentJwtSecret = process.env.PAPERCLIP_AGENT_JWT_SECRET?.trim() ?? "";
+  if (deploymentMode !== "authenticated" || !betterAuthSecret || agentJwtSecret) return;
+
+  const { createLocalAgentJwt } = await import("../server/dist/agent-auth-jwt.js");
+  const token = createLocalAgentJwt(
+    "docker-self-test-agent",
+    "docker-self-test-company",
+    "codex_local",
+    "docker-self-test-run",
+  );
+  if (typeof token !== "string" || token.trim().length === 0) {
+    throw new Error(
+      "Authenticated Docker runtime self-test failed: server/dist cannot mint local agent JWTs from BETTER_AUTH_SECRET.",
+    );
+  }
+}
+
+function maybeRepairHybridLocalAgents() {
+  if ((process.env.PAPERCLIP_LOCAL_ADAPTER_DEFAULT_EXECUTION_LOCATION ?? "").trim() !== "host") return;
+
+  const inlineRepairScript = `
+import { createDb } from "./packages/db/src/index.ts";
+import { repairMissingLocalAdapterExecutionLocations } from "./server/src/local-adapter-repair.ts";
+
+const db = createDb(process.env.DATABASE_URL);
+const result = await repairMissingLocalAdapterExecutionLocations(db, process.env);
+console.log(
+  "Hybrid local-agent execution-location repair",
+  JSON.stringify({
+    checked: result.checked,
+    updated: result.updated,
+    skipped: result.skipped,
+    defaultExecutionLocation: result.defaultExecutionLocation,
+  }),
+);
+`;
+  const result = spawnSync(
+    "node",
+    [
+      "--import",
+      "./server/node_modules/tsx/dist/loader.mjs",
+      "--input-type=module",
+      "-e",
+      inlineRepairScript,
+    ],
+    {
+      stdio: "inherit",
+      env: process.env,
+    },
+  );
+  if (result.status !== 0) {
+    console.error("Hybrid local-agent execution-location repair failed inside docker entrypoint.");
+  }
+}
+
 async function waitForHealth(serverProcess, timeoutMs = 120_000) {
   const startedAt = Date.now();
   while (!serverProcess.killed && serverProcess.exitCode === null) {
@@ -89,40 +147,48 @@ function maybeCreateBootstrapInvite(health) {
 }
 
 maybeAutoLoginCodex();
-
-const serverProcess = spawn(
-  "node",
-  ["--import", "./server/node_modules/tsx/dist/loader.mjs", "server/dist/index.js"],
-  {
-    stdio: "inherit",
-    env: process.env,
-  },
-);
-
-const forwardSignal = (signal) => {
-  if (serverProcess.exitCode === null && !serverProcess.killed) {
-    serverProcess.kill(signal);
-  }
-};
-
-for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, () => forwardSignal(signal));
-}
-
 void (async () => {
   try {
+    await assertAuthenticatedRuntimeBuild();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(message);
+    process.exit(1);
+  }
+
+  const serverProcess = spawn(
+    "node",
+    ["--import", "./server/node_modules/tsx/dist/loader.mjs", "server/dist/index.js"],
+    {
+      stdio: "inherit",
+      env: process.env,
+    },
+  );
+
+  serverProcess.on("exit", (code, signal) => {
+    if (signal) {
+      process.kill(process.pid, signal);
+      return;
+    }
+    process.exit(code ?? 1);
+  });
+
+  const forwardSignal = (signal) => {
+    if (serverProcess.exitCode === null && !serverProcess.killed) {
+      serverProcess.kill(signal);
+    }
+  };
+
+  for (const signal of ["SIGINT", "SIGTERM"]) {
+    process.on(signal, () => forwardSignal(signal));
+  }
+
+  try {
     const health = await waitForHealth(serverProcess);
+    maybeRepairHybridLocalAgents();
     maybeCreateBootstrapInvite(health);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`Docker entrypoint bootstrap check failed: ${message}`);
   }
 })();
-
-serverProcess.on("exit", (code, signal) => {
-  if (signal) {
-    process.kill(process.pid, signal);
-    return;
-  }
-  process.exit(code ?? 1);
-});

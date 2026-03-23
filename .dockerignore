@@ -8,3 +8,7 @@ coverage
 data
 tmp
 *.log
+**/dist
+**/ui-dist
+ui-dist
+**/*.tsbuildinfo

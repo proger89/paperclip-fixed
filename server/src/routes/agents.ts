@@ -61,6 +61,7 @@ import {
   loadDefaultAgentInstructionsBundle,
   resolveDefaultAgentInstructionsBundleRole,
 } from "../services/default-agent-instructions.js";
+import { applyDefaultLocalExecutionLocation } from "../local-adapter-defaults.js";
 
 export function agentRoutes(db: Db) {
   const DEFAULT_INSTRUCTIONS_PATH_KEYS: Record<string, string> = {
@@ -356,7 +357,7 @@ export function agentRoutes(db: Db) {
     adapterType: string | null | undefined,
     adapterConfig: Record<string, unknown>,
   ): Record<string, unknown> {
-    const next = { ...adapterConfig };
+    const next = applyDefaultLocalExecutionLocation(adapterType, { ...adapterConfig });
     if (adapterType === "codex_local") {
       if (!asNonEmptyString(next.model)) {
         next.model = DEFAULT_CODEX_LOCAL_MODEL;
