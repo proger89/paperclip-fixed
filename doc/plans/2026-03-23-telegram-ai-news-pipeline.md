@@ -174,6 +174,16 @@ Telegram ingestion and Telegram publication adapters are not implemented in this
 
 There is no server-side enforcement yet that blocks an agent from publishing unless a linked approval is approved. That should be addressed in a follow-up iteration before enabling unattended publication.
 
+Update 2026-03-23:
+
+- server now blocks agent creation/update of non-draft Telegram/publication `issue_work_products` unless the issue has an approved linked `publish_content` approval
+- draft publication placeholders remain allowed before approval
+- board users retain manual override for recording publication results
+
+Remaining blocker:
+
+- this is not yet a full adapter/runtime-level kill switch for every possible outbound publish action; it guards the Paperclip publication result recording path, not arbitrary external side effects outside the control plane
+
 ## Iteration 1 Status
 
 Completed on 2026-03-23:

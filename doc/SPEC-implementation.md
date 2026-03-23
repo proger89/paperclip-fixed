@@ -662,7 +662,15 @@ Before first strategy approval, CEO may only draft tasks, not transition them to
 3. Board reviews what is being claimed, where it came from, what changed during rewrite, and where it will be published.
 4. Only after approval may a publishing agent execute the outbound publish and write the resulting URL or external artifact back as an `issue_work_product`.
 
-V1 treats `publish_content` as the canonical governance gate for Telegram-style editorial workflows. Server-side enforcement that blocks all outbound publication without an approved linked approval remains a follow-up requirement, not a completed V1 invariant.
+V1 treats `publish_content` as the canonical governance gate for Telegram-style editorial workflows.
+
+Current enforcement boundary:
+
+- agents may create draft publication placeholders before approval
+- agents may not create or update non-draft publication result work products for governed channels (for example Telegram) unless the issue has an approved linked `publish_content` approval
+- board users may still record publication results as a manual governance override
+
+Hard enforcement that blocks every external publish action at the adapter/runtime layer remains a follow-up requirement, not a completed V1 invariant.
 
 ## 12.4 Board Override
 
