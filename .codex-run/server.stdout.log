@@ -1,0 +1,12 @@
+
+> @paperclipai/server@0.3.1 dev D:\new-projects\paperclip\server
+> tsx src/index.ts
+
+[06:38:01] [32mINFO[39m: [36mUsing embedded PostgreSQL because no DATABASE_URL set (dataDir=C:\Users\test\.paperclip-worktrees\instances\repo-local\db, port=54329)[39m
+[06:38:01] [32mINFO[39m: [36mEmbedded PostgreSQL cluster already exists (C:\Users\test\.paperclip-worktrees\instances\repo-local\db\PG_VERSION); skipping init[39m
+[06:38:01] [33mWARN[39m: [36mRemoving stale embedded PostgreSQL lock file[39m
+[06:38:11] [31mERROR[39m: [36mEmbedded PostgreSQL failed; showing buffered startup logs[39m [90m{"phase":"start","recentLogs":["2026-03-23 09:38:11.607 MSK [19692] FATAL:  pre-existing shared memory block is still in use","2026-03-23 09:38:11.607 MSK [19692] HINT:  Check if there are any old server processes still running, and terminate them.","2026-03-23 09:38:11.607 MSK [19692] LOG:  database system is shut down"]}[39m
+[06:38:11] [31mERROR[39m: [36mPaperclip server failed to start[39m
+D:\new-projects\paperclip\server:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @paperclipai/server@0.3.1 dev: `tsx src/index.ts`
+Exit status 1

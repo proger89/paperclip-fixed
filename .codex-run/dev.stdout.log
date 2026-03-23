@@ -1,0 +1,5 @@
+
+> paperclip@ dev D:\new-projects\paperclip
+> node scripts/dev-runner.mjs watch
+
+[paperclip] dev mode: local_trusted (default)
