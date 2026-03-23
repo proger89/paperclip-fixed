@@ -1,0 +1,31 @@
+services:
+  paperclip:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${PAPERCLIP_PORT:-3100}:3100"
+    environment:
+      HOST: "0.0.0.0"
+      PAPERCLIP_HOME: "/paperclip"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      PAPERCLIP_DEPLOYMENT_MODE: "authenticated"
+      PAPERCLIP_DEPLOYMENT_EXPOSURE: "private"
+      PAPERCLIP_PUBLIC_URL: "${PAPERCLIP_PUBLIC_URL:-http://localhost:3100}"
+      BETTER_AUTH_SECRET: "${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET must be set}"
+      PAPERCLIP_HOST_BRIDGE_URL: "${PAPERCLIP_HOST_BRIDGE_URL:-http://host.docker.internal:4243}"
+      PAPERCLIP_HOST_BRIDGE_TOKEN: "${PAPERCLIP_HOST_BRIDGE_TOKEN:?PAPERCLIP_HOST_BRIDGE_TOKEN must be set}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - "${PAPERCLIP_DATA_DIR:-./data/docker-paperclip}:/paperclip"
+
+  playwright-browser:
+    image: browserless/chromium:latest
+    profiles: ["browser"]
+    environment:
+      PORT: "3000"
+      TOKEN: "${PLAYWRIGHT_BROWSER_TOKEN:-paperclip}"
+    expose:
+      - "3000"

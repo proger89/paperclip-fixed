@@ -124,7 +124,9 @@ hostRuntime
     acc.push(value);
     return acc;
   }, [] as string[])
-  .action(hostRuntimeServe);
+  .action(async (opts) => {
+    await hostRuntimeServe(opts);
+  });
 
 heartbeat
   .command("run")

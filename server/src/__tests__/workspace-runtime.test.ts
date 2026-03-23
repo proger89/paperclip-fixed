@@ -972,6 +972,47 @@ describe("ensureRuntimeServicesForRun", () => {
 
     expect(seenDeletes).toEqual(["/v1/browser-sessions/browser-session-1"]);
   });
+
+  it("realizes direct browser endpoint services without spawning a local process", async () => {
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-runtime-browser-endpoint-"));
+    const workspace = buildWorkspace(workspaceRoot);
+    const runId = "run-browser-endpoint";
+    leasedRunIds.add(runId);
+
+    const services = await ensureRuntimeServicesForRun({
+      runId,
+      agent: {
+        id: "agent-1",
+        name: "Codex Coder",
+        companyId: "company-1",
+      },
+      issue: null,
+      workspace,
+      config: {
+        workspaceRuntime: {
+          services: [
+            {
+              name: "browser",
+              browser: {
+                wsEndpoint: "ws://playwright-browser:3000/playwright",
+              },
+            },
+          ],
+        },
+      },
+      adapterEnv: {},
+    });
+
+    expect(services).toHaveLength(1);
+    expect(services[0]).toMatchObject({
+      serviceName: "browser",
+      provider: "adapter_managed",
+      url: "ws://playwright-browser:3000/playwright",
+    });
+
+    await releaseRuntimeServicesForRun(runId);
+    leasedRunIds.delete(runId);
+  });
 });
 
 describe("normalizeAdapterManagedRuntimeServices", () => {

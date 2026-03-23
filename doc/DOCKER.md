@@ -44,6 +44,83 @@ PAPERCLIP_PORT=3200 PAPERCLIP_DATA_DIR=./data/pc docker compose -f docker-compos
 
 If you change host port or use a non-local domain, set `PAPERCLIP_PUBLIC_URL` to the external URL you will use in browser/auth flows.
 
+## Hybrid Docker Mode
+
+Use this when you want Paperclip itself in Docker, but `codex`, `claude`, or browser automation to stay on the host machine.
+
+Start Paperclip:
+
+```sh
+docker compose -f docker-compose.hybrid.yml up --build
+```
+
+Start the host bridge on the host machine:
+
+Linux:
+
+```sh
+paperclipai host-runtime serve \
+  --listen 0.0.0.0:4243 \
+  --token "$PAPERCLIP_HOST_BRIDGE_TOKEN" \
+  --path-map /paperclip=/absolute/host/paperclip-data \
+  --path-map /workspace=/absolute/host/workspace \
+  --capability codex \
+  --capability claude \
+  --capability browser
+```
+
+Windows PowerShell:
+
+```powershell
+paperclipai host-runtime serve `
+  --listen 0.0.0.0:4243 `
+  --token $env:PAPERCLIP_HOST_BRIDGE_TOKEN `
+  --path-map /paperclip=C:\paperclip-data `
+  --path-map /workspace=C:\workspace `
+  --capability codex `
+  --capability claude `
+  --capability browser
+```
+
+Hybrid mode requirements:
+
+- Set `PAPERCLIP_HOST_BRIDGE_TOKEN` on both the container and the host bridge.
+- Set `PAPERCLIP_HOST_BRIDGE_URL` if you do not want the default `http://host.docker.internal:4243`.
+- Every path the host-executed adapter needs must be covered by a `--path-map` entry.
+- On Linux, `docker-compose.hybrid.yml` already adds `host.docker.internal:host-gateway`.
+
+Agent config for host-executed Codex or Claude:
+
+```json
+{
+  "executionLocation": "host"
+}
+```
+
+Example browser runtime service for a host-managed browser:
+
+```json
+{
+  "services": [
+    {
+      "name": "browser",
+      "location": "host",
+      "lifecycle": "ephemeral",
+      "browser": {
+        "browserName": "chromium"
+      }
+    }
+  ]
+}
+```
+
+Paperclip injects these env vars into the adapter when a browser runtime is present:
+
+- `PAPERCLIP_PLAYWRIGHT_WS_ENDPOINT`
+- `PAPERCLIP_BROWSER_CDP_URL`
+
+If the host bridge is down, Paperclip still boots normally. Only host-mode environment tests and host-mode runs fail.
+
 ## Authenticated Compose (Single Public URL)
 
 For authenticated deployments, set one canonical public URL and let Paperclip derive auth/callback defaults:
@@ -92,6 +169,31 @@ Notes:
 
 - Without API keys, the app still runs normally.
 - Adapter environment checks in Paperclip will surface missing auth/CLI prerequisites.
+
+## Optional Browser Sidecar
+
+If you want a browser endpoint inside Docker without installing browser binaries in the main Paperclip image, start the optional sidecar profile:
+
+```sh
+docker compose -f docker-compose.hybrid.yml --profile browser up --build
+```
+
+Then point a browser runtime service at the sidecar endpoint:
+
+```json
+{
+  "services": [
+    {
+      "name": "browser",
+      "browser": {
+        "cdpUrl": "http://playwright-browser:3000"
+      }
+    }
+  ]
+}
+```
+
+This keeps the main app image slim while still exposing browser connection details to adapters through the standard Paperclip browser env vars.
 
 ## Untrusted PR Review Container
 

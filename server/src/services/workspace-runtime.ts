@@ -1313,6 +1313,74 @@ async function startHostBridgeRuntimeService(input: {
   };
 }
 
+async function startExternalBrowserRuntimeService(input: {
+  db?: Db;
+  runId: string;
+  agent: ExecutionWorkspaceAgentRef;
+  issue: ExecutionWorkspaceIssueRef | null;
+  workspace: RealizedExecutionWorkspace;
+  executionWorkspaceId?: string | null;
+  service: Record<string, unknown>;
+  reuseKey: string | null;
+  scopeType: "project_workspace" | "execution_workspace" | "run" | "agent";
+  scopeId: string | null;
+}): Promise<RuntimeServiceRecord> {
+  const serviceName = asString(input.service.name, "service");
+  if (serviceName !== "browser") {
+    throw new Error(
+      `Runtime service "${serviceName}" is missing command. Only browser services may use a direct endpoint without command.`,
+    );
+  }
+  const browserConfig = parseObject(input.service.browser);
+  const wsEndpoint = asString(browserConfig.wsEndpoint, "").trim() || null;
+  const cdpUrl = asString(browserConfig.cdpUrl, "").trim() || null;
+  const url = asString(browserConfig.url, "").trim() || wsEndpoint || cdpUrl;
+  if (!url) {
+    throw new Error(
+      `Runtime service "${serviceName}" needs browser.wsEndpoint, browser.cdpUrl, or browser.url when no command is configured.`,
+    );
+  }
+  const lifecycle = asString(input.service.lifecycle, "shared") === "ephemeral" ? "ephemeral" : "shared";
+  return {
+    id: randomUUID(),
+    companyId: input.agent.companyId,
+    projectId: input.workspace.projectId,
+    projectWorkspaceId: input.workspace.workspaceId,
+    executionWorkspaceId: input.executionWorkspaceId ?? null,
+    issueId: input.issue?.id ?? null,
+    serviceName,
+    status: "running",
+    lifecycle,
+    scopeType: input.scopeType,
+    scopeId: input.scopeId,
+    reuseKey: input.reuseKey,
+    command: null,
+    cwd: input.workspace.cwd,
+    port: null,
+    url,
+    provider: "adapter_managed",
+    providerRef: null,
+    ownerAgentId: input.agent.id,
+    startedByRunId: input.runId,
+    lastUsedAt: new Date().toISOString(),
+    startedAt: new Date().toISOString(),
+    stoppedAt: null,
+    stopPolicy: {
+      ...parseObject(input.service.stopPolicy),
+      wsEndpoint,
+      cdpUrl,
+      url,
+    },
+    healthStatus: "healthy",
+    reused: false,
+    db: input.db,
+    child: null,
+    leaseRunIds: new Set([input.runId]),
+    idleTimer: null,
+    envFingerprint: createHash("sha256").update(stableStringify(browserConfig)).digest("hex"),
+  };
+}
+
 function scheduleIdleStop(record: RuntimeServiceRecord) {
   clearIdleTimer(record);
   const stopType = asString(record.stopPolicy?.type, "manual");
@@ -1464,6 +1532,19 @@ export async function ensureRuntimeServicesForRun(input: {
               scopeType,
               scopeId,
             })
+          : !asString(service.command, "").trim() && asString(service.name, "service") === "browser"
+            ? await startExternalBrowserRuntimeService({
+                db: input.db,
+                runId: input.runId,
+                agent: input.agent,
+                issue: input.issue,
+                workspace: input.workspace,
+                executionWorkspaceId: input.executionWorkspaceId,
+                service,
+                reuseKey,
+                scopeType,
+                scopeId,
+              })
           : await startLocalRuntimeService({
               db: input.db,
               runId: input.runId,

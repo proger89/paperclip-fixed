@@ -3,7 +3,7 @@ import {
   parseHostRuntimePathMap,
   translateMappedPath,
   translatePathBearingValue,
-} from "./host-runtime.ts";
+} from "./host-runtime.js";
 
 describe("host runtime path mapping", () => {
   it("uses the longest matching prefix when translating container paths to host paths", () => {

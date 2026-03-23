@@ -1,6 +1,6 @@
 import net from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { hostRuntimeServe } from "../commands/host-runtime.ts";
+import { hostRuntimeServe } from "../commands/host-runtime.js";
 
 async function allocatePort() {
   const server = net.createServer();
@@ -39,7 +39,7 @@ describe("host-runtime serve", () => {
     const body = await authorized.json() as Record<string, unknown>;
 
     await new Promise<void>((resolve, reject) => {
-      server.close((err) => (err ? reject(err) : resolve()));
+      server.close((err?: Error | null) => (err ? reject(err) : resolve()));
     });
 
     expect(unauthorized.status).toBe(401);
