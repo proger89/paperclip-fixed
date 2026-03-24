@@ -28,6 +28,7 @@ import {
   logActivity,
   projectService,
   routineService,
+  buildPrimaryWorkProducts,
   workProductService,
 } from "../services/index.js";
 import { logger } from "../middleware/logger.js";
@@ -214,6 +215,58 @@ export function issueRoutes(db: Db, storage: StorageService) {
     return true;
   }
 
+  function reviewableWorkProductTypesForPolicy(reviewPolicyKey: string | null | undefined) {
+    if (reviewPolicyKey === "design_review") {
+      return ["preview_url", "runtime_service", "artifact", "document"];
+    }
+    if (reviewPolicyKey === "qa_review" || reviewPolicyKey === "content_review") {
+      return ["runtime_service", "artifact", "document", "preview_url"];
+    }
+    return ["preview_url", "runtime_service", "artifact", "document"];
+  }
+
+  async function assertIssueCanComplete(
+    existing: {
+      id: string;
+      reviewerAgentId?: string | null;
+      reviewerUserId?: string | null;
+      reviewPolicyKey?: string | null;
+    },
+    patch: {
+      status?: string;
+      reviewerAgentId?: string | null;
+      reviewerUserId?: string | null;
+      reviewPolicyKey?: string | null;
+    },
+  ) {
+    const nextStatus = patch.status ?? null;
+    const nextReviewPolicyKey =
+      patch.reviewPolicyKey !== undefined ? patch.reviewPolicyKey : (existing.reviewPolicyKey ?? null);
+    if (nextStatus !== "done" || !nextReviewPolicyKey) return;
+
+    const nextReviewerAgentId =
+      patch.reviewerAgentId !== undefined ? patch.reviewerAgentId : (existing.reviewerAgentId ?? null);
+    const nextReviewerUserId =
+      patch.reviewerUserId !== undefined ? patch.reviewerUserId : (existing.reviewerUserId ?? null);
+    if (!nextReviewerAgentId && !nextReviewerUserId) {
+      throw unprocessable("This issue requires a reviewer before it can be marked done");
+    }
+
+    const workProducts = await workProductsSvc.listForIssue(existing.id);
+    const reviewableTypes = reviewableWorkProductTypesForPolicy(nextReviewPolicyKey);
+    const reviewableProducts = workProducts.filter((product) => reviewableTypes.includes(product.type));
+    if (reviewableProducts.length === 0) {
+      throw unprocessable("This issue requires a reviewable work product before it can be marked done");
+    }
+
+    const hasApprovedReview = reviewableProducts.some((product) =>
+      product.reviewState === "approved" || product.status === "approved",
+    );
+    if (!hasApprovedReview) {
+      throw unprocessable("This issue cannot be marked done until review is approved");
+    }
+  }
+
   async function assertCanRecordGovernedPublication(
     req: Request,
     issueId: string,
@@ -308,6 +361,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
       ? await executionWorkspacesSvc.getById(issue.executionWorkspaceId)
       : null;
     const workProducts = await workProductsSvc.listForIssue(issue.id);
+    const primaryWorkProducts = buildPrimaryWorkProducts(workProducts);
     res.json({
       ...issue,
       goalId: goal?.id ?? issue.goalId,
@@ -318,6 +372,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
       mentionedProjects,
       currentExecutionWorkspace,
       workProducts,
+      primaryWorkProducts,
     });
   }
 
@@ -934,6 +989,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
     if (!(await assertAgentRunCheckoutOwnership(req, res, existing))) return;
 
     const actor = getActorInfo(req);
+    await assertIssueCanComplete(existing, updateFields);
     const isClosed = existing.status === "done" || existing.status === "cancelled";
     const { comment: commentBody, reopen: reopenRequested, hiddenAt: hiddenAtRaw, ...updateFields } = req.body;
     if (hiddenAtRaw !== undefined) {

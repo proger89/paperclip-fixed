@@ -1,4 +1,5 @@
 import type { PauseReason, ProjectStatus } from "../constants.js";
+import type { WorkProductSummaryItem } from "./work-product.js";
 import type { ProjectExecutionWorkspacePolicy, WorkspaceRuntimeService } from "./workspace-runtime.js";
 
 export type ProjectWorkspaceSourceType = "local_path" | "git_repo" | "remote_managed" | "non_git_path";
@@ -66,6 +67,7 @@ export interface Project {
   codebase: ProjectCodebase;
   workspaces: ProjectWorkspace[];
   primaryWorkspace: ProjectWorkspace | null;
+  latestOutputs?: WorkProductSummaryItem[];
   archivedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;

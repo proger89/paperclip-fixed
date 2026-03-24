@@ -53,3 +53,11 @@ export interface IssueWorkProduct {
   createdAt: Date;
   updatedAt: Date;
 }
+
+export type IssuePrimaryWorkProducts = Partial<Record<IssueWorkProductType, IssueWorkProduct>>;
+
+export interface WorkProductSummaryItem extends IssueWorkProduct {
+  issueIdentifier: string | null;
+  issueTitle: string;
+  projectName: string | null;
+}

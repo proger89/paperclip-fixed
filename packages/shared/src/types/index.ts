@@ -1,4 +1,4 @@
-export type { Company } from "./company.js";
+export type { Company, CompanyRequiredReviewByRole, CompanyRequiredReviewRule } from "./company.js";
 export type {
   InstanceExperimentalSettings,
   InstanceGeneralSettings,
@@ -77,6 +77,8 @@ export type {
   IssueWorkProductProvider,
   IssueWorkProductStatus,
   IssueWorkProductReviewState,
+  IssuePrimaryWorkProducts,
+  WorkProductSummaryItem,
 } from "./work-product.js";
 export type {
   Issue,

@@ -235,6 +235,8 @@ export function buildManagedHeartbeatControlPlaneGuardNote() {
     "- Do not run `paperclipai worktree init` or `paperclipai auth bootstrap-ceo`.",
     "- Do not mint your own JWT/API key or switch to browser-cookie/local_trusted fallback.",
     "- Do not change `PAPERCLIP_API_URL`.",
+    "- Do not copy the current working directory or `$AGENT_HOME` into `adapterConfig.cwd` when hiring managed agents.",
+    "- Omit `adapterConfig.cwd` unless the new hire truly needs a specific repo/workspace; for Paperclip-managed storage, use container-visible paths like `/paperclip/...`, never host absolute paths.",
   ].join("\n");
 }
 

@@ -1,3 +1,18 @@
+import type { WorkProductSummaryItem } from "./work-product.js";
+
+export interface DashboardReviewItem {
+  issueId: string;
+  identifier: string | null;
+  title: string;
+  status: string;
+  reviewPolicyKey: string;
+  reviewerAgentId: string | null;
+  reviewerUserId: string | null;
+  projectId: string | null;
+  projectName: string | null;
+  updatedAt: Date;
+}
+
 export interface DashboardSummary {
   companyId: string;
   agents: {
@@ -23,5 +38,17 @@ export interface DashboardSummary {
     pendingApprovals: number;
     pausedAgents: number;
     pausedProjects: number;
+  };
+  outputs?: {
+    activePreviews: number;
+    readyForReview: number;
+    failed: number;
+    recent: WorkProductSummaryItem[];
+    byProject: WorkProductSummaryItem[];
+  };
+  reviews?: {
+    pending: number;
+    missingReviewer: number;
+    items: DashboardReviewItem[];
   };
 }

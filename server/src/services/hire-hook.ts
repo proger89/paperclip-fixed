@@ -15,6 +15,9 @@ export interface NotifyHireApprovedInput {
   source: "join_request" | "approval";
   sourceId: string;
   approvedAt?: Date;
+  message?: string | null;
+  issueId?: string | null;
+  issueIds?: string[];
 }
 
 /**
@@ -54,7 +57,9 @@ export async function notifyHireApproved(
     source,
     sourceId,
     approvedAt: approvedAt.toISOString(),
-    message: HIRE_APPROVED_MESSAGE,
+    message: input.message ?? HIRE_APPROVED_MESSAGE,
+    issueId: input.issueId ?? null,
+    issueIds: input.issueIds ?? [],
   };
 
   const adapterConfig =

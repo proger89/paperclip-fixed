@@ -132,6 +132,7 @@ Hybrid mode requirements:
 - `docker-compose.hybrid.yml` defaults `PAPERCLIP_HOST_BRIDGE_TOKEN` to `paperclip-hybrid-dev-token` for local private use. Override it for any shared or non-local deployment.
 - `docker-compose.hybrid.yml` also defaults `PAPERCLIP_LOCAL_ADAPTER_DEFAULT_EXECUTION_LOCATION=host`, so newly created local CLI agents use the host bridge unless you explicitly set `executionLocation`.
 - Set `PAPERCLIP_HOST_BRIDGE_URL` if you do not want the default `http://host.docker.internal:4243`.
+- `PAPERCLIP_HOST_RUNTIME_PATH_MAPS` is the server-side source of truth for reverse/forward host path normalization. Keep it aligned with the `--path-map` entries you pass to `paperclipai host-runtime serve`.
 - Host-executed agents use the agent-facing URL contract: `PAPERCLIP_AGENT_API_URL` if set, otherwise `PAPERCLIP_PUBLIC_URL`, otherwise the internal listen URL. Set `PAPERCLIP_AGENT_API_URL` whenever the host bridge must reach Paperclip through a different hostname or port than the browser.
 - On Windows host-mode setups, prefer `PAPERCLIP_AGENT_API_URL=http://127.0.0.1:3100` even when the browser uses `http://localhost:3100`; this avoids PowerShell loopback timeouts while keeping browser/auth origins unchanged.
 - Every path the host-executed adapter needs must be covered by a `--path-map` entry.

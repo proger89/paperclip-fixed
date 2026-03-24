@@ -24,7 +24,7 @@ export { instanceSettingsService } from "./instance-settings.js";
 export { companyPortabilityService } from "./company-portability.js";
 export { executionWorkspaceService } from "./execution-workspaces.js";
 export { workspaceOperationService } from "./workspace-operations.js";
-export { workProductService } from "./work-products.js";
+export { workProductService, buildPrimaryWorkProducts } from "./work-products.js";
 export { repairManagedInstructionBundles } from "./managed-instruction-bundles.js";
 export { logActivity, type LogActivityInput } from "./activity-log.js";
 export { notifyHireApproved, type NotifyHireApprovedInput } from "./hire-hook.js";

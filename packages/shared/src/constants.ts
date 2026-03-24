@@ -1,6 +1,12 @@
 export const COMPANY_STATUSES = ["active", "paused", "archived"] as const;
 export type CompanyStatus = (typeof COMPANY_STATUSES)[number];
 
+export const COMPANY_ARCHETYPES = ["general_company", "delivery_studio", "content_ops"] as const;
+export type CompanyArchetype = (typeof COMPANY_ARCHETYPES)[number];
+
+export const TOOL_INSTALL_POLICIES = ["approval_gated", "manual_only"] as const;
+export type ToolInstallPolicy = (typeof TOOL_INSTALL_POLICIES)[number];
+
 export const DEPLOYMENT_MODES = ["local_trusted", "authenticated"] as const;
 export type DeploymentMode = (typeof DEPLOYMENT_MODES)[number];
 
@@ -48,6 +54,16 @@ export const AGENT_ROLES = [
   "general",
 ] as const;
 export type AgentRole = (typeof AGENT_ROLES)[number];
+
+export const ROLE_BUNDLE_KEYS = [
+  "general_specialist",
+  "designer",
+  "qa",
+  "pm",
+  "frontend_engineer",
+  "content_operator",
+] as const;
+export type RoleBundleKey = (typeof ROLE_BUNDLE_KEYS)[number];
 
 export const AGENT_ROLE_LABELS: Record<AgentRole, string> = {
   ceo: "CEO",
@@ -189,6 +205,8 @@ export const APPROVAL_TYPES = [
   "approve_ceo_strategy",
   "budget_override_required",
   "publish_content",
+  "install_company_skill",
+  "install_connector_plugin",
 ] as const;
 export type ApprovalType = (typeof APPROVAL_TYPES)[number];
 

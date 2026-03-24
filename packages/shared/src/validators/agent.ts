@@ -4,6 +4,7 @@ import {
   AGENT_ICON_NAMES,
   AGENT_ROLES,
   AGENT_STATUSES,
+  ROLE_BUNDLE_KEYS,
 } from "../constants.js";
 import { envConfigSchema } from "./secret.js";
 
@@ -64,6 +65,17 @@ export type CreateAgent = z.infer<typeof createAgentSchema>;
 export const createAgentHireSchema = createAgentSchema.extend({
   sourceIssueId: z.string().uuid().optional().nullable(),
   sourceIssueIds: z.array(z.string().uuid()).optional(),
+  roleBundleKey: z.enum(ROLE_BUNDLE_KEYS).optional().nullable(),
+  requestedSkills: z.array(z.string().min(1)).optional(),
+  staffingReason: z.string().trim().min(1).optional().nullable(),
+  followUpIssueId: z.string().uuid().optional().nullable(),
+  followUpAction: z.enum([
+    "auto",
+    "assign_source_issue",
+    "assign_existing_issue",
+    "create_follow_up_issue",
+    "none",
+  ]).optional().nullable(),
 });
 
 export type CreateAgentHire = z.infer<typeof createAgentHireSchema>;

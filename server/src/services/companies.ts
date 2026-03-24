@@ -27,6 +27,7 @@ import {
   companyMemberships,
 } from "@paperclipai/db";
 import { notFound, unprocessable } from "../errors.js";
+import { normalizeCompanyAutonomySettings } from "./autonomy-policy.js";
 
 export function companyService(db: Db) {
   const ISSUE_PREFIX_FALLBACK = "CMP";
@@ -36,6 +37,10 @@ export function companyService(db: Db) {
     name: companies.name,
     description: companies.description,
     status: companies.status,
+    companyArchetype: companies.companyArchetype,
+    toolInstallPolicy: companies.toolInstallPolicy,
+    autoAssignApprovedHires: companies.autoAssignApprovedHires,
+    requiredReviewByRole: companies.requiredReviewByRole,
     issuePrefix: companies.issuePrefix,
     issueCounter: companies.issueCounter,
     budgetMonthlyCents: companies.budgetMonthlyCents,
@@ -48,10 +53,10 @@ export function companyService(db: Db) {
   };
 
   function enrichCompany<T extends { logoAssetId: string | null }>(company: T) {
-    return {
+    return normalizeCompanyAutonomySettings({
       ...company,
       logoUrl: company.logoAssetId ? `/api/assets/${company.logoAssetId}/content` : null,
-    };
+    });
   }
 
   function currentUtcMonthWindow(now = new Date()) {

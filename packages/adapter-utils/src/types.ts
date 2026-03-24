@@ -221,6 +221,8 @@ export interface HireApprovedPayload {
   approvedAt: string;
   /** Canonical operator-facing message for cloud adapters to show the user. */
   message: string;
+  issueId?: string | null;
+  issueIds?: string[];
 }
 
 /** Result of onHireApproved hook; failures are non-fatal to the approval flow. */

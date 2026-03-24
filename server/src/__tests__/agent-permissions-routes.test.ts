@@ -35,6 +35,7 @@ const baseAgent = {
 const mockAgentService = vi.hoisted(() => ({
   getById: vi.fn(),
   create: vi.fn(),
+  update: vi.fn(),
   createApiKey: vi.fn(),
   updatePermissions: vi.fn(),
   getChainOfCommand: vi.fn(),
@@ -136,10 +137,12 @@ function createApp(actor: Record<string, unknown>) {
 describe("agent permission routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.PAPERCLIP_HOST_RUNTIME_PATH_MAPS;
     mockAgentService.getById.mockResolvedValue(baseAgent);
     mockAgentService.getChainOfCommand.mockResolvedValue([]);
     mockAgentService.resolveByReference.mockResolvedValue({ ambiguous: false, agent: baseAgent });
     mockAgentService.create.mockResolvedValue(baseAgent);
+    mockAgentService.update.mockResolvedValue(baseAgent);
     mockAgentService.listKeys.mockResolvedValue([]);
     mockAgentService.createApiKey.mockResolvedValue({
       id: "key-1",
@@ -316,5 +319,124 @@ describe("agent permission routes", () => {
     expect(mockAgentService.listKeys).not.toHaveBeenCalled();
     expect(mockAgentService.createApiKey).not.toHaveBeenCalled();
     expect(mockAgentService.revokeKey).not.toHaveBeenCalled();
+  });
+
+  it("canonicalizes mapped Windows host adapter paths before persisting a local agent", async () => {
+    process.env.PAPERCLIP_HOST_RUNTIME_PATH_MAPS = "/paperclip=D:\\new-projects\\paperclip\\data\\docker-paperclip";
+    const app = createApp({
+      type: "board",
+      userId: "board-user",
+      source: "local_implicit",
+      isInstanceAdmin: true,
+      companyIds: [companyId],
+    });
+
+    const res = await request(app)
+      .post(`/api/companies/${companyId}/agents`)
+      .send({
+        name: "Host Worker",
+        role: "engineer",
+        adapterType: "codex_local",
+        adapterConfig: {
+          cwd: "D:\\new-projects\\paperclip\\data\\docker-paperclip\\repos\\product",
+        },
+      });
+
+    expect(res.status).toBe(201);
+    expect(mockAgentService.create).toHaveBeenCalledWith(
+      companyId,
+      expect.objectContaining({
+        adapterConfig: expect.objectContaining({
+          cwd: "/paperclip/repos/product",
+        }),
+      }),
+    );
+  });
+
+  it("drops managed workspace cwd instead of persisting it for managed local agents", async () => {
+    const app = createApp({
+      type: "board",
+      userId: "board-user",
+      source: "local_implicit",
+      isInstanceAdmin: true,
+      companyIds: [companyId],
+    });
+
+    const res = await request(app)
+      .post(`/api/companies/${companyId}/agents`)
+      .send({
+        name: "Managed Worker",
+        role: "engineer",
+        adapterType: "codex_local",
+        adapterConfig: {
+          cwd: "/paperclip/instances/default/workspaces/another-agent",
+        },
+      });
+
+    expect(res.status).toBe(201);
+    expect(mockAgentService.create).toHaveBeenCalledWith(
+      companyId,
+      expect.objectContaining({
+        adapterConfig: expect.not.objectContaining({
+          cwd: expect.anything(),
+        }),
+      }),
+    );
+  });
+
+  it("rejects unmapped Windows host adapter paths with 422", async () => {
+    const app = createApp({
+      type: "board",
+      userId: "board-user",
+      source: "local_implicit",
+      isInstanceAdmin: true,
+      companyIds: [companyId],
+    });
+
+    const res = await request(app)
+      .post(`/api/companies/${companyId}/agents`)
+      .send({
+        name: "Broken Worker",
+        role: "engineer",
+        adapterType: "codex_local",
+        adapterConfig: {
+          cwd: "D:\\outside-maps\\repo",
+        },
+      });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error).toContain("adapterConfig.cwd");
+    expect(mockAgentService.create).not.toHaveBeenCalled();
+  });
+
+  it("canonicalizes persisted adapter paths on agent patch", async () => {
+    process.env.PAPERCLIP_HOST_RUNTIME_PATH_MAPS = "/paperclip=D:\\new-projects\\paperclip\\data\\docker-paperclip";
+    const app = createApp({
+      type: "board",
+      userId: "board-user",
+      source: "local_implicit",
+      isInstanceAdmin: true,
+      companyIds: [companyId],
+    });
+
+    const res = await request(app)
+      .patch(`/api/agents/${agentId}`)
+      .send({
+        adapterType: "codex_local",
+        adapterConfig: {
+          cwd: "D:\\new-projects\\paperclip\\data\\docker-paperclip\\repos\\product",
+        },
+      });
+
+    expect(res.status).toBe(200);
+    expect(mockAgentService.update).toHaveBeenCalledWith(
+      agentId,
+      expect.objectContaining({
+        adapterConfig: expect.objectContaining({
+          cwd: "/paperclip/repos/product",
+        }),
+      }),
+      expect.anything(),
+    );
   });
 });

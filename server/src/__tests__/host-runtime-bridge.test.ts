@@ -32,6 +32,7 @@ afterEach(() => {
   delete process.env.PAPERCLIP_HOST_BRIDGE_TOKEN;
   delete process.env.PAPERCLIP_AGENT_API_URL;
   delete process.env.PAPERCLIP_PUBLIC_URL;
+  delete process.env.PAPERCLIP_HOST_RUNTIME_PATH_MAPS;
 });
 
 describe("host runtime bridge client", () => {
@@ -39,6 +40,17 @@ describe("host runtime bridge client", () => {
     const seenAuthHeaders: string[] = [];
     const seenPaperclipApiUrls: string[] = [];
     const { server, baseUrl } = await startBridgeServer(async (req, res) => {
+      if (req.url === "/health") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({
+          ok: true,
+          version: "0.1",
+          platform: "win32",
+          capabilities: { codex: true, claude: true, browser: false },
+          pathMaps: [],
+        }));
+        return;
+      }
       seenAuthHeaders.push(req.headers.authorization ?? "");
       if (req.url === "/v1/execute") {
         let raw = "";
@@ -168,6 +180,17 @@ describe("host runtime bridge client", () => {
 
   it("coalesces log chunks when the host bridge consumer lags", async () => {
     const { server, baseUrl } = await startBridgeServer((req, res) => {
+      if (req.url === "/health") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({
+          ok: true,
+          version: "0.1",
+          platform: "win32",
+          capabilities: { codex: true, claude: true, browser: false },
+          pathMaps: [],
+        }));
+        return;
+      }
       if (req.url !== "/v1/execute") {
         res.writeHead(404).end();
         return;
@@ -221,5 +244,107 @@ describe("host runtime bridge client", () => {
     expect(result).toMatchObject({ exitCode: 0, summary: "done" });
     expect(logs.some((chunk) => chunk.includes("Host bridge log consumer lagged"))).toBe(true);
     expect(logs.some((chunk) => chunk.includes("burst-239"))).toBe(true);
+  });
+
+  it("fails fast when the server and bridge path maps differ", async () => {
+    const { server, baseUrl } = await startBridgeServer((req, res) => {
+      if (req.url === "/health") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({
+          ok: true,
+          version: "0.1",
+          platform: "win32",
+          capabilities: { codex: true, claude: true, browser: false },
+          pathMaps: [{ containerPath: "/paperclip", hostPath: "D:\\other-data" }],
+        }));
+        return;
+      }
+      res.writeHead(404).end();
+    });
+
+    process.env.PAPERCLIP_HOST_BRIDGE_URL = baseUrl;
+    process.env.PAPERCLIP_HOST_BRIDGE_TOKEN = "bridge-token";
+    process.env.PAPERCLIP_HOST_RUNTIME_PATH_MAPS = "/paperclip=D:\\paperclip-data";
+
+    const result = await executeViaHostRuntimeBridge("codex_local", {
+      runId: "run-mismatch",
+      agent: {
+        id: "agent-1",
+        companyId: "company-1",
+        name: "Host Codex",
+        adapterType: "codex_local",
+        adapterConfig: {},
+      },
+      runtime: {
+        sessionId: null,
+        sessionParams: null,
+        sessionDisplayId: null,
+        taskKey: null,
+      },
+      config: {
+        executionLocation: "host",
+      },
+      context: {},
+      onLog: async () => {},
+    });
+
+    await stopServer(server);
+
+    expect(result.errorCode).toBe("host_bridge_path_map_mismatch");
+    expect(result.errorMessage).toContain("path maps");
+  });
+
+  it("classifies unmapped path failures separately from generic bridge errors", async () => {
+    const { server, baseUrl } = await startBridgeServer(async (req, res) => {
+      if (req.url === "/health") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({
+          ok: true,
+          version: "0.1",
+          platform: "win32",
+          capabilities: { codex: true, claude: true, browser: false },
+          pathMaps: [{ containerPath: "/paperclip", hostPath: "D:\\paperclip-data" }],
+        }));
+        return;
+      }
+      if (req.url === "/v1/execute") {
+        res.writeHead(500, { "content-type": "application/json" });
+        res.end(JSON.stringify({
+          error: 'Path "D:\\\\paperclip-data\\\\instances\\\\default\\\\workspaces\\\\agent-1" is outside configured host-runtime path maps.',
+        }));
+        return;
+      }
+      res.writeHead(404).end();
+    });
+
+    process.env.PAPERCLIP_HOST_BRIDGE_URL = baseUrl;
+    process.env.PAPERCLIP_HOST_BRIDGE_TOKEN = "bridge-token";
+    process.env.PAPERCLIP_HOST_RUNTIME_PATH_MAPS = "/paperclip=D:\\paperclip-data";
+
+    const result = await executeViaHostRuntimeBridge("claude_local", {
+      runId: "run-unmapped",
+      agent: {
+        id: "agent-1",
+        companyId: "company-1",
+        name: "Host Claude",
+        adapterType: "claude_local",
+        adapterConfig: {},
+      },
+      runtime: {
+        sessionId: null,
+        sessionParams: null,
+        sessionDisplayId: null,
+        taskKey: null,
+      },
+      config: {
+        executionLocation: "host",
+      },
+      context: {},
+      onLog: async () => {},
+    });
+
+    await stopServer(server);
+
+    expect(result.errorCode).toBe("host_bridge_unmapped_path");
   });
 });

@@ -2,7 +2,7 @@ import type { IssueOriginKind, IssuePriority, IssueStatus } from "../constants.j
 import type { Goal } from "./goal.js";
 import type { Project, ProjectWorkspace } from "./project.js";
 import type { ExecutionWorkspace, IssueExecutionWorkspaceSettings } from "./workspace-runtime.js";
-import type { IssueWorkProduct } from "./work-product.js";
+import type { IssuePrimaryWorkProducts, IssueWorkProduct } from "./work-product.js";
 
 export interface IssueAncestorProject {
   id: string;
@@ -108,6 +108,10 @@ export interface Issue {
   priority: IssuePriority;
   assigneeAgentId: string | null;
   assigneeUserId: string | null;
+  reviewerAgentId?: string | null;
+  reviewerUserId?: string | null;
+  reviewPolicyKey?: string | null;
+  acceptanceChecklistJson?: string[] | null;
   checkoutRunId: string | null;
   executionRunId: string | null;
   executionAgentNameKey: string | null;
@@ -138,6 +142,7 @@ export interface Issue {
   goal?: Goal | null;
   currentExecutionWorkspace?: ExecutionWorkspace | null;
   workProducts?: IssueWorkProduct[];
+  primaryWorkProducts?: IssuePrimaryWorkProducts;
   mentionedProjects?: Project[];
   myLastTouchAt?: Date | null;
   lastExternalCommentAt?: Date | null;

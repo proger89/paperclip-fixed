@@ -1,4 +1,17 @@
-import type { CompanyStatus, PauseReason } from "../constants.js";
+import type {
+  AgentRole,
+  CompanyArchetype,
+  CompanyStatus,
+  PauseReason,
+  ToolInstallPolicy,
+} from "../constants.js";
+
+export interface CompanyRequiredReviewRule {
+  reviewPolicyKey: string;
+  reviewerRole?: AgentRole | string | null;
+}
+
+export type CompanyRequiredReviewByRole = Record<string, CompanyRequiredReviewRule>;
 
 export interface Company {
   id: string;
@@ -7,6 +20,10 @@ export interface Company {
   status: CompanyStatus;
   pauseReason: PauseReason | null;
   pausedAt: Date | null;
+  companyArchetype?: CompanyArchetype;
+  toolInstallPolicy?: ToolInstallPolicy;
+  autoAssignApprovedHires?: boolean;
+  requiredReviewByRole?: CompanyRequiredReviewByRole | null;
   issuePrefix: string;
   issueCounter: number;
   budgetMonthlyCents: number;

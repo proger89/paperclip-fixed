@@ -8,13 +8,14 @@ import {
   updateProjectWorkspaceSchema,
 } from "@paperclipai/shared";
 import { validate } from "../middleware/validate.js";
-import { projectService, logActivity } from "../services/index.js";
+import { projectService, logActivity, workProductService } from "../services/index.js";
 import { conflict } from "../errors.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
 
 export function projectRoutes(db: Db) {
   const router = Router();
   const svc = projectService(db);
+  const workProducts = workProductService(db);
 
   async function resolveCompanyIdForProjectReference(req: Request) {
     const companyIdQuery = req.query.companyId;
@@ -68,6 +69,18 @@ export function projectRoutes(db: Db) {
     }
     assertCompanyAccess(req, project.companyId);
     res.json(project);
+  });
+
+  router.get("/projects/:id/outputs", async (req, res) => {
+    const id = req.params.id as string;
+    const project = await svc.getById(id);
+    if (!project) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+    assertCompanyAccess(req, project.companyId);
+    const outputs = await workProducts.listProjectOutputs(project.id);
+    res.json(outputs);
   });
 
   router.post("/companies/:companyId/projects", validate(createProjectSchema), async (req, res) => {

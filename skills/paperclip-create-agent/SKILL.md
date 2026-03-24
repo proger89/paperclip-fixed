@@ -67,6 +67,12 @@ curl -sS "$PAPERCLIP_API_URL/llms/agent-icons.txt" \
 - run prompt in adapter config (`promptTemplate` where applicable)
 - source issue linkage (`sourceIssueId` or `sourceIssueIds`) when this hire came from an issue
 
+Path rules for managed local agents:
+
+- Do not copy your current working directory or `$AGENT_HOME` into `adapterConfig.cwd`.
+- Omit `cwd` by default unless the new agent truly needs a specific repo/workspace.
+- If the path must point into Paperclip-managed storage, use the container-visible path contract (for example `/paperclip/...`), never a host absolute path like `D:\...`.
+
 7. Submit hire request.
 
 ```sh

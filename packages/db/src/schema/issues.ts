@@ -33,6 +33,10 @@ export const issues = pgTable(
     priority: text("priority").notNull().default("medium"),
     assigneeAgentId: uuid("assignee_agent_id").references(() => agents.id),
     assigneeUserId: text("assignee_user_id"),
+    reviewerAgentId: uuid("reviewer_agent_id").references(() => agents.id),
+    reviewerUserId: text("reviewer_user_id"),
+    reviewPolicyKey: text("review_policy_key"),
+    acceptanceChecklistJson: jsonb("acceptance_checklist_json").$type<string[]>(),
     checkoutRunId: uuid("checkout_run_id").references(() => heartbeatRuns.id, { onDelete: "set null" }),
     executionRunId: uuid("execution_run_id").references(() => heartbeatRuns.id, { onDelete: "set null" }),
     executionAgentNameKey: text("execution_agent_name_key"),
@@ -68,6 +72,11 @@ export const issues = pgTable(
     assigneeUserStatusIdx: index("issues_company_assignee_user_status_idx").on(
       table.companyId,
       table.assigneeUserId,
+      table.status,
+    ),
+    reviewStatusIdx: index("issues_company_review_status_idx").on(
+      table.companyId,
+      table.reviewPolicyKey,
       table.status,
     ),
     parentIdx: index("issues_company_parent_idx").on(table.companyId, table.parentId),

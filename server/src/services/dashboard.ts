@@ -1,11 +1,13 @@
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
-import { agents, approvals, companies, costEvents, issues } from "@paperclipai/db";
+import { agents, approvals, companies, costEvents, issues, projects } from "@paperclipai/db";
 import { notFound } from "../errors.js";
 import { budgetService } from "./budgets.js";
+import { workProductService } from "./work-products.js";
 
 export function dashboardService(db: Db) {
   const budgets = budgetService(db);
+  const workProducts = workProductService(db);
   return {
     summary: async (companyId: string) => {
       const company = await db
@@ -81,6 +83,33 @@ export function dashboardService(db: Db) {
           ? (monthSpendCents / company.budgetMonthlyCents) * 100
           : 0;
       const budgetOverview = await budgets.overview(companyId);
+      const [outputSummary, reviewRows] = await Promise.all([
+        workProducts.summarizeForDashboard(companyId),
+        db
+          .select({
+            issueId: issues.id,
+            identifier: issues.identifier,
+            title: issues.title,
+            status: issues.status,
+            reviewPolicyKey: issues.reviewPolicyKey,
+            reviewerAgentId: issues.reviewerAgentId,
+            reviewerUserId: issues.reviewerUserId,
+            projectId: issues.projectId,
+            projectName: projects.name,
+            updatedAt: issues.updatedAt,
+          })
+          .from(issues)
+          .leftJoin(projects, eq(projects.id, issues.projectId))
+          .where(
+            and(
+              eq(issues.companyId, companyId),
+              sql`${issues.reviewPolicyKey} is not null`,
+              inArray(issues.status, ["todo", "in_progress", "in_review"]),
+            ),
+          )
+          .orderBy(desc(issues.updatedAt))
+          .limit(6),
+      ]);
 
       return {
         companyId,
@@ -102,6 +131,25 @@ export function dashboardService(db: Db) {
           pendingApprovals: budgetOverview.pendingApprovalCount,
           pausedAgents: budgetOverview.pausedAgentCount,
           pausedProjects: budgetOverview.pausedProjectCount,
+        },
+        outputs: outputSummary,
+        reviews: {
+          pending: reviewRows.filter((row) => row.status === "in_review").length,
+          missingReviewer: reviewRows.filter((row) => !row.reviewerAgentId && !row.reviewerUserId).length,
+          items: reviewRows
+            .filter((row) => typeof row.reviewPolicyKey === "string" && row.reviewPolicyKey.length > 0)
+            .map((row) => ({
+              issueId: row.issueId,
+              identifier: row.identifier,
+              title: row.title,
+              status: row.status,
+              reviewPolicyKey: row.reviewPolicyKey!,
+              reviewerAgentId: row.reviewerAgentId,
+              reviewerUserId: row.reviewerUserId,
+              projectId: row.projectId,
+              projectName: row.projectName,
+              updatedAt: row.updatedAt,
+            })),
         },
       };
     },

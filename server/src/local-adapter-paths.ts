@@ -68,12 +68,6 @@ function normalizePathForCompare(value: string) {
   return value.replaceAll("\\", "/").replace(/\/+$/, "").toLowerCase();
 }
 
-function containsMappedPrefix(value: string, prefix: string) {
-  const normalizedValue = normalizePathForCompare(value);
-  const normalizedPrefix = normalizePathForCompare(prefix);
-  return normalizedValue === normalizedPrefix || normalizedValue.startsWith(`${normalizedPrefix}/`);
-}
-
 function looksLikeWindowsAbsolutePath(value: string) {
   return WINDOWS_ABS_RE.test(value) || WINDOWS_UNC_RE.test(value);
 }
@@ -87,7 +81,8 @@ function reverseMapHostPath(value: string, maps: HostRuntimePathMap[]) {
     const translated = translateMappedPath(value, maps, "host_to_container", {
       throwOnUnmapped: true,
     });
-    return translated === value ? null : translated;
+    if (translated === value) return null;
+    return translated.replaceAll("\\", "/");
   } catch {
     return null;
   }
@@ -310,6 +305,28 @@ export function repairTaskSessionPathState(
 
   const maps = resolveConfiguredHostRuntimePathMaps(options.env);
   const mapped = reverseMapHostPath(rawCwd, maps);
+  const normalizedCwd = mapped ?? rawCwd;
+  if (isManagedWorkspaceContainerPath(normalizedCwd)) {
+    logPathRepair({
+      companyId: options.companyId,
+      agentId: options.agentId,
+      sessionId: options.sessionId,
+      taskKey: options.taskKey,
+      route: options.route,
+      repairSource: options.repairSource,
+      key: "sessionParamsJson.cwd",
+      originalPath: rawCwd,
+      normalizedPath: null,
+      action: "cleared_session",
+    });
+    return {
+      sessionParamsJson: null,
+      sessionDisplayId: null,
+      changed: true,
+      cleared: true,
+      normalizedCwd: false,
+    };
+  }
   if (mapped) {
     params.cwd = mapped;
     logPathRepair({
@@ -333,7 +350,7 @@ export function repairTaskSessionPathState(
     };
   }
 
-  if (!isManagedWorkspaceContainerPath(rawCwd) && !isUnmappedHostAbsolutePath(rawCwd, maps)) {
+  if (!isUnmappedHostAbsolutePath(rawCwd, maps)) {
     return {
       sessionParamsJson: params,
       sessionDisplayId: currentDisplayId,
@@ -374,4 +391,3 @@ export function isManagedAgentWorkspacePath(value: string, env: NodeJS.ProcessEn
 export function isKnownLocalAdapterPathKey(key: string): key is LocalAdapterPathConfigKey {
   return LOCAL_ADAPTER_PATH_CONFIG_KEYS.includes(key as LocalAdapterPathConfigKey);
 }
-
