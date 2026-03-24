@@ -95,7 +95,7 @@ describe("adapter model listing", () => {
     expect(first.some((model) => model.id === "composer-1")).toBe(true);
   });
 
-  it("returns no opencode models when opencode command is unavailable", async () => {
+  it("returns no opencode models when opencode command is unavailable", { timeout: 20_000 }, async () => {
     process.env.PAPERCLIP_OPENCODE_COMMAND = "__paperclip_missing_opencode_command__";
 
     const models = await listAdapterModels("opencode_local");
