@@ -18,6 +18,8 @@ docker run --name paperclip \
 
 Open: `http://localhost:3100`
 
+Paperclip no longer supports an offline/PWA shell in V1. If an older browser session still shows a cached UI after Docker is stopped, start Paperclip once on the same origin so the legacy service worker can unregister itself, or clear the browser's site data for that host.
+
 Data persistence:
 
 - uploaded assets

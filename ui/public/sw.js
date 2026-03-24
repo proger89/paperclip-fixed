@@ -1,4 +1,13 @@
-const CACHE_NAME = "paperclip-v2";
+const PAPERCLIP_CACHE_PREFIX = "paperclip-";
+
+async function clearPaperclipCaches() {
+  const keys = await caches.keys();
+  await Promise.all(
+    keys
+      .filter((key) => key.toLowerCase().startsWith(PAPERCLIP_CACHE_PREFIX))
+      .map((key) => caches.delete(key)),
+  );
+}
 
 self.addEventListener("install", () => {
   self.skipWaiting();
@@ -6,37 +15,21 @@ self.addEventListener("install", () => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.map((key) => caches.delete(key)))
-    )
-  );
-  self.clients.claim();
-});
-
-self.addEventListener("fetch", (event) => {
-  const { request } = event;
-  const url = new URL(request.url);
-
-  // Skip non-GET requests and API calls
-  if (request.method !== "GET" || url.pathname.startsWith("/api")) {
-    return;
-  }
-
-  // Network-first for everything — cache is only an offline fallback
-  event.respondWith(
-    fetch(request)
-      .then((response) => {
-        if (response.ok && url.origin === self.location.origin) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-        }
-        return response;
-      })
-      .catch(() => {
-        if (request.mode === "navigate") {
-          return caches.match("/") || new Response("Offline", { status: 503 });
-        }
-        return caches.match(request);
-      })
+    (async () => {
+      await clearPaperclipCaches();
+      await self.registration.unregister();
+      const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      await Promise.all(
+        clients.map(async (client) => {
+          if ("navigate" in client) {
+            try {
+              await client.navigate(client.url);
+            } catch {
+              // Best-effort refresh only.
+            }
+          }
+        }),
+      );
+    })(),
   );
 });

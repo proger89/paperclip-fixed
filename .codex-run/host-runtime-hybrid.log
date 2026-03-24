@@ -1,1 +1,5 @@
-[paperclip host-runtime] listening on http://127.0.0.1:4243 capabilities=codex,claude,browser
+
+> paperclip@ paperclipai D:\new-projects\paperclip
+> node cli/node_modules/tsx/dist/cli.mjs cli/src/index.ts "host-runtime" "serve" "--listen" "127.0.0.1:4243" "--token" "paperclip-hybrid-dev-token" "--path-map" "/paperclip=D:\\new-projects\\paperclip\\data\\docker-paperclip" "--path-map" "/app=D:\\new-projects\\paperclip"
+
+ ELIFECYCLE  Command failed with exit code 1.
