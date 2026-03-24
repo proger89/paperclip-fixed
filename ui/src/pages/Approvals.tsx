@@ -1,16 +1,25 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useLocation } from "@/lib/router";
+import { useNavigate, useLocation, useSearchParams } from "@/lib/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { approvalsApi } from "../api/approvals";
 import { agentsApi } from "../api/agents";
+import { companySkillsApi } from "../api/companySkills";
+import { issuesApi } from "../api/issues";
+import { pluginsApi } from "../api/plugins";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
+import { useToast } from "../context/ToastContext";
 import { queryKeys } from "../lib/queryKeys";
 import { cn } from "../lib/utils";
+import {
+  decodeInstallApprovalPrefill,
+  INSTALL_APPROVAL_PREFILL_SEARCH_PARAM,
+} from "../lib/install-approval-prefill";
 import { PageTabBar } from "../components/PageTabBar";
 import { Tabs } from "@/components/ui/tabs";
 import { ShieldCheck } from "lucide-react";
 import { ApprovalCard } from "../components/ApprovalCard";
+import { InstallApprovalComposer } from "../components/InstallApprovalComposer";
 import { PageSkeleton } from "../components/PageSkeleton";
 
 type StatusFilter = "pending" | "all";
@@ -18,12 +27,17 @@ type StatusFilter = "pending" | "all";
 export function Approvals() {
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
+  const { pushToast } = useToast();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const pathSegment = location.pathname.split("/").pop() ?? "pending";
   const statusFilter: StatusFilter = pathSegment === "all" ? "all" : "pending";
   const [actionError, setActionError] = useState<string | null>(null);
+  const installApprovalPrefill = decodeInstallApprovalPrefill(
+    searchParams.get(INSTALL_APPROVAL_PREFILL_SEARCH_PARAM),
+  );
 
   useEffect(() => {
     setBreadcrumbs([{ label: "Approvals" }]);
@@ -38,6 +52,36 @@ export function Approvals() {
   const { data: agents } = useQuery({
     queryKey: queryKeys.agents.list(selectedCompanyId!),
     queryFn: () => agentsApi.list(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+
+  const { data: roleBundles, isLoading: roleBundlesLoading } = useQuery({
+    queryKey: queryKeys.agents.roleBundles(selectedCompanyId!),
+    queryFn: () => agentsApi.roleBundles(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+
+  const { data: companySkills, isLoading: companySkillsLoading } = useQuery({
+    queryKey: queryKeys.companySkills.list(selectedCompanyId!),
+    queryFn: () => companySkillsApi.list(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+
+  const { data: installedPlugins, isLoading: installedPluginsLoading } = useQuery({
+    queryKey: queryKeys.plugins.all,
+    queryFn: () => pluginsApi.list(),
+    enabled: !!selectedCompanyId,
+  });
+
+  const { data: pluginExamples, isLoading: pluginExamplesLoading } = useQuery({
+    queryKey: queryKeys.plugins.examples,
+    queryFn: () => pluginsApi.listExamples(),
+    enabled: !!selectedCompanyId,
+  });
+
+  const { data: issues, isLoading: issuesLoading } = useQuery({
+    queryKey: queryKeys.issues.list(selectedCompanyId!),
+    queryFn: () => issuesApi.list(selectedCompanyId!),
     enabled: !!selectedCompanyId,
   });
 
@@ -61,6 +105,31 @@ export function Approvals() {
     },
     onError: (err) => {
       setActionError(err instanceof Error ? err.message : "Failed to reject");
+    },
+  });
+
+  const createInstallApprovalMutation = useMutation({
+    mutationFn: (input: {
+      type: "install_company_skill" | "install_connector_plugin";
+      payload: Record<string, unknown>;
+      issueIds: string[];
+    }) => approvalsApi.create(selectedCompanyId!, input),
+    onSuccess: (approval) => {
+      setActionError(null);
+      void Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.approvals.list(selectedCompanyId!) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(selectedCompanyId!) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.sidebarBadges(selectedCompanyId!) }),
+      ]);
+      pushToast({
+        tone: "success",
+        title: "Approval requested",
+        body: "Install request added to the approvals queue.",
+        action: { label: "Open", href: `/approvals/${approval.id}` },
+      });
+    },
+    onError: (err) => {
+      setActionError(err instanceof Error ? err.message : "Failed to create install approval");
     },
   });
 
@@ -102,6 +171,26 @@ export function Approvals() {
 
       {error && <p className="text-sm text-destructive">{error.message}</p>}
       {actionError && <p className="text-sm text-destructive">{actionError}</p>}
+
+      <InstallApprovalComposer
+        approvals={data ?? []}
+        agents={agents ?? []}
+        roleBundles={roleBundles ?? []}
+        companySkills={companySkills ?? []}
+        installedPlugins={installedPlugins ?? []}
+        pluginExamples={pluginExamples ?? []}
+        issues={issues ?? []}
+        prefill={installApprovalPrefill}
+        lookupsLoading={
+          roleBundlesLoading
+          || companySkillsLoading
+          || installedPluginsLoading
+          || pluginExamplesLoading
+          || issuesLoading
+        }
+        isPending={createInstallApprovalMutation.isPending}
+        onCreate={(input) => createInstallApprovalMutation.mutate(input)}
+      />
 
       {filtered.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">

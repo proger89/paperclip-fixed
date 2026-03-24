@@ -4,6 +4,8 @@ import type {
   ReviewPolicyKey,
   RoleBundleKey,
 } from "@paperclipai/shared";
+import { resolveRoleBundleSkillRequirement } from "./role-bundle-skills.js";
+import { listBundledPluginExamples } from "./plugin-example-catalog.js";
 
 export interface RoleBundleConnectorRequirement {
   key: string;
@@ -13,6 +15,8 @@ export interface RoleBundleConnectorRequirement {
   version?: string;
   source?: "npm" | "local_path";
   localPath?: string;
+  description?: string;
+  categories?: string[];
   reason?: string;
 }
 
@@ -23,6 +27,7 @@ export interface RoleBundleDefinition {
   title: string;
   requestedSkillRefs: string[];
   requiredConnectorPlugins: RoleBundleConnectorRequirement[];
+  suggestedConnectorPlugins: RoleBundleConnectorRequirement[];
   managedInstructions: string[];
   managedInstructionOverlays: Partial<Record<string, string>>;
   defaultReviewPolicyKey: ReviewPolicyKey | null;
@@ -67,6 +72,35 @@ function dedupe(values: string[]) {
   return Array.from(new Set(values));
 }
 
+const BUNDLED_CONNECTOR_EXAMPLES = listBundledPluginExamples()
+  .filter((plugin) => plugin.categories.includes("connector"));
+
+function bundledConnectorSuggestion(
+  pluginKey: string,
+  reason: string,
+): RoleBundleConnectorRequirement {
+  const example = BUNDLED_CONNECTOR_EXAMPLES.find((plugin) => plugin.pluginKey === pluginKey);
+  if (!example) {
+    return {
+      key: pluginKey,
+      displayName: pluginKey,
+      reason,
+    };
+  }
+
+  return {
+    key: example.pluginKey,
+    displayName: example.displayName,
+    pluginKey: example.pluginKey,
+    packageName: example.packageName,
+    source: "local_path",
+    localPath: example.localPath,
+    description: example.description,
+    categories: example.categories,
+    reason,
+  };
+}
+
 function buildRoleFocusOverlay(title: string, bullets: string[]) {
   return [
     "## Role Focus",
@@ -94,6 +128,12 @@ export const ROLE_BUNDLES: Record<RoleBundleKey, RoleBundleDefinition> = {
       ...BROWSER_WORKFLOW_SKILLS,
     ]),
     requiredConnectorPlugins: [],
+    suggestedConnectorPlugins: [
+      bundledConnectorSuggestion(
+        "paperclip-kitchen-sink-example",
+        "Useful sandbox for prototyping connector, automation, and workspace flows before committing to a dedicated integration.",
+      ),
+    ],
     managedInstructions: ["AGENTS.md"],
     managedInstructionOverlays: {
       "AGENTS.md": buildRoleFocusOverlay(
@@ -119,6 +159,7 @@ export const ROLE_BUNDLES: Record<RoleBundleKey, RoleBundleDefinition> = {
       ...CORE_MEMORY_SKILLS,
     ]),
     requiredConnectorPlugins: [],
+    suggestedConnectorPlugins: [],
     managedInstructions: ["AGENTS.md"],
     managedInstructionOverlays: {
       "AGENTS.md": buildRoleFocusOverlay(
@@ -144,6 +185,7 @@ export const ROLE_BUNDLES: Record<RoleBundleKey, RoleBundleDefinition> = {
       ...CORE_MEMORY_SKILLS,
     ]),
     requiredConnectorPlugins: [],
+    suggestedConnectorPlugins: [],
     managedInstructions: ["AGENTS.md"],
     managedInstructionOverlays: {
       "AGENTS.md": buildRoleFocusOverlay(
@@ -170,6 +212,16 @@ export const ROLE_BUNDLES: Record<RoleBundleKey, RoleBundleDefinition> = {
       ...CORE_MEMORY_SKILLS,
     ]),
     requiredConnectorPlugins: [],
+    suggestedConnectorPlugins: [
+      bundledConnectorSuggestion(
+        "paperclip-kitchen-sink-example",
+        "Good default sandbox when this role needs to validate a new connector or automation path before asking for a bespoke plugin.",
+      ),
+      bundledConnectorSuggestion(
+        "paperclipai.plugin-authoring-smoke-example",
+        "Minimal connector starter for cases where the company needs a small custom integration and wants a safe local install path first.",
+      ),
+    ],
     managedInstructions: ["AGENTS.md"],
     managedInstructionOverlays: {
       "AGENTS.md": buildRoleFocusOverlay(
@@ -197,6 +249,7 @@ export const ROLE_BUNDLES: Record<RoleBundleKey, RoleBundleDefinition> = {
       ...CORE_MEMORY_SKILLS,
     ]),
     requiredConnectorPlugins: [],
+    suggestedConnectorPlugins: [],
     managedInstructions: ["AGENTS.md"],
     managedInstructionOverlays: {
       "AGENTS.md": buildRoleFocusOverlay(
@@ -224,6 +277,12 @@ export const ROLE_BUNDLES: Record<RoleBundleKey, RoleBundleDefinition> = {
       "pr-report",
     ]),
     requiredConnectorPlugins: [],
+    suggestedConnectorPlugins: [
+      bundledConnectorSuggestion(
+        "paperclip-kitchen-sink-example",
+        "Helps prototype connector-backed publishing and automation flows before the team invests in a production channel integration.",
+      ),
+    ],
     managedInstructions: ["AGENTS.md"],
     managedInstructionOverlays: {
       "AGENTS.md": buildRoleFocusOverlay(
@@ -279,11 +338,37 @@ export function listRoleBundleCatalog(
       agentRole: bundle.agentRole,
       title: bundle.title,
       requestedSkillRefs: [...bundle.requestedSkillRefs],
+      requestedSkillRequirements: bundle.requestedSkillRefs.map((reference) => {
+        const requirement = resolveRoleBundleSkillRequirement(reference);
+        return {
+          reference: requirement.reference,
+          displayName: requirement.displayName,
+          source: requirement.source,
+          sourceType: requirement.sourceType,
+        };
+      }),
       requiredConnectorPlugins: bundle.requiredConnectorPlugins.map((requirement) => ({
         key: requirement.key,
         displayName: requirement.displayName,
         pluginKey: requirement.pluginKey ?? null,
         packageName: requirement.packageName ?? null,
+        version: requirement.version ?? null,
+        source: requirement.source ?? null,
+        localPath: requirement.localPath ?? null,
+        description: requirement.description ?? null,
+        categories: requirement.categories ?? null,
+        reason: requirement.reason ?? null,
+      })),
+      suggestedConnectorPlugins: bundle.suggestedConnectorPlugins.map((requirement) => ({
+        key: requirement.key,
+        displayName: requirement.displayName,
+        pluginKey: requirement.pluginKey ?? null,
+        packageName: requirement.packageName ?? null,
+        version: requirement.version ?? null,
+        source: requirement.source ?? null,
+        localPath: requirement.localPath ?? null,
+        description: requirement.description ?? null,
+        categories: requirement.categories ?? null,
         reason: requirement.reason ?? null,
       })),
       defaultReviewPolicyKey: bundle.defaultReviewPolicyKey,

@@ -247,6 +247,11 @@ export function PluginManager() {
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-medium">{example.displayName}</span>
                         <Badge variant="outline">Example</Badge>
+                        {example.categories.map((category) => (
+                          <Badge key={`${example.packageName}:${category}`} variant="secondary" className="capitalize">
+                            {category}
+                          </Badge>
+                        ))}
                         {installedPlugin ? (
                           <Badge
                             variant={installedPlugin.status === "ready" ? "default" : "secondary"}

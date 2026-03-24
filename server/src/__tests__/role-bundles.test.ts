@@ -44,6 +44,16 @@ describe("role bundles", () => {
       "pr-report",
       "playwright",
     ]));
+    expect(pm.suggestedConnectorPlugins).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: "paperclip-kitchen-sink-example",
+        source: "local_path",
+      }),
+      expect.objectContaining({
+        key: "paperclipai.plugin-authoring-smoke-example",
+        source: "local_path",
+      }),
+    ]));
   });
 
   it("uses only curated skill refs that can be resolved by the install flow", () => {

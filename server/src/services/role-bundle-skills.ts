@@ -53,7 +53,7 @@ function repoSkillRoots() {
   ].filter((value): value is string => Boolean(value));
 }
 
-function resolveSkillImportSource(reference: string) {
+export function resolveSkillImportSource(reference: string) {
   const trimmed = reference.trim();
   if (!trimmed) return { source: null, sourceType: null } as const;
 
@@ -78,6 +78,17 @@ function resolveSkillImportSource(reference: string) {
   return { source: null, sourceType: null } as const;
 }
 
+export function resolveRoleBundleSkillRequirement(reference: string): RoleBundleSkillRequirement {
+  const trimmed = reference.trim();
+  const importSource = resolveSkillImportSource(trimmed);
+  return {
+    reference: trimmed,
+    displayName: trimmed,
+    source: importSource.source,
+    sourceType: importSource.sourceType,
+  };
+}
+
 export async function resolveRoleBundleSkillCoverage(
   db: Db,
   companyId: string,
@@ -99,13 +110,7 @@ export async function resolveRoleBundleSkillCoverage(
       continue;
     }
 
-    const importSource = resolveSkillImportSource(trimmed);
-    missing.set(trimmed, {
-      reference: trimmed,
-      displayName: trimmed,
-      source: importSource.source,
-      sourceType: importSource.sourceType,
-    });
+    missing.set(trimmed, resolveRoleBundleSkillRequirement(trimmed));
   }
 
   return {

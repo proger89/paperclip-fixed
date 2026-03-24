@@ -5,11 +5,18 @@ import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useToast } from "../context/ToastContext";
 import { agentsApi } from "../api/agents";
+import { approvalsApi } from "../api/approvals";
 import { companySkillsApi } from "../api/companySkills";
 import { instanceSettingsApi } from "../api/instanceSettings";
 import { pluginsApi } from "../api/plugins";
 import { queryKeys } from "../lib/queryKeys";
 import { buildAgentHireToastPlan } from "../lib/agent-hire-feedback";
+import { buildInstallApprovalPrefillPath } from "../lib/install-approval-prefill";
+import {
+  findInstalledConnector,
+  findOpenConnectorInstallApproval,
+  findOpenSkillInstallApproval,
+} from "../lib/install-approval-drafts";
 import { AGENT_ROLES, REVIEW_POLICY_LABELS } from "@paperclipai/shared";
 import { getRoleBundleReadiness } from "../lib/role-bundle-readiness";
 import { Button } from "@/components/ui/button";
@@ -186,7 +193,15 @@ export function NewAgent() {
   } = useQuery({
     queryKey: queryKeys.plugins.all,
     queryFn: () => pluginsApi.list(),
-    enabled: Boolean(selectedRoleBundle?.requiredConnectorPlugins.length),
+    enabled: Boolean(
+      (selectedRoleBundle?.requiredConnectorPlugins.length ?? 0)
+      || (selectedRoleBundle?.suggestedConnectorPlugins.length ?? 0),
+    ),
+  });
+  const { data: approvals } = useQuery({
+    queryKey: queryKeys.approvals.list(selectedCompanyId!),
+    queryFn: () => approvalsApi.list(selectedCompanyId!),
+    enabled: Boolean(selectedCompanyId && selectedRoleBundle),
   });
 
   const roleBundleReadiness = useMemo(
@@ -227,7 +242,10 @@ export function NewAgent() {
   useEffect(() => {
     if (bundleIncludedSkillKeys.length === 0) return;
     const includedKeys = new Set(bundleIncludedSkillKeys);
-    setSelectedSkillKeys((prev) => prev.filter((key) => !includedKeys.has(key)));
+    setSelectedSkillKeys((prev) => {
+      const next = prev.filter((key) => !includedKeys.has(key));
+      return next.length === prev.length ? prev : next;
+    });
   }, [bundleIncludedSkillKeys]);
 
   const createAgent = useMutation({
@@ -335,6 +353,134 @@ export function NewAgent() {
         ? "This company is configured for manual installs, or the missing connector lacks an install package."
         : `Covered now: ${bundleCoverageCount} ${bundleCoverageCount === 1 ? "capability" : "capabilities"}.`
     : null;
+  const missingApprovalSkillRequirements = useMemo(
+    () =>
+      (selectedRoleBundle?.requestedSkillRequirements ?? []).filter((requirement) =>
+        roleBundleReadiness?.pendingApprovalSkillRefs.includes(requirement.reference),
+      ),
+    [roleBundleReadiness, selectedRoleBundle],
+  );
+  const missingManualSkillRequirements = useMemo(
+    () =>
+      (selectedRoleBundle?.requestedSkillRequirements ?? []).filter((requirement) =>
+        roleBundleReadiness?.manualSkillRefs.includes(requirement.reference),
+      ),
+    [roleBundleReadiness, selectedRoleBundle],
+  );
+  const missingApprovalConnectorRequirements = useMemo(
+    () =>
+      (selectedRoleBundle?.requiredConnectorPlugins ?? []).filter((requirement) =>
+        roleBundleReadiness?.pendingApprovalConnectors.some((entry) => entry.key === requirement.key),
+      ),
+    [roleBundleReadiness, selectedRoleBundle],
+  );
+  const roleBundleSkillRequirements = useMemo(
+    () =>
+      selectedRoleBundle
+        ? selectedRoleBundle.requestedSkillRequirements.length > 0
+          ? selectedRoleBundle.requestedSkillRequirements
+          : selectedRoleBundle.requestedSkillRefs.map((reference) => ({
+              reference,
+              displayName: reference,
+              source: null,
+              sourceType: null,
+            }))
+        : [],
+    [selectedRoleBundle],
+  );
+  const suggestedConnectorRecommendations = useMemo(() => {
+    if (!selectedRoleBundle) return [];
+    const requiredKeys = new Set(selectedRoleBundle.requiredConnectorPlugins.map((entry) => entry.key));
+    return selectedRoleBundle.suggestedConnectorPlugins
+      .filter((requirement) => !requiredKeys.has(requirement.key))
+      .map((requirement) => ({
+        requirement,
+        installedConnector:
+          findInstalledConnector(installedPlugins ?? [], {
+            pluginKey: requirement.pluginKey ?? requirement.key,
+            packageName: requirement.packageName ?? null,
+            localPath: requirement.localPath ?? null,
+          }) ?? null,
+        openApproval:
+          findOpenConnectorInstallApproval(approvals ?? [], {
+            pluginKey: requirement.pluginKey ?? requirement.key,
+            packageName: requirement.packageName ?? null,
+            localPath: requirement.localPath ?? null,
+          }) ?? null,
+      }));
+  }, [approvals, installedPlugins, selectedRoleBundle]);
+  const pendingSkillInstallApprovals = useMemo(
+    () =>
+      missingApprovalSkillRequirements
+        .map((requirement) => ({
+          requirement,
+          approval:
+            findOpenSkillInstallApproval(approvals ?? [], {
+              requestedRef: requirement.reference,
+              source: requirement.source,
+              name: requirement.displayName,
+            }) ?? null,
+        }))
+        .filter(
+          (entry): entry is { requirement: typeof entry.requirement; approval: NonNullable<typeof entry.approval> } =>
+            entry.approval !== null,
+        ),
+    [approvals, missingApprovalSkillRequirements],
+  );
+  const requestableSkillRequirements = useMemo(() => {
+    const blocked = new Set(
+      pendingSkillInstallApprovals.map((entry) => entry.requirement.reference),
+    );
+    return missingApprovalSkillRequirements.filter((requirement) => !blocked.has(requirement.reference));
+  }, [missingApprovalSkillRequirements, pendingSkillInstallApprovals]);
+  const pendingConnectorInstallApprovals = useMemo(
+    () =>
+      missingApprovalConnectorRequirements
+        .map((requirement) => ({
+          requirement,
+          approval:
+            findOpenConnectorInstallApproval(approvals ?? [], {
+              pluginKey: requirement.pluginKey ?? requirement.key,
+              packageName: requirement.packageName ?? null,
+              localPath: requirement.localPath ?? null,
+            }) ?? null,
+        }))
+        .filter(
+          (entry): entry is { requirement: typeof entry.requirement; approval: NonNullable<typeof entry.approval> } =>
+            entry.approval !== null,
+        ),
+    [approvals, missingApprovalConnectorRequirements],
+  );
+  const requestableConnectorRequirements = useMemo(() => {
+    const blocked = new Set(
+      pendingConnectorInstallApprovals.map((entry) => entry.requirement.key),
+    );
+    return missingApprovalConnectorRequirements.filter((requirement) => !blocked.has(requirement.key));
+  }, [missingApprovalConnectorRequirements, pendingConnectorInstallApprovals]);
+  const existingBundleApprovalCount =
+    pendingSkillInstallApprovals.length + pendingConnectorInstallApprovals.length;
+  const requestableBundleApprovalCount =
+    requestableSkillRequirements.length + requestableConnectorRequirements.length;
+  const readinessSupplement =
+    existingBundleApprovalCount > 0
+      ? `${existingBundleApprovalCount} ${existingBundleApprovalCount === 1 ? "install approval is already open" : "install approvals are already open"} for this bundle and will not be duplicated on hire.`
+      : null;
+  const resolvedReadinessHeadline = roleBundleReadiness
+    ? requestableBundleApprovalCount > 0
+      ? `${requestableBundleApprovalCount} ${requestableBundleApprovalCount === 1 ? "bundle capability needs" : "bundle capabilities need"} install approval${requestableBundleApprovalCount === 1 ? "" : "s"} before this role is fully ready.`
+      : existingBundleApprovalCount > 0
+        ? `${existingBundleApprovalCount} ${existingBundleApprovalCount === 1 ? "bundle capability is already waiting on" : "bundle capabilities are already waiting on"} open install approval${existingBundleApprovalCount === 1 ? "" : "s"}.`
+        : readinessHeadline
+    : readinessHeadline;
+  const resolvedReadinessDetail = roleBundleReadiness
+    ? requestableBundleApprovalCount > 0
+      ? existingBundleApprovalCount > 0
+        ? "Some bundle installs already have approvals in queue; the remaining gaps can be requested now or will be queued on hire."
+        : readinessDetail
+      : existingBundleApprovalCount > 0
+        ? "Open approvals already cover the installable bundle gaps."
+        : readinessDetail
+    : readinessDetail;
 
   function toggleSkill(key: string, checked: boolean) {
     setSelectedSkillKeys((prev) => {
@@ -343,6 +489,51 @@ export function NewAgent() {
       }
       return prev.filter((value) => value !== key);
     });
+  }
+
+  function openSkillInstallDraft(reference: {
+    displayName: string;
+    reference: string;
+    source?: string | null;
+  }) {
+    if (!reference.source || !selectedRoleBundle) return;
+    navigate(
+      buildInstallApprovalPrefillPath({
+        kind: "skill",
+        mode: "import",
+        source: reference.source,
+        requestedRef: reference.reference,
+        name: reference.displayName,
+        roleBundleKey: selectedRoleBundle.key,
+        reason: `Required for ${selectedRoleBundle.label} role bundle`,
+      }),
+    );
+  }
+
+  function openConnectorInstallDraft(requirement: {
+    key: string;
+    displayName: string;
+    pluginKey?: string | null;
+    packageName?: string | null;
+    localPath?: string | null;
+    source?: "npm" | "local_path" | null;
+    version?: string | null;
+    reason?: string | null;
+  }) {
+    if (!selectedRoleBundle) return;
+    navigate(
+      buildInstallApprovalPrefillPath({
+        kind: "connector",
+        mode: requirement.source === "npm" ? "npm" : "local_path",
+        packageName: requirement.packageName ?? null,
+        localPath: requirement.localPath ?? null,
+        pluginKey: requirement.pluginKey ?? requirement.key,
+        name: requirement.displayName,
+        version: requirement.version ?? null,
+        roleBundleKey: selectedRoleBundle.key,
+        reason: requirement.reason ?? `Required for ${selectedRoleBundle.label} role bundle`,
+      }),
+    );
   }
 
   return (
@@ -521,9 +712,14 @@ export function NewAgent() {
 
               {roleBundleReadiness ? (
                 <div className="rounded-md border border-border/70 bg-background/80 p-3">
-                  <p className="text-sm font-medium">{readinessHeadline}</p>
-                  {readinessDetail ? (
-                    <p className="mt-1 text-xs text-muted-foreground">{readinessDetail}</p>
+                  <p className="text-sm font-medium">{resolvedReadinessHeadline}</p>
+                  {resolvedReadinessDetail ? (
+                    <p className="mt-1 text-xs text-muted-foreground">{resolvedReadinessDetail}</p>
+                  ) : null}
+                  {readinessSupplement ? (
+                    <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                      {readinessSupplement}
+                    </p>
                   ) : null}
                 </div>
               ) : null}
@@ -534,23 +730,27 @@ export function NewAgent() {
                     Auto skills
                   </p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
-                    {selectedRoleBundle.requestedSkillRefs.map((skillRef) => {
+                    {roleBundleSkillRequirements.map((requirement) => {
                       const installedByCompany = roleBundleReadiness?.installedSkills.some(
-                        (entry) => entry.reference === skillRef,
+                        (entry) => entry.reference === requirement.reference,
+                      );
+                      const queuedForApproval = roleBundleReadiness?.pendingApprovalSkillRefs.includes(
+                        requirement.reference,
                       );
                       return (
                         <span
-                          key={skillRef}
+                          key={requirement.reference}
+                          title={requirement.reference}
                           className={cn(
                             "rounded-full border px-2 py-0.5 font-mono text-[10px]",
                             installedByCompany
                               ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                              : toolInstallPolicy === "approval_gated"
+                              : queuedForApproval
                                 ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
                                 : "border-border bg-background text-muted-foreground",
                           )}
                         >
-                          {skillRef}
+                          {requirement.displayName}
                         </span>
                       );
                     })}
@@ -559,8 +759,88 @@ export function NewAgent() {
                     Green means the skill is already installed in the company library. Amber means the hire will queue an install approval.
                     {toolInstallPolicy === "manual_only"
                       ? " Neutral chips still need manual setup."
-                      : ""}
+                      : " Neutral chips still need manual setup or a cataloged install source."}
                   </p>
+                  {requestableSkillRequirements.length > 0 ? (
+                    <div className="mt-3 space-y-1.5">
+                      {requestableSkillRequirements.map((requirement) => (
+                        <div
+                          key={requirement.reference}
+                          className="flex items-center justify-between gap-3 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2"
+                        >
+                          <div className="min-w-0">
+                            <div className="text-xs font-medium text-foreground">
+                              {requirement.displayName}
+                            </div>
+                            <div className="text-[11px] text-amber-700 dark:text-amber-300">
+                              Install approval required
+                            </div>
+                            <div className="truncate text-[11px] text-muted-foreground">
+                              {requirement.sourceType === "skills_sh" ? "skills.sh" : "Cataloged import"}:{" "}
+                              {requirement.source ?? requirement.reference}
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openSkillInstallDraft(requirement)}
+                          >
+                            Request now
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {pendingSkillInstallApprovals.length > 0 ? (
+                    <div className="mt-3 space-y-1.5">
+                      {pendingSkillInstallApprovals.map(({ requirement, approval }) => (
+                        <div
+                          key={`${requirement.reference}-${approval.id}`}
+                          className="flex items-center justify-between gap-3 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2"
+                        >
+                          <div className="min-w-0">
+                            <div className="text-xs font-medium text-foreground">
+                              {requirement.displayName}
+                            </div>
+                            <div className="text-[11px] text-amber-700 dark:text-amber-300">
+                              Approval already open
+                            </div>
+                            <div className="truncate text-[11px] text-muted-foreground">
+                              {approval.status === "revision_requested"
+                                ? "Needs revision before install can continue."
+                                : "Install request is already waiting in the approvals queue."}
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => navigate(`/approvals/${approval.id}`)}
+                          >
+                            Open approval
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {missingManualSkillRequirements.length > 0 ? (
+                    <div className="mt-3 space-y-1.5">
+                      {missingManualSkillRequirements.map((requirement) => (
+                        <div
+                          key={requirement.reference}
+                          className="rounded-md border border-border/70 bg-background/70 px-3 py-2"
+                        >
+                          <div className="text-xs font-medium text-foreground">
+                            {requirement.displayName}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground">
+                            Install source not cataloged. Manual setup required before this role bundle is fully ready.
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
 
                 <div>
@@ -569,23 +849,162 @@ export function NewAgent() {
                   </p>
                   {selectedRoleBundle.requiredConnectorPlugins.length > 0 ? (
                     <div className="mt-2 space-y-1.5">
-                      {selectedRoleBundle.requiredConnectorPlugins.map((requirement) => (
-                        <div key={requirement.key} className="text-xs text-muted-foreground">
-                          <span className="font-medium text-foreground">{requirement.displayName}</span>
-                          {requirement.reason ? ` · ${requirement.reason}` : ""}
-                        </div>
-                      ))}
+                      {selectedRoleBundle.requiredConnectorPlugins.map((requirement) => {
+                        const installedConnector = roleBundleReadiness?.installedConnectors.find(
+                          (entry) => entry.requirement.key === requirement.key,
+                        );
+                        const openApproval = pendingConnectorInstallApprovals.find(
+                          (entry) => entry.requirement.key === requirement.key,
+                        )?.approval;
+                        const needsApproval = requestableConnectorRequirements.some(
+                          (entry) => entry.key === requirement.key,
+                        );
+                        const needsManualSetup = roleBundleReadiness?.manualConnectorRequirements.some(
+                          (entry) => entry.key === requirement.key,
+                        );
+                        return (
+                          <div
+                            key={requirement.key}
+                            className="flex items-center justify-between gap-3 rounded-md border border-border/70 bg-background/70 px-3 py-2"
+                          >
+                            <div className="min-w-0 text-xs text-muted-foreground">
+                              <div className="font-medium text-foreground">{requirement.displayName}</div>
+                              {installedConnector ? (
+                                <div className="text-emerald-700 dark:text-emerald-300">
+                                  Installed via {installedConnector.plugin.pluginKey}
+                                </div>
+                              ) : openApproval ? (
+                                <div className="text-amber-700 dark:text-amber-300">
+                                  {openApproval.status === "revision_requested"
+                                    ? "Approval open and waiting on revision"
+                                    : "Approval already open"}
+                                </div>
+                              ) : needsApproval ? (
+                                <div className="text-amber-700 dark:text-amber-300">
+                                  Install approval required
+                                </div>
+                              ) : needsManualSetup ? (
+                                <div>Manual setup required</div>
+                              ) : null}
+                              {requirement.reason ? (
+                                <div className="truncate text-[11px] text-muted-foreground">
+                                  {requirement.reason}
+                                </div>
+                              ) : null}
+                            </div>
+                            {openApproval ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => navigate(`/approvals/${openApproval.id}`)}
+                              >
+                                Open approval
+                              </Button>
+                            ) : needsApproval ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openConnectorInstallDraft(requirement)}
+                              >
+                                Request now
+                              </Button>
+                            ) : null}
+                          </div>
+                        );
+                      })}
                     </div>
                   ) : (
                     <p className="mt-2 text-xs text-muted-foreground">
                       No default connector installs required for this bundle.
                     </p>
                   )}
+                  {installedPluginsError instanceof Error ? (
+                    <p className="mt-2 text-xs text-destructive">{installedPluginsError.message}</p>
+                  ) : null}
                 </div>
+
+                {suggestedConnectorRecommendations.length > 0 ? (
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                      Recommended connectors
+                    </p>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      These installs do not block the hire. They are curated defaults for this role bundle based on bundled plugins that already exist in this repo.
+                    </p>
+                    <div className="mt-2 space-y-1.5">
+                      {suggestedConnectorRecommendations.map(({ requirement, installedConnector, openApproval }) => (
+                        <div
+                          key={requirement.key}
+                          className="flex items-center justify-between gap-3 rounded-md border border-border/70 bg-background/70 px-3 py-2"
+                        >
+                          <div className="min-w-0 text-xs text-muted-foreground">
+                            <div className="font-medium text-foreground">{requirement.displayName}</div>
+                            {requirement.description ? (
+                              <div className="text-[11px] text-muted-foreground">
+                                {requirement.description}
+                              </div>
+                            ) : null}
+                            {installedConnector ? (
+                              <div className="text-emerald-700 dark:text-emerald-300">
+                                Installed via {installedConnector.pluginKey}
+                              </div>
+                            ) : openApproval ? (
+                              <div className="text-amber-700 dark:text-amber-300">
+                                {openApproval.status === "revision_requested"
+                                  ? "Approval open and waiting on revision"
+                                  : "Approval already open"}
+                              </div>
+                            ) : (
+                              <div>Optional install</div>
+                            )}
+                            {requirement.reason ? (
+                              <div className="truncate text-[11px] text-muted-foreground">
+                                {requirement.reason}
+                              </div>
+                            ) : null}
+                            {requirement.categories && requirement.categories.length > 0 ? (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {requirement.categories.map((category) => (
+                                  <span
+                                    key={`${requirement.key}-${category}`}
+                                    className="rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em]"
+                                  >
+                                    {category}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                          {installedConnector ? null : openApproval ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => navigate(`/approvals/${openApproval.id}`)}
+                            >
+                              Open approval
+                            </Button>
+                          ) : (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openConnectorInstallDraft(requirement)}
+                            >
+                              Request now
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               <p className="text-xs text-muted-foreground">
-                Paperclip will attach installed skills automatically and create approval-gated install requests for missing bundle capabilities when needed.
+                Paperclip will attach installed skills automatically and keep duplicate manual selections out of the hire request.
               </p>
             </div>
             {roleBundlesError instanceof Error ? (
@@ -623,16 +1042,25 @@ export function NewAgent() {
               <div className="space-y-3">
                 {availableSkills.map((skill) => {
                   const inputId = `skill-${skill.id}`;
-                  const checked = selectedSkillKeys.includes(skill.key);
+                  const includedViaBundle = bundleIncludedSkillKeys.includes(skill.key);
+                  const checked = includedViaBundle || selectedSkillKeys.includes(skill.key);
                   return (
                     <div key={skill.id} className="flex items-start gap-3">
                       <Checkbox
                         id={inputId}
                         checked={checked}
+                        disabled={includedViaBundle}
                         onCheckedChange={(next) => toggleSkill(skill.key, next === true)}
                       />
                       <label htmlFor={inputId} className="grid gap-1 leading-none">
-                        <span className="text-sm font-medium">{skill.name}</span>
+                        <span className="text-sm font-medium">
+                          {skill.name}
+                          {includedViaBundle ? (
+                            <span className="ml-2 text-[11px] font-normal text-emerald-700 dark:text-emerald-300">
+                              Included via {selectedRoleBundle?.label ?? "role bundle"}
+                            </span>
+                          ) : null}
+                        </span>
                         <span className="text-xs text-muted-foreground">
                           {skill.description ?? skill.key}
                         </span>

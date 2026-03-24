@@ -17,10 +17,7 @@
  * @see doc/plugins/PLUGIN_SPEC.md for the full plugin specification
  */
 
-import { existsSync } from "node:fs";
-import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { fileURLToPath } from "node:url";
 import { Router } from "express";
 import type { Request } from "express";
 import { and, desc, eq, gte } from "drizzle-orm";
@@ -41,6 +38,7 @@ import { getPluginUiContributionMetadata, pluginLoader } from "../services/plugi
 import { logActivity } from "../services/activity-log.js";
 import { publishGlobalLiveEvent } from "../services/live-events.js";
 import { installManagedPlugin } from "../services/plugin-installs.js";
+import { listBundledPluginExamples } from "../services/plugin-example-catalog.js";
 import type { PluginJobScheduler } from "../services/plugin-job-scheduler.js";
 import type { PluginJobStore } from "../services/plugin-job-store.js";
 import type { PluginWorkerManager } from "../services/plugin-worker-manager.js";
@@ -86,15 +84,6 @@ interface PluginInstallRequest {
   isLocalPath?: boolean;
 }
 
-interface AvailablePluginExample {
-  packageName: string;
-  pluginKey: string;
-  displayName: string;
-  description: string;
-  localPath: string;
-  tag: "example";
-}
-
 /** Response body for GET /api/plugins/:pluginId/health */
 interface PluginHealthCheckResult {
   pluginId: string;
@@ -111,44 +100,6 @@ interface PluginHealthCheckResult {
 /** UUID v4 regex used for plugin ID route resolution. */
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(__dirname, "../../..");
-
-const BUNDLED_PLUGIN_EXAMPLES: AvailablePluginExample[] = [
-  {
-    packageName: "@paperclipai/plugin-hello-world-example",
-    pluginKey: "paperclip.hello-world-example",
-    displayName: "Hello World Widget (Example)",
-    description: "Reference UI plugin that adds a simple Hello World widget to the Paperclip dashboard.",
-    localPath: "packages/plugins/examples/plugin-hello-world-example",
-    tag: "example",
-  },
-  {
-    packageName: "@paperclipai/plugin-file-browser-example",
-    pluginKey: "paperclip-file-browser-example",
-    displayName: "File Browser (Example)",
-    description: "Example plugin that adds a Files link in project navigation plus a project detail file browser.",
-    localPath: "packages/plugins/examples/plugin-file-browser-example",
-    tag: "example",
-  },
-  {
-    packageName: "@paperclipai/plugin-kitchen-sink-example",
-    pluginKey: "paperclip-kitchen-sink-example",
-    displayName: "Kitchen Sink (Example)",
-    description: "Reference plugin that demonstrates the current Paperclip plugin API surface, bridge flows, UI extension surfaces, jobs, webhooks, tools, streams, and trusted local workspace/process demos.",
-    localPath: "packages/plugins/examples/plugin-kitchen-sink-example",
-    tag: "example",
-  },
-];
-
-function listBundledPluginExamples(): AvailablePluginExample[] {
-  return BUNDLED_PLUGIN_EXAMPLES.flatMap((plugin) => {
-    const absoluteLocalPath = path.resolve(REPO_ROOT, plugin.localPath);
-    if (!existsSync(absoluteLocalPath)) return [];
-    return [{ ...plugin, localPath: absoluteLocalPath }];
-  });
-}
 
 /**
  * Resolve a plugin by either database ID or plugin key.

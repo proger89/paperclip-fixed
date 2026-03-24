@@ -13,6 +13,7 @@
 import type {
   PluginLauncherDeclaration,
   PluginLauncherRenderContextSnapshot,
+  PluginCategory,
   PluginUiSlotDeclaration,
   PluginRecord,
   PluginConfig,
@@ -138,6 +139,7 @@ export interface AvailablePluginExample {
   description: string;
   localPath: string;
   tag: "example";
+  categories: PluginCategory[];
 }
 
 /**

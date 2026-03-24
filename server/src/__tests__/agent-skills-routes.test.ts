@@ -3,6 +3,7 @@ import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { agentRoutes } from "../routes/agents.js";
 import { errorHandler } from "../middleware/index.js";
+import { ROLE_BUNDLES } from "../services/role-bundles.js";
 
 const mockAgentService = vi.hoisted(() => ({
   getById: vi.fn(),
@@ -86,9 +87,13 @@ vi.mock("../services/role-bundle-connectors.js", () => ({
   resolveRoleBundleConnectorCoverage: mockResolveRoleBundleConnectorCoverage,
 }));
 
-vi.mock("../services/role-bundle-skills.js", () => ({
-  resolveRoleBundleSkillCoverage: mockResolveRoleBundleSkillCoverage,
-}));
+vi.mock("../services/role-bundle-skills.js", async (importActual) => {
+  const actual = await importActual<typeof import("../services/role-bundle-skills.js")>();
+  return {
+    ...actual,
+    resolveRoleBundleSkillCoverage: mockResolveRoleBundleSkillCoverage,
+  };
+});
 
 function createDb(options: { requireBoardApprovalForNewAgents?: boolean; toolInstallPolicy?: string } = {}) {
   return {
@@ -560,13 +565,84 @@ describe("agent skill routes", () => {
         key: "content_operator",
         agentRole: "general",
         requestedSkillRefs: expect.arrayContaining(["doc-maintenance", "pr-report"]),
+        requestedSkillRequirements: expect.arrayContaining([
+          expect.objectContaining({
+            reference: "doc-maintenance",
+          }),
+        ]),
+        suggestedConnectorPlugins: expect.arrayContaining([
+          expect.objectContaining({
+            key: "paperclip-kitchen-sink-example",
+            source: "local_path",
+          }),
+        ]),
       }),
       expect.objectContaining({
         key: "general_specialist",
         agentRole: "general",
         requestedSkillRefs: expect.arrayContaining(["paperclip", "playwright"]),
+        requestedSkillRequirements: expect.arrayContaining([
+          expect.objectContaining({
+            reference: "playwright",
+          }),
+        ]),
+        suggestedConnectorPlugins: expect.arrayContaining([
+          expect.objectContaining({
+            key: "paperclip-kitchen-sink-example",
+            source: "local_path",
+          }),
+        ]),
       }),
     ]));
+  });
+
+  it("includes local connector install metadata in the role bundle catalog", async () => {
+    const previousRequirements = ROLE_BUNDLES.pm.requiredConnectorPlugins;
+    ROLE_BUNDLES.pm.requiredConnectorPlugins = [
+      {
+        key: "paperclipai.plugin-authoring-smoke-example",
+        displayName: "Plugin Authoring Smoke Example",
+        pluginKey: "paperclipai.plugin-authoring-smoke-example",
+        packageName: "@paperclipai/plugin-authoring-smoke-example",
+        source: "local_path",
+        localPath: "D:/new-projects/paperclip/packages/plugins/examples/plugin-authoring-smoke-example",
+        version: "0.1.0",
+      },
+    ];
+
+    try {
+      const res = await request(createApp())
+        .get("/api/companies/company-1/agent-role-bundles?role=pm");
+
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body).toEqual([
+        expect.objectContaining({
+          key: "pm",
+          suggestedConnectorPlugins: expect.arrayContaining([
+            expect.objectContaining({
+              key: "paperclip-kitchen-sink-example",
+              source: "local_path",
+            }),
+            expect.objectContaining({
+              key: "paperclipai.plugin-authoring-smoke-example",
+              packageName: "@paperclipai/plugin-authoring-smoke-example",
+              source: "local_path",
+            }),
+          ]),
+          requiredConnectorPlugins: [
+            expect.objectContaining({
+              key: "paperclipai.plugin-authoring-smoke-example",
+              packageName: "@paperclipai/plugin-authoring-smoke-example",
+              source: "local_path",
+              localPath: "D:/new-projects/paperclip/packages/plugins/examples/plugin-authoring-smoke-example",
+              version: "0.1.0",
+            }),
+          ],
+        }),
+      ]);
+    } finally {
+      ROLE_BUNDLES.pm.requiredConnectorPlugins = previousRequirements;
+    }
   });
 
   it("includes canonical desired skills in hire approvals", async () => {

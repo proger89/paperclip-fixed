@@ -66,7 +66,19 @@ export interface RoleBundleCatalogConnectorRequirement {
   displayName: string;
   pluginKey?: string | null;
   packageName?: string | null;
+  version?: string | null;
+  source?: "npm" | "local_path" | null;
+  localPath?: string | null;
+  description?: string | null;
+  categories?: string[] | null;
   reason?: string | null;
+}
+
+export interface RoleBundleCatalogSkillRequirement {
+  reference: string;
+  displayName: string;
+  source?: string | null;
+  sourceType?: "local_path" | "skills_sh" | null;
 }
 
 export interface RoleBundleCatalogEntry {
@@ -75,7 +87,9 @@ export interface RoleBundleCatalogEntry {
   agentRole: AgentRole;
   title: string;
   requestedSkillRefs: string[];
+  requestedSkillRequirements: RoleBundleCatalogSkillRequirement[];
   requiredConnectorPlugins: RoleBundleCatalogConnectorRequirement[];
+  suggestedConnectorPlugins: RoleBundleCatalogConnectorRequirement[];
   defaultReviewPolicyKey: ReviewPolicyKey | null;
   defaultReviewerRole: AgentRole | string | null;
 }

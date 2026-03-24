@@ -3,6 +3,7 @@ import type {
   PluginRecord,
   RoleBundleCatalogConnectorRequirement,
   RoleBundleCatalogEntry,
+  RoleBundleCatalogSkillRequirement,
   ToolInstallPolicy,
 } from "@paperclipai/shared";
 
@@ -39,9 +40,30 @@ function matchesSkillReference(skill: CompanySkillListItem, reference: string) {
     .includes(normalizedReference);
 }
 
+function skillRequirements(bundle: RoleBundleCatalogEntry): RoleBundleCatalogSkillRequirement[] {
+  if (bundle.requestedSkillRequirements.length > 0) {
+    return bundle.requestedSkillRequirements;
+  }
+
+  return bundle.requestedSkillRefs.map((reference) => ({
+    reference,
+    displayName: reference,
+    source: null,
+    sourceType: null,
+  }));
+}
+
+function canQueueSkillInstallApproval(
+  requirement: RoleBundleCatalogSkillRequirement,
+  toolInstallPolicy: ToolInstallPolicy,
+) {
+  if (toolInstallPolicy !== "approval_gated") return false;
+  return normalizeToken(requirement.source).length > 0;
+}
+
 function requirementTokens(requirement: RoleBundleCatalogConnectorRequirement) {
   return new Set(
-    [requirement.key, requirement.pluginKey, requirement.packageName]
+    [requirement.key, requirement.pluginKey, requirement.packageName, requirement.localPath]
       .map((value) => normalizeToken(value))
       .filter((value) => value.length > 0),
   );
@@ -73,7 +95,10 @@ function canQueueConnectorInstallApproval(
   toolInstallPolicy: ToolInstallPolicy,
 ) {
   if (toolInstallPolicy !== "approval_gated") return false;
-  return normalizeToken(requirement.packageName).length > 0;
+  return (
+    normalizeToken(requirement.packageName).length > 0
+    || normalizeToken(requirement.localPath).length > 0
+  );
 }
 
 export function getRoleBundleReadiness(input: {
@@ -84,14 +109,15 @@ export function getRoleBundleReadiness(input: {
 }): RoleBundleReadiness {
   const toolInstallPolicy = input.toolInstallPolicy ?? "approval_gated";
   const installedSkills: RoleBundleInstalledSkillMatch[] = [];
-  const missingSkillRefs: string[] = [];
+  const missingSkillRequirements: RoleBundleCatalogSkillRequirement[] = [];
 
-  for (const reference of input.bundle.requestedSkillRefs) {
+  for (const requirement of skillRequirements(input.bundle)) {
+    const reference = requirement.reference;
     const match = input.companySkills.find((skill) => matchesSkillReference(skill, reference));
     if (match) {
       installedSkills.push({ reference, skill: match });
     } else {
-      missingSkillRefs.push(reference);
+      missingSkillRequirements.push(requirement);
     }
   }
 
@@ -109,13 +135,15 @@ export function getRoleBundleReadiness(input: {
 
   return {
     installedSkills,
-    missingSkillRefs,
+    missingSkillRefs: missingSkillRequirements.map((requirement) => requirement.reference),
     installedConnectors,
     missingConnectorRequirements,
-    pendingApprovalSkillRefs:
-      toolInstallPolicy === "approval_gated" ? missingSkillRefs : [],
-    manualSkillRefs:
-      toolInstallPolicy === "manual_only" ? missingSkillRefs : [],
+    pendingApprovalSkillRefs: missingSkillRequirements
+      .filter((requirement) => canQueueSkillInstallApproval(requirement, toolInstallPolicy))
+      .map((requirement) => requirement.reference),
+    manualSkillRefs: missingSkillRequirements
+      .filter((requirement) => !canQueueSkillInstallApproval(requirement, toolInstallPolicy))
+      .map((requirement) => requirement.reference),
     pendingApprovalConnectors: missingConnectorRequirements.filter((requirement) =>
       canQueueConnectorInstallApproval(requirement, toolInstallPolicy),
     ),

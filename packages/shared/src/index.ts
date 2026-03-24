@@ -184,6 +184,7 @@ export type {
   AgentAccessState,
   AgentChainOfCommandEntry,
   RoleBundleCatalogConnectorRequirement,
+  RoleBundleCatalogSkillRequirement,
   RoleBundleCatalogEntry,
   AgentDetail,
   AgentPermissions,
