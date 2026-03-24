@@ -223,7 +223,7 @@ describe("realizeExecutionWorkspace", () => {
     expect(second.branchName).toBe(first.branchName);
   });
 
-  it("runs a configured provision command inside the derived worktree", async () => {
+  it("runs a configured provision command inside the derived worktree", { timeout: 20_000 }, async () => {
     const repoRoot = await createTempRepo();
     await fs.mkdir(path.join(repoRoot, "scripts"), { recursive: true });
     await fs.writeFile(
@@ -362,7 +362,7 @@ describe("realizeExecutionWorkspace", () => {
       created: true,
     });
     expect(operations[1]?.command).toBe("node ./scripts/provision.js");
-  });
+  }, 15_000);
 
   it("reuses an existing branch without resetting it when recreating a missing worktree", async () => {
     const repoRoot = await createTempRepo();

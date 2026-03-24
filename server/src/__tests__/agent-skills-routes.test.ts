@@ -41,6 +41,7 @@ const mockAgentInstructionsService = vi.hoisted(() => ({
 }));
 
 const mockCompanySkillService = vi.hoisted(() => ({
+  listFull: vi.fn(),
   listRuntimeSkillEntries: vi.fn(),
   resolveRequestedSkillKeys: vi.fn(),
 }));
@@ -145,6 +146,15 @@ describe("agent skill routes", () => {
         source: "/tmp/paperclip",
         required: true,
         requiredReason: "required",
+      },
+    ]);
+    mockCompanySkillService.listFull.mockResolvedValue([
+      {
+        id: "skill-1",
+        companyId: "company-1",
+        key: "paperclipai/paperclip/paperclip",
+        slug: "paperclip",
+        name: "paperclip",
       },
     ]);
     mockCompanySkillService.resolveRequestedSkillKeys.mockImplementation(

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
+import fsPromises from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -81,6 +82,21 @@ async function startTempDatabase() {
   return { connectionString, dataDir, instance };
 }
 
+async function removeDirWithRetries(dir: string, attempts = 10): Promise<void> {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      await fsPromises.rm(dir, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException | undefined)?.code;
+      if ((code !== "EBUSY" && code !== "EPERM") || attempt === attempts - 1) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+}
+
 describe("issue service release", () => {
   let db!: ReturnType<typeof createDb>;
   let instance: EmbeddedPostgresInstance | null = null;
@@ -103,7 +119,7 @@ describe("issue service release", () => {
   afterAll(async () => {
     await instance?.stop();
     if (dataDir) {
-      fs.rmSync(dataDir, { recursive: true, force: true });
+      await removeDirWithRetries(dataDir);
     }
   });
 

@@ -12,13 +12,39 @@ export interface RoleBundleDefinition {
   defaultReviewerRole: AgentRole | string | null;
 }
 
+// Use flexible skill refs here: canonical keys, slugs, or common names all work.
+// The hire flow resolves these against installed company skills by key/slug/name,
+// so specialist bundles can snap to bundled Paperclip skills and skills.sh imports
+// without hard-coding a single provenance scheme.
+const CORE_MEMORY_SKILLS = [
+  "para-memory-files",
+];
+
+const BROWSER_WORKFLOW_SKILLS = [
+  "agent-browser",
+];
+
+const DESIGN_SYSTEM_SKILLS = [
+  "design-guide",
+  "frontend-design",
+  "web-design-guidelines",
+  "ui-ux-pro-max",
+];
+
+const MANAGERIAL_SKILLS = [
+  "paperclip-create-agent",
+];
+
 export const ROLE_BUNDLES: Record<RoleBundleKey, RoleBundleDefinition> = {
   general_specialist: {
     key: "general_specialist",
     label: "General Specialist",
     agentRole: "general",
     title: "General Specialist",
-    requestedSkillRefs: [],
+    requestedSkillRefs: [
+      ...CORE_MEMORY_SKILLS,
+      ...BROWSER_WORKFLOW_SKILLS,
+    ],
     requiredConnectorPlugins: [],
     managedInstructions: ["AGENTS.md"],
     defaultReviewPolicyKey: null,
@@ -29,7 +55,11 @@ export const ROLE_BUNDLES: Record<RoleBundleKey, RoleBundleDefinition> = {
     label: "Designer",
     agentRole: "designer",
     title: "Product Designer",
-    requestedSkillRefs: [],
+    requestedSkillRefs: [
+      ...DESIGN_SYSTEM_SKILLS,
+      ...BROWSER_WORKFLOW_SKILLS,
+      ...CORE_MEMORY_SKILLS,
+    ],
     requiredConnectorPlugins: [],
     managedInstructions: ["AGENTS.md"],
     defaultReviewPolicyKey: "design_review",
@@ -40,7 +70,11 @@ export const ROLE_BUNDLES: Record<RoleBundleKey, RoleBundleDefinition> = {
     label: "QA",
     agentRole: "qa",
     title: "QA Reviewer",
-    requestedSkillRefs: [],
+    requestedSkillRefs: [
+      ...BROWSER_WORKFLOW_SKILLS,
+      "web-design-guidelines",
+      ...CORE_MEMORY_SKILLS,
+    ],
     requiredConnectorPlugins: [],
     managedInstructions: ["AGENTS.md"],
     defaultReviewPolicyKey: "qa_review",
@@ -51,7 +85,11 @@ export const ROLE_BUNDLES: Record<RoleBundleKey, RoleBundleDefinition> = {
     label: "PM",
     agentRole: "pm",
     title: "Project Manager",
-    requestedSkillRefs: [],
+    requestedSkillRefs: [
+      ...MANAGERIAL_SKILLS,
+      ...BROWSER_WORKFLOW_SKILLS,
+      ...CORE_MEMORY_SKILLS,
+    ],
     requiredConnectorPlugins: [],
     managedInstructions: ["AGENTS.md"],
     defaultReviewPolicyKey: null,
@@ -62,7 +100,11 @@ export const ROLE_BUNDLES: Record<RoleBundleKey, RoleBundleDefinition> = {
     label: "Frontend Engineer",
     agentRole: "engineer",
     title: "Frontend Engineer",
-    requestedSkillRefs: [],
+    requestedSkillRefs: [
+      ...DESIGN_SYSTEM_SKILLS,
+      ...BROWSER_WORKFLOW_SKILLS,
+      ...CORE_MEMORY_SKILLS,
+    ],
     requiredConnectorPlugins: [],
     managedInstructions: ["AGENTS.md"],
     defaultReviewPolicyKey: "design_review",
@@ -73,7 +115,10 @@ export const ROLE_BUNDLES: Record<RoleBundleKey, RoleBundleDefinition> = {
     label: "Content Operator",
     agentRole: "general",
     title: "Content Operator",
-    requestedSkillRefs: [],
+    requestedSkillRefs: [
+      ...BROWSER_WORKFLOW_SKILLS,
+      ...CORE_MEMORY_SKILLS,
+    ],
     requiredConnectorPlugins: [],
     managedInstructions: ["AGENTS.md"],
     defaultReviewPolicyKey: "content_review",

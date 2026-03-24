@@ -628,8 +628,11 @@ function resolveBundledSkillsRoot() {
   const moduleDir = path.dirname(fileURLToPath(import.meta.url));
   return [
     path.resolve(moduleDir, "../../skills"),
+    path.resolve(moduleDir, "../../.claude/skills"),
     path.resolve(process.cwd(), "skills"),
+    path.resolve(process.cwd(), ".claude/skills"),
     path.resolve(moduleDir, "../../../skills"),
+    path.resolve(moduleDir, "../../../.claude/skills"),
   ];
 }
 
@@ -1430,10 +1433,11 @@ export function companySkillService(db: Db) {
   const secretsSvc = secretService(db);
 
   async function ensureBundledSkills(companyId: string) {
+    const bundledSkills: ImportedSkill[] = [];
     for (const skillsRoot of resolveBundledSkillsRoot()) {
       const stats = await fs.stat(skillsRoot).catch(() => null);
       if (!stats?.isDirectory()) continue;
-      const bundledSkills = await readLocalSkillImports(companyId, skillsRoot)
+      const rootSkills = await readLocalSkillImports(companyId, skillsRoot)
         .then((skills) => skills.map((skill) => ({
           ...skill,
           key: deriveCanonicalSkillKey(companyId, {
@@ -1449,10 +1453,11 @@ export function companySkillService(db: Db) {
           },
         })))
         .catch(() => [] as ImportedSkill[]);
-      if (bundledSkills.length === 0) continue;
-      return upsertImportedSkills(companyId, bundledSkills);
+      if (rootSkills.length === 0) continue;
+      bundledSkills.push(...rootSkills);
     }
-    return [];
+    if (bundledSkills.length === 0) return [];
+    return upsertImportedSkills(companyId, bundledSkills);
   }
 
   async function pruneMissingLocalPathSkills(companyId: string) {
