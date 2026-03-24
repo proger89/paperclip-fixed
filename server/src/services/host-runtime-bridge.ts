@@ -102,13 +102,16 @@ async function bridgeFetch(path: string, init: RequestInit = {}) {
   return response;
 }
 
-async function readBridgeHealth() {
+async function readBridgeHealth(options?: { allowMissing?: boolean }) {
   const response = await bridgeFetch("/health", {
     method: "GET",
     headers: {
       accept: "application/json",
     },
   });
+  if (options?.allowMissing && response.status === 404) {
+    return null;
+  }
   if (!response.ok) {
     const body = await parseJsonResponse(response);
     throw new HostRuntimeBridgeError(
@@ -325,7 +328,7 @@ export async function executeViaHostRuntimeBridge(
   const controller = new AbortController();
   activeExecutions.set(ctx.runId, controller);
   try {
-    await readBridgeHealth();
+    await readBridgeHealth({ allowMissing: true });
     const response = await bridgeFetch("/v1/execute", {
       method: "POST",
       signal: controller.signal,

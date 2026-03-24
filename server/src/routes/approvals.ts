@@ -9,6 +9,7 @@ import {
 } from "@paperclipai/shared";
 import { validate } from "../middleware/validate.js";
 import { logger } from "../middleware/logger.js";
+import type { ApprovalServiceOptions } from "../services/approvals.js";
 import {
   approvalService,
   heartbeatService,
@@ -26,9 +27,9 @@ function redactApprovalPayload<T extends { payload: Record<string, unknown> }>(a
   };
 }
 
-export function approvalRoutes(db: Db) {
+export function approvalRoutes(db: Db, serviceOptions: ApprovalServiceOptions = {}) {
   const router = Router();
-  const svc = approvalService(db);
+  const svc = approvalService(db, serviceOptions);
   const heartbeat = heartbeatService(db);
   const issueApprovalsSvc = issueApprovalService(db);
   const secretsSvc = secretService(db);

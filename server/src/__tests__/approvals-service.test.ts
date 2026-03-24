@@ -8,6 +8,7 @@ const mockAgentService = vi.hoisted(() => ({
 }));
 
 const mockNotifyHireApproved = vi.hoisted(() => vi.fn());
+const mockInstallConnectorPlugin = vi.hoisted(() => vi.fn());
 
 vi.mock("../services/agents.js", () => ({
   agentService: vi.fn(() => mockAgentService),
@@ -62,6 +63,7 @@ describe("approvalService resolution idempotency", () => {
     mockAgentService.create.mockResolvedValue({ id: "agent-1" });
     mockAgentService.terminate.mockResolvedValue(undefined);
     mockNotifyHireApproved.mockResolvedValue(undefined);
+    mockInstallConnectorPlugin.mockResolvedValue(undefined);
   });
 
   it("treats repeated approve retries as no-ops after another worker resolves the approval", async () => {
@@ -103,5 +105,39 @@ describe("approvalService resolution idempotency", () => {
     expect(result.applied).toBe(true);
     expect(mockAgentService.activatePendingApproval).toHaveBeenCalledWith("agent-1");
     expect(mockNotifyHireApproved).toHaveBeenCalledTimes(1);
+  });
+
+  it("installs connector plugins on approval using the normalized install payload", async () => {
+    const dbStub = createDbStub(
+      [[{
+        ...createApproval("pending"),
+        type: "install_connector_plugin",
+        payload: {
+          localPath: "D:/plugins/linear",
+          version: "1.2.3",
+        },
+      }]],
+      [{
+        ...createApproval("approved"),
+        type: "install_connector_plugin",
+        payload: {
+          localPath: "D:/plugins/linear",
+          version: "1.2.3",
+        },
+      }],
+    );
+
+    const svc = approvalService(dbStub.db as any, {
+      installConnectorPlugin: mockInstallConnectorPlugin,
+    });
+    const result = await svc.approve("approval-1", "board", "install it");
+
+    expect(result.applied).toBe(true);
+    expect(mockInstallConnectorPlugin).toHaveBeenCalledWith({
+      packageName: "D:/plugins/linear",
+      version: "1.2.3",
+      isLocalPath: true,
+      source: "local_path",
+    });
   });
 });

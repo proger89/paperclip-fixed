@@ -40,6 +40,7 @@ import { pluginLifecycleManager } from "../services/plugin-lifecycle.js";
 import { getPluginUiContributionMetadata, pluginLoader } from "../services/plugin-loader.js";
 import { logActivity } from "../services/activity-log.js";
 import { publishGlobalLiveEvent } from "../services/live-events.js";
+import { installManagedPlugin } from "../services/plugin-installs.js";
 import type { PluginJobScheduler } from "../services/plugin-job-scheduler.js";
 import type { PluginJobStore } from "../services/plugin-job-store.js";
 import type { PluginWorkerManager } from "../services/plugin-worker-manager.js";
@@ -604,65 +605,20 @@ export function pluginRoutes(
     assertBoard(req);
     const { packageName, version, isLocalPath } = req.body as PluginInstallRequest;
 
-    // Input validation
-    if (!packageName || typeof packageName !== "string") {
-      res.status(400).json({ error: "packageName is required and must be a string" });
-      return;
-    }
-
-    if (version !== undefined && typeof version !== "string") {
-      res.status(400).json({ error: "version must be a string if provided" });
-      return;
-    }
-
-    if (isLocalPath !== undefined && typeof isLocalPath !== "boolean") {
-      res.status(400).json({ error: "isLocalPath must be a boolean if provided" });
-      return;
-    }
-
-    // Validate package name format
-    const trimmedPackage = packageName.trim();
-    if (trimmedPackage.length === 0) {
-      res.status(400).json({ error: "packageName cannot be empty" });
-      return;
-    }
-
-    // Basic security check for package name (prevent injection)
-    if (!isLocalPath && /[<>:"|?*]/.test(trimmedPackage)) {
-      res.status(400).json({ error: "packageName contains invalid characters" });
-      return;
-    }
-
     try {
-      const installOptions = isLocalPath
-        ? { localPath: trimmedPackage }
-        : { packageName: trimmedPackage, version: version?.trim() };
-
-      const discovered = await loader.installPlugin(installOptions);
-
-      if (!discovered.manifest) {
-        res.status(500).json({ error: "Plugin installed but manifest is missing" });
-        return;
-      }
-
-      // Transition to ready state
-      const existingPlugin = await registry.getByKey(discovered.manifest.id);
-      if (existingPlugin) {
-        await lifecycle.load(existingPlugin.id);
-        const updated = await registry.getById(existingPlugin.id);
-        await logPluginMutationActivity(req, "plugin.installed", existingPlugin.id, {
-          pluginId: existingPlugin.id,
-          pluginKey: existingPlugin.pluginKey,
-          packageName: updated?.packageName ?? existingPlugin.packageName,
-          version: updated?.version ?? existingPlugin.version,
-          source: isLocalPath ? "local_path" : "npm",
-        });
-        publishGlobalLiveEvent({ type: "plugin.ui.updated", payload: { pluginId: existingPlugin.id, action: "installed" } });
-        res.json(updated);
-      } else {
-        // This shouldn't happen since installPlugin already registers in the DB
-        res.status(500).json({ error: "Plugin installed but not found in registry" });
-      }
+      const { plugin, source } = await installManagedPlugin(db, loader, lifecycle, {
+        packageName,
+        version,
+        isLocalPath,
+      });
+      await logPluginMutationActivity(req, "plugin.installed", plugin.id, {
+        pluginId: plugin.id,
+        pluginKey: plugin.pluginKey,
+        packageName: plugin.packageName,
+        version: plugin.version,
+        source,
+      });
+      res.json(plugin);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       res.status(400).json({ error: message });

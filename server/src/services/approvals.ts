@@ -10,8 +10,13 @@ import { heartbeatService } from "./heartbeat.js";
 import { completeHireFollowUp } from "./hire-follow-up.js";
 import { notifyHireApproved } from "./hire-hook.js";
 import { instanceSettingsService } from "./instance-settings.js";
+import type { ManagedPluginInstallRequest } from "./plugin-installs.js";
 
-export function approvalService(db: Db) {
+export interface ApprovalServiceOptions {
+  installConnectorPlugin?: (input: ManagedPluginInstallRequest) => Promise<unknown>;
+}
+
+export function approvalService(db: Db, options: ApprovalServiceOptions = {}) {
   const agentsSvc = agentService(db);
   const budgets = budgetService(db);
   const companySkills = companySkillService(db);
@@ -32,6 +37,15 @@ export function approvalService(db: Db) {
       ...comment,
       body: redactCurrentUserText(comment.body, { enabled: censorUsernameInLogs }),
     };
+  }
+
+  function firstNonEmptyString(...values: unknown[]) {
+    for (const value of values) {
+      if (typeof value === "string" && value.trim().length > 0) {
+        return value.trim();
+      }
+    }
+    return null;
   }
 
   async function getExistingApproval(id: string) {
@@ -246,6 +260,31 @@ export function approvalService(db: Db) {
         } else if (source) {
           await companySkills.importFromSource(updated.companyId, source);
         }
+      }
+
+      if (applied && updated.type === "install_connector_plugin") {
+        if (!options.installConnectorPlugin) {
+          throw new Error("Connector plugin installation is not enabled");
+        }
+
+        const payload = updated.payload as Record<string, unknown>;
+        await options.installConnectorPlugin({
+          packageName: firstNonEmptyString(
+            payload.packageName,
+            payload.pluginPackageName,
+            payload.pluginPackage,
+            payload.localPath,
+            payload.source,
+          ) ?? "",
+          version: firstNonEmptyString(payload.version) ?? undefined,
+          isLocalPath:
+            payload.isLocalPath === true
+            || typeof payload.localPath === "string",
+          source:
+            payload.isLocalPath === true || typeof payload.localPath === "string"
+              ? "local_path"
+              : "npm",
+        });
       }
 
       return { approval: updated, applied };

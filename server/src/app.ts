@@ -44,6 +44,7 @@ import { createPluginEventBus } from "./services/plugin-event-bus.js";
 import { setPluginEventBus } from "./services/activity-log.js";
 import { createPluginDevWatcher } from "./services/plugin-dev-watcher.js";
 import { createPluginHostServiceCleanup } from "./services/plugin-host-service-cleanup.js";
+import { installManagedPlugin } from "./services/plugin-installs.js";
 import { pluginRegistryService } from "./services/plugin-registry.js";
 import { createHostClientHandlers } from "@paperclipai/plugin-sdk";
 import type { BetterAuthSessionResult } from "./auth/better-auth.js";
@@ -148,7 +149,6 @@ export async function createApp(
   api.use(routineRoutes(db));
   api.use(executionWorkspaceRoutes(db));
   api.use(goalRoutes(db));
-  api.use(approvalRoutes(db));
   api.use(secretRoutes(db));
   api.use(costRoutes(db));
   api.use(activityRoutes(db));
@@ -207,6 +207,11 @@ export async function createApp(
         });
       },
     },
+  );
+  api.use(
+    approvalRoutes(db, {
+      installConnectorPlugin: (input) => installManagedPlugin(db, loader, lifecycle, input),
+    }),
   );
   api.use(
     pluginRoutes(
