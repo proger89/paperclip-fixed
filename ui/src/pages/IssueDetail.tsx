@@ -21,6 +21,7 @@ import { CommentThread } from "../components/CommentThread";
 import { IssueDocumentsSection } from "../components/IssueDocumentsSection";
 import { IssueProperties } from "../components/IssueProperties";
 import { LiveRunWidget } from "../components/LiveRunWidget";
+import { IssueReviewHandoffCard } from "../components/IssueReviewHandoffCard";
 import { WorkProductCard } from "../components/WorkProductCard";
 import type { MentionOption } from "../components/MarkdownEditor";
 import { ScrollToBottom } from "../components/ScrollToBottom";
@@ -912,6 +913,14 @@ export function IssueDetail() {
         className="space-y-3"
         itemClassName="rounded-lg border border-border p-3"
         missingBehavior="placeholder"
+      />
+
+      <IssueReviewHandoffCard
+        issue={issue}
+        agents={agents ?? []}
+        currentUserId={currentUserId}
+        onUpdate={(data) => updateIssue.mutateAsync(data)}
+        isUpdating={updateIssue.isPending}
       />
 
       {(visibleWorkProducts.length > 0 || issue.reviewPolicyKey) ? (

@@ -10,6 +10,7 @@ import {
   createIssueSchema,
   linkIssueApprovalSchema,
   issueDocumentKeySchema,
+  reviewableWorkProductTypesForPolicy,
   updateIssueWorkProductSchema,
   upsertIssueDocumentSchema,
   updateIssueSchema,
@@ -213,16 +214,6 @@ export function issueRoutes(db: Db, storage: StorageService) {
       });
     }
     return true;
-  }
-
-  function reviewableWorkProductTypesForPolicy(reviewPolicyKey: string | null | undefined) {
-    if (reviewPolicyKey === "design_review") {
-      return ["preview_url", "runtime_service", "artifact", "document"];
-    }
-    if (reviewPolicyKey === "qa_review" || reviewPolicyKey === "content_review") {
-      return ["runtime_service", "artifact", "document", "preview_url"];
-    }
-    return ["preview_url", "runtime_service", "artifact", "document"];
   }
 
   async function assertIssueCanComplete(

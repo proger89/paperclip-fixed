@@ -12,6 +12,14 @@ import { Button } from "@/components/ui/button";
 import { Settings, Check, Download, Upload } from "lucide-react";
 import { CompanyPatternIcon } from "../components/CompanyPatternIcon";
 import {
+  CompanyReviewRulesEditor,
+} from "../components/CompanyReviewRulesEditor";
+import {
+  buildRequiredReviewByRole,
+  buildReviewRuleDrafts,
+  type ReviewRuleDraft,
+} from "../components/company-review-rule-drafts";
+import {
   Field,
   ToggleField,
   HintIcon
@@ -42,7 +50,7 @@ export function CompanySettings() {
   const [companyArchetype, setCompanyArchetype] = useState<CompanyArchetypeValue>("general_company");
   const [toolInstallPolicy, setToolInstallPolicy] = useState<ToolInstallPolicyValue>("approval_gated");
   const [autoAssignApprovedHires, setAutoAssignApprovedHires] = useState(true);
-  const [requiredReviewByRoleText, setRequiredReviewByRoleText] = useState("{}");
+  const [requiredReviewRules, setRequiredReviewRules] = useState<ReviewRuleDraft[]>([]);
   const [logoUploadError, setLogoUploadError] = useState<string | null>(null);
   const [requiredReviewError, setRequiredReviewError] = useState<string | null>(null);
 
@@ -56,9 +64,14 @@ export function CompanySettings() {
     setCompanyArchetype(selectedCompany.companyArchetype ?? "general_company");
     setToolInstallPolicy(selectedCompany.toolInstallPolicy ?? "approval_gated");
     setAutoAssignApprovedHires(selectedCompany.autoAssignApprovedHires !== false);
-    setRequiredReviewByRoleText(JSON.stringify(selectedCompany.requiredReviewByRole ?? {}, null, 2));
+    setRequiredReviewRules(buildReviewRuleDrafts(selectedCompany.requiredReviewByRole));
     setRequiredReviewError(null);
   }, [selectedCompany]);
+
+  const currentRequiredReviewByRole = buildRequiredReviewByRole(requiredReviewRules).value;
+  const selectedRequiredReviewByRole = buildRequiredReviewByRole(
+    buildReviewRuleDrafts(selectedCompany?.requiredReviewByRole ?? {}),
+  ).value;
 
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [inviteSnippet, setInviteSnippet] = useState<string | null>(null);
@@ -76,7 +89,7 @@ export function CompanySettings() {
       companyArchetype !== (selectedCompany.companyArchetype ?? "general_company") ||
       toolInstallPolicy !== (selectedCompany.toolInstallPolicy ?? "approval_gated") ||
       autoAssignApprovedHires !== (selectedCompany.autoAssignApprovedHires !== false) ||
-      requiredReviewByRoleText !== JSON.stringify(selectedCompany.requiredReviewByRole ?? {}, null, 2));
+      JSON.stringify(currentRequiredReviewByRole) !== JSON.stringify(selectedRequiredReviewByRole));
 
   const generalMutation = useMutation({
     mutationFn: (data: {
@@ -263,18 +276,12 @@ export function CompanySettings() {
   }
 
   function handleSaveGeneral() {
-    let requiredReviewByRole: CompanyRequiredReviewByRole;
-    try {
-      const parsed = JSON.parse(requiredReviewByRoleText);
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        throw new Error("Required review by role must be a JSON object.");
-      }
-      requiredReviewByRole = parsed as CompanyRequiredReviewByRole;
-      setRequiredReviewError(null);
-    } catch (error) {
-      setRequiredReviewError(error instanceof Error ? error.message : "Invalid JSON");
+    const { value: requiredReviewByRole, error } = buildRequiredReviewByRole(requiredReviewRules);
+    if (error) {
+      setRequiredReviewError(error);
       return;
     }
+    setRequiredReviewError(null);
     generalMutation.mutate({
       name: companyName.trim(),
       description: description.trim() || null,
@@ -467,25 +474,14 @@ export function CompanySettings() {
 
           <Field
             label="Required review by role"
-            hint="JSON map from role bundle key to review policy and reviewer role."
+            hint="Configure which role bundles must enter review, which policy applies, and who should review them."
           >
-            <div className="space-y-2">
-              <textarea
-                className="min-h-[180px] w-full rounded-md border border-border bg-transparent px-2.5 py-2 text-sm font-mono outline-none"
-                value={requiredReviewByRoleText}
-                onChange={(e) => {
-                  setRequiredReviewByRoleText(e.target.value);
-                  setRequiredReviewError(null);
-                }}
-              />
-              {requiredReviewError ? (
-                <div className="text-xs text-destructive">{requiredReviewError}</div>
-              ) : (
-                <div className="text-xs text-muted-foreground">
-                  {"Example: designer -> design_review via pm, frontend_engineer -> design_review via designer."}
-                </div>
-              )}
-            </div>
+            <CompanyReviewRulesEditor
+              drafts={requiredReviewRules}
+              onChange={setRequiredReviewRules}
+              error={requiredReviewError}
+              onErrorChange={setRequiredReviewError}
+            />
           </Field>
         </div>
       </div>

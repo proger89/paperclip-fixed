@@ -69,7 +69,14 @@ import {
 } from "../local-adapter-paths.js";
 import { completeHireFollowUp } from "../services/hire-follow-up.js";
 import { notifyHireApproved } from "../services/hire-hook.js";
-import { resolveRoleBundle } from "../services/role-bundles.js";
+import {
+  applyRoleBundleManagedInstructions,
+  listRoleBundleCatalog,
+  resolveRoleBundle,
+} from "../services/role-bundles.js";
+import { resolveRoleBundleConnectorCoverage } from "../services/role-bundle-connectors.js";
+import { normalizeCompanyAutonomySettings } from "../services/autonomy-policy.js";
+import { resolveRoleBundleSkillCoverage } from "../services/role-bundle-skills.js";
 
 export function agentRoutes(db: Db) {
   const DEFAULT_INSTRUCTIONS_PATH_KEYS: Record<string, string> = {
@@ -309,34 +316,118 @@ export function agentRoutes(db: Db) {
     ));
   }
 
-  function normalizeTextKey(value: string | null | undefined): string | null {
-    if (!value) return null;
-    return deriveAgentUrlKey(value) ?? null;
+  function connectorRequirementKey(requirement: {
+    key?: string | null;
+    pluginKey?: string | null;
+    packageName?: string | null;
+    localPath?: string | null;
+  }) {
+    return (
+      asNonEmptyString(requirement.key)
+      ?? asNonEmptyString(requirement.pluginKey)
+      ?? asNonEmptyString(requirement.packageName)
+      ?? asNonEmptyString(requirement.localPath)
+      ?? "connector"
+    );
   }
 
-  async function resolveInstalledSkillRefs(companyId: string, requestedRefs: string[]) {
-    const requested = dedupeTextValues(requestedRefs);
-    if (requested.length === 0) return [];
+  function connectorRequirementDisplayName(requirement: {
+    displayName?: string | null;
+    name?: string | null;
+    key?: string | null;
+    pluginKey?: string | null;
+    packageName?: string | null;
+    localPath?: string | null;
+  }) {
+    return (
+      asNonEmptyString(requirement.displayName)
+      ?? asNonEmptyString(requirement.name)
+      ?? connectorRequirementKey(requirement)
+    );
+  }
 
-    const installedSkills = await companySkills.listFull(companyId);
-    const resolved = new Set<string>();
-    for (const reference of requested) {
-      const normalizedReference = normalizeTextKey(reference);
-      const match = installedSkills.find((skill) => {
-        if (skill.key === reference || skill.slug === reference || skill.name === reference) return true;
-        if (!normalizedReference) return false;
-        return [
-          normalizeTextKey(skill.key),
-          normalizeTextKey(skill.slug),
-          normalizeTextKey(skill.name),
-        ].includes(normalizedReference);
-      });
-      if (match) {
-        resolved.add(match.key);
-      }
+  function connectorRequirementCanCreateInstallApproval(requirement: {
+    packageName?: string | null;
+    localPath?: string | null;
+  }) {
+    return Boolean(asNonEmptyString(requirement.packageName) || asNonEmptyString(requirement.localPath));
+  }
+
+  function connectorRequirementMatchesApprovalPayload(
+    requirement: {
+      key?: string | null;
+      pluginKey?: string | null;
+      packageName?: string | null;
+      localPath?: string | null;
+    },
+    payload: Record<string, unknown>,
+  ) {
+    const requirementTokens = new Set(
+      [
+        asNonEmptyString(requirement.key),
+        asNonEmptyString(requirement.pluginKey),
+        asNonEmptyString(requirement.packageName),
+        asNonEmptyString(requirement.localPath),
+      ]
+        .filter((value): value is string => Boolean(value))
+        .map((value) => value.toLowerCase()),
+    );
+    if (requirementTokens.size === 0) return false;
+
+    const payloadTokens = new Set(
+      [
+        asNonEmptyString(payload.pluginKey),
+        asNonEmptyString(payload.pluginId),
+        asNonEmptyString(payload.pluginSlug),
+        asNonEmptyString(payload.packageName),
+        asNonEmptyString(payload.pluginPackageName),
+        asNonEmptyString(payload.localPath),
+        asNonEmptyString(payload.source),
+      ]
+        .filter((value): value is string => Boolean(value))
+        .map((value) => value.toLowerCase()),
+    );
+
+    for (const token of requirementTokens) {
+      if (payloadTokens.has(token)) return true;
     }
 
-    return Array.from(resolved);
+    return false;
+  }
+
+  function skillRequirementMatchesApprovalPayload(
+    requirement: {
+      reference?: string | null;
+      source?: string | null;
+    },
+    payload: Record<string, unknown>,
+  ) {
+    const requirementTokens = new Set(
+      [
+        asNonEmptyString(requirement.reference),
+        asNonEmptyString(requirement.source),
+      ]
+        .filter((value): value is string => Boolean(value))
+        .map((value) => value.toLowerCase()),
+    );
+    if (requirementTokens.size === 0) return false;
+
+    const payloadTokens = new Set(
+      [
+        asNonEmptyString(payload.requestedRef),
+        asNonEmptyString(payload.slug),
+        asNonEmptyString(payload.name),
+        asNonEmptyString(payload.source),
+      ]
+        .filter((value): value is string => Boolean(value))
+        .map((value) => value.toLowerCase()),
+    );
+
+    for (const token of requirementTokens) {
+      if (payloadTokens.has(token)) return true;
+    }
+
+    return false;
   }
 
   function asRecord(value: unknown): Record<string, unknown> | null {
@@ -491,7 +582,10 @@ export function agentRoutes(db: Db) {
     role: string;
     adapterType: string;
     adapterConfig: unknown;
-  }>(agent: T): Promise<T> {
+  }>(
+    agent: T,
+    options?: { roleBundleKey?: string | null },
+  ): Promise<T> {
     if (!DEFAULT_MANAGED_INSTRUCTIONS_ADAPTER_TYPES.has(agent.adapterType)) {
       return agent;
     }
@@ -512,9 +606,12 @@ export function agentRoutes(db: Db) {
       : "";
     const defaultBundleRole = resolveDefaultAgentInstructionsBundleRole(agent.role);
     const useDefaultBundle = promptTemplate.trim().length === 0;
-    const files = useDefaultBundle
+    const baseFiles = useDefaultBundle
       ? await loadDefaultAgentInstructionsBundle(defaultBundleRole)
       : { "AGENTS.md": promptTemplate };
+    const files = useDefaultBundle
+      ? applyRoleBundleManagedInstructions(baseFiles, options?.roleBundleKey ?? null, agent.role)
+      : baseFiles;
     const materialized = await instructions.materializeManagedBundle(
       agent,
       files,
@@ -987,6 +1084,12 @@ export function agentRoutes(db: Db) {
     res.json(leanTree);
   });
 
+  router.get("/companies/:companyId/agent-role-bundles", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+    res.json(listRoleBundleCatalog(asNonEmptyString(req.query.role)));
+  });
+
   router.get("/companies/:companyId/org.svg", async (req, res) => {
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
@@ -1234,7 +1337,12 @@ export function agentRoutes(db: Db) {
       ...(Array.isArray(requestedRoleSkills) ? requestedRoleSkills : []),
       ...roleBundle.requestedSkillRefs,
     ]);
-    const installedRoleSkills = await resolveInstalledSkillRefs(companyId, requestedSkills);
+    const skillCoverage = await resolveRoleBundleSkillCoverage(db, companyId, requestedSkills);
+    const installedRoleSkills = skillCoverage.installedSkillKeys;
+    const missingRequestedSkills = skillCoverage.missing;
+    const missingRequestedSkillRefs = missingRequestedSkills.map((requirement) => requirement.reference);
+    const missingRequestedSkillDisplayNames = missingRequestedSkills.map((requirement) => requirement.displayName);
+    const actionableMissingRequestedSkills = missingRequestedSkills.filter((requirement) => Boolean(requirement.source));
     const desiredSkillRefs = dedupeTextValues([
       ...(Array.isArray(requestedDesiredSkills) ? requestedDesiredSkills : []),
       ...installedRoleSkills,
@@ -1288,6 +1396,15 @@ export function agentRoutes(db: Db) {
       return;
     }
 
+    const autonomySettings = normalizeCompanyAutonomySettings(company);
+    const connectorCoverage = await resolveRoleBundleConnectorCoverage(db, roleBundle.key, hireInput.role);
+    const missingConnectorPlugins = connectorCoverage.missing;
+    const missingConnectorPluginKeys = missingConnectorPlugins.map((requirement) => connectorRequirementKey(requirement));
+    const missingConnectorPluginDisplayNames = missingConnectorPlugins
+      .map((requirement) => connectorRequirementDisplayName(requirement));
+    const actionableMissingConnectorPlugins = missingConnectorPlugins
+      .filter((requirement) => connectorRequirementCanCreateInstallApproval(requirement));
+
     const requiresApproval = company.requireBoardApprovalForNewAgents;
     const status = requiresApproval ? "pending_approval" : "idle";
     const createdAgent = await svc.create(companyId, {
@@ -1296,9 +1413,13 @@ export function agentRoutes(db: Db) {
       spentMonthlyCents: 0,
       lastHeartbeatAt: null,
     });
-    const agent = await materializeDefaultInstructionsBundleForNewAgent(createdAgent);
+    const agent = await materializeDefaultInstructionsBundleForNewAgent(createdAgent, {
+      roleBundleKey: roleBundle.key,
+    });
 
     let approval: Awaited<ReturnType<typeof approvalsSvc.getById>> | null = null;
+    const skillApprovals: Array<NonNullable<Awaited<ReturnType<typeof approvalsSvc.getById>>>> = [];
+    const connectorApprovals: Array<NonNullable<Awaited<ReturnType<typeof approvalsSvc.getById>>>> = [];
     const actor = getActorInfo(req);
 
     if (requiresApproval) {
@@ -1337,6 +1458,13 @@ export function agentRoutes(db: Db) {
           desiredSkills: desiredSkillAssignment.desiredSkills,
           roleBundleKey: roleBundle.key,
           requestedSkills,
+          missingRequestedSkills,
+          missingRequestedSkillRefs,
+          missingRequestedSkillDisplayNames,
+          requiredConnectorPlugins: connectorCoverage.required,
+          missingConnectorPlugins,
+          missingConnectorPluginKeys,
+          missingConnectorPluginDisplayNames,
           staffingReason: staffingReason ?? null,
           sourceIssueIds,
           followUpIssueId: followUpIssueId ?? null,
@@ -1350,6 +1478,8 @@ export function agentRoutes(db: Db) {
             runtimeConfig: requestedRuntimeConfig,
             desiredSkills: desiredSkillAssignment.desiredSkills,
             roleBundleKey: roleBundle.key,
+            missingRequestedSkillRefs,
+            missingConnectorPluginKeys,
           },
         },
         decisionNote: null,
@@ -1362,6 +1492,160 @@ export function agentRoutes(db: Db) {
         await issueApprovalsSvc.linkManyForApproval(approval.id, sourceIssueIds, {
           agentId: actor.actorType === "agent" ? actor.actorId : null,
           userId: actor.actorType === "user" ? actor.actorId : null,
+        });
+      }
+    }
+
+    if (
+      autonomySettings.toolInstallPolicy === "approval_gated"
+      && actionableMissingRequestedSkills.length > 0
+    ) {
+      const existingSkillApprovals = (await approvalsSvc.list(companyId))
+        .filter((existingApproval) =>
+          existingApproval.type === "install_company_skill"
+          && (existingApproval.status === "pending" || existingApproval.status === "revision_requested"));
+
+      for (const requirement of actionableMissingRequestedSkills) {
+        const existingApproval = existingSkillApprovals.find((existing) =>
+          skillRequirementMatchesApprovalPayload(
+            requirement,
+            (existing.payload as Record<string, unknown> | null) ?? {},
+          ));
+        if (existingApproval) {
+          skillApprovals.push(existingApproval);
+          continue;
+        }
+
+        const skillApproval = await approvalsSvc.create(companyId, {
+          type: "install_company_skill",
+          requestedByAgentId: actor.actorType === "agent" ? actor.actorId : null,
+          requestedByUserId: actor.actorType === "user" ? actor.actorId : null,
+          status: "pending",
+          payload: {
+            name: requirement.displayName,
+            slug: requirement.reference,
+            requestedRef: requirement.reference,
+            source: requirement.source,
+            sourceType: requirement.sourceType,
+            reason: `Required for ${roleBundle.label} role bundle`,
+            roleBundleKey: roleBundle.key,
+            roleBundleLabel: roleBundle.label,
+            role: hireInput.role,
+            requiredByAgentId: agent.id,
+            requiredByAgentName: agent.name,
+            staffingReason: staffingReason ?? null,
+            sourceIssueIds,
+            relatedHireApprovalId: approval?.id ?? null,
+          },
+          decisionNote: null,
+          decidedByUserId: null,
+          decidedAt: null,
+          updatedAt: new Date(),
+        });
+        skillApprovals.push(skillApproval);
+
+        if (sourceIssueIds.length > 0) {
+          await issueApprovalsSvc.linkManyForApproval(skillApproval.id, sourceIssueIds, {
+            agentId: actor.actorType === "agent" ? actor.actorId : null,
+            userId: actor.actorType === "user" ? actor.actorId : null,
+          });
+        }
+
+        await logActivity(db, {
+          companyId,
+          actorType: actor.actorType,
+          actorId: actor.actorId,
+          agentId: actor.agentId,
+          runId: actor.runId,
+          action: "approval.created",
+          entityType: "approval",
+          entityId: skillApproval.id,
+          details: {
+            type: skillApproval.type,
+            linkedAgentId: agent.id,
+            source: requirement.source,
+            requestedRef: requirement.reference,
+          },
+        });
+      }
+    }
+
+    if (
+      autonomySettings.toolInstallPolicy === "approval_gated"
+      && actionableMissingConnectorPlugins.length > 0
+    ) {
+      const existingConnectorApprovals = (await approvalsSvc.list(companyId))
+        .filter((existingApproval) =>
+          existingApproval.type === "install_connector_plugin"
+          && (existingApproval.status === "pending" || existingApproval.status === "revision_requested"));
+
+      for (const requirement of actionableMissingConnectorPlugins) {
+        const existingApproval = existingConnectorApprovals.find((existing) =>
+          connectorRequirementMatchesApprovalPayload(
+            requirement,
+            (existing.payload as Record<string, unknown> | null) ?? {},
+          ));
+        if (existingApproval) {
+          connectorApprovals.push(existingApproval);
+          continue;
+        }
+
+        const connectorApproval = await approvalsSvc.create(companyId, {
+          type: "install_connector_plugin",
+          requestedByAgentId: actor.actorType === "agent" ? actor.actorId : null,
+          requestedByUserId: actor.actorType === "user" ? actor.actorId : null,
+          status: "pending",
+          payload: {
+            pluginId: requirement.pluginKey ?? requirement.key,
+            pluginKey: requirement.pluginKey ?? null,
+            pluginSlug: requirement.key,
+            name: requirement.displayName,
+            packageName: asNonEmptyString(requirement.packageName),
+            version: asNonEmptyString(requirement.version),
+            isLocalPath: requirement.source === "local_path" || Boolean(asNonEmptyString(requirement.localPath)),
+            localPath: asNonEmptyString(requirement.localPath),
+            source: requirement.source ?? (asNonEmptyString(requirement.localPath) ? "local_path" : "npm"),
+            reason:
+              asNonEmptyString(requirement.reason)
+              ?? `Required for ${roleBundle.label} role bundle`,
+            roleBundleKey: roleBundle.key,
+            roleBundleLabel: roleBundle.label,
+            role: hireInput.role,
+            requiredByAgentId: agent.id,
+            requiredByAgentName: agent.name,
+            staffingReason: staffingReason ?? null,
+            sourceIssueIds,
+            relatedHireApprovalId: approval?.id ?? null,
+          },
+          decisionNote: null,
+          decidedByUserId: null,
+          decidedAt: null,
+          updatedAt: new Date(),
+        });
+        connectorApprovals.push(connectorApproval);
+
+        if (sourceIssueIds.length > 0) {
+          await issueApprovalsSvc.linkManyForApproval(connectorApproval.id, sourceIssueIds, {
+            agentId: actor.actorType === "agent" ? actor.actorId : null,
+            userId: actor.actorType === "user" ? actor.actorId : null,
+          });
+        }
+
+        await logActivity(db, {
+          companyId,
+          actorType: actor.actorType,
+          actorId: actor.actorId,
+          agentId: actor.agentId,
+          runId: actor.runId,
+          action: "approval.created",
+          entityType: "approval",
+          entityId: connectorApproval.id,
+          details: {
+            type: connectorApproval.type,
+            linkedAgentId: agent.id,
+            packageName: asNonEmptyString(requirement.packageName),
+            pluginKey: requirement.pluginKey ?? requirement.key,
+          },
         });
       }
     }
@@ -1381,6 +1665,10 @@ export function agentRoutes(db: Db) {
         roleBundleKey: roleBundle.key,
         requiresApproval,
         approvalId: approval?.id ?? null,
+        skillApprovalIds: skillApprovals.map((entry) => entry.id),
+        connectorApprovalIds: connectorApprovals.map((entry) => entry.id),
+        missingRequestedSkillRefs,
+        missingConnectorPluginKeys,
         issueIds: sourceIssueIds,
         desiredSkills: desiredSkillAssignment.desiredSkills,
         requestedSkills,
@@ -1459,7 +1747,14 @@ export function agentRoutes(db: Db) {
       }).catch(() => {});
     }
 
-    res.status(201).json({ agent, approval });
+    res.status(201).json({
+      agent,
+      approval,
+      skillApprovals,
+      connectorApprovals,
+      missingRequestedSkills,
+      missingConnectorPlugins,
+    });
   });
 
   router.post("/companies/:companyId/agents", validate(createAgentSchema), async (req, res) => {

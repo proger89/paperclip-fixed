@@ -65,6 +65,38 @@ export const ROLE_BUNDLE_KEYS = [
 ] as const;
 export type RoleBundleKey = (typeof ROLE_BUNDLE_KEYS)[number];
 
+export const REVIEW_POLICY_KEYS = [
+  "design_review",
+  "qa_review",
+  "content_review",
+] as const;
+export type ReviewPolicyKey = (typeof REVIEW_POLICY_KEYS)[number];
+
+export const REVIEW_POLICY_LABELS: Record<ReviewPolicyKey, string> = {
+  design_review: "Design Review",
+  qa_review: "QA Review",
+  content_review: "Content Review",
+};
+
+export const DEFAULT_REVIEWABLE_WORK_PRODUCT_TYPES = [
+  "preview_url",
+  "runtime_service",
+  "artifact",
+  "document",
+] as const;
+
+export const REVIEW_POLICY_REQUIRED_WORK_PRODUCT_TYPES: Record<ReviewPolicyKey, readonly string[]> = {
+  design_review: DEFAULT_REVIEWABLE_WORK_PRODUCT_TYPES,
+  qa_review: DEFAULT_REVIEWABLE_WORK_PRODUCT_TYPES,
+  content_review: DEFAULT_REVIEWABLE_WORK_PRODUCT_TYPES,
+};
+
+export function reviewableWorkProductTypesForPolicy(reviewPolicyKey: string | null | undefined) {
+  if (!reviewPolicyKey) return DEFAULT_REVIEWABLE_WORK_PRODUCT_TYPES;
+  return REVIEW_POLICY_REQUIRED_WORK_PRODUCT_TYPES[reviewPolicyKey as ReviewPolicyKey]
+    ?? DEFAULT_REVIEWABLE_WORK_PRODUCT_TYPES;
+}
+
 export const AGENT_ROLE_LABELS: Record<AgentRole, string> = {
   ceo: "CEO",
   cto: "CTO",

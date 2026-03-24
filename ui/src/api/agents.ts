@@ -11,6 +11,7 @@ import type {
   HeartbeatRun,
   Approval,
   AgentConfigRevision,
+  RoleBundleCatalogEntry,
 } from "@paperclipai/shared";
 import { isUuidLike, normalizeAgentUrlKey } from "@paperclipai/shared";
 import { ApiError, api } from "./client";
@@ -47,6 +48,10 @@ export interface OrgNode {
 export interface AgentHireResponse {
   agent: Agent;
   approval: Approval | null;
+  skillApprovals?: Approval[];
+  connectorApprovals?: Approval[];
+  missingRequestedSkills?: Record<string, unknown>[];
+  missingConnectorPlugins?: Record<string, unknown>[];
 }
 
 export interface AgentPermissionUpdate {
@@ -69,6 +74,12 @@ export const agentsApi = {
   org: (companyId: string) => api.get<OrgNode[]>(`/companies/${companyId}/org`),
   listConfigurations: (companyId: string) =>
     api.get<Record<string, unknown>[]>(`/companies/${companyId}/agent-configurations`),
+  roleBundles: (companyId: string, role?: string) =>
+    api.get<RoleBundleCatalogEntry[]>(
+      `/companies/${encodeURIComponent(companyId)}/agent-role-bundles${
+        role ? `?role=${encodeURIComponent(role)}` : ""
+      }`,
+    ),
   get: async (id: string, companyId?: string) => {
     try {
       return await api.get<AgentDetail>(agentPath(id, companyId));

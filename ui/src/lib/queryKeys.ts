@@ -25,6 +25,8 @@ export const queryKeys = {
     configRevisions: (agentId: string) => ["agents", "config-revisions", agentId] as const,
     adapterModels: (companyId: string, adapterType: string) =>
       ["agents", companyId, "adapter-models", adapterType] as const,
+    roleBundles: (companyId: string, role?: string) =>
+      ["agents", companyId, "role-bundles", role ?? "__all__"] as const,
   },
   issues: {
     list: (companyId: string) => ["issues", companyId] as const,

@@ -39,6 +39,8 @@ export type {
   Agent,
   AgentAccessState,
   AgentChainOfCommandEntry,
+  RoleBundleCatalogConnectorRequirement,
+  RoleBundleCatalogEntry,
   AgentDetail,
   AgentPermissions,
   AgentInstructionsBundleMode,

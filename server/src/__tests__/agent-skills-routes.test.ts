@@ -22,6 +22,7 @@ const mockAccessService = vi.hoisted(() => ({
 
 const mockApprovalService = vi.hoisted(() => ({
   create: vi.fn(),
+  list: vi.fn(),
 }));
 const mockBudgetService = vi.hoisted(() => ({}));
 const mockHeartbeatService = vi.hoisted(() => ({}));
@@ -52,6 +53,8 @@ const mockSecretService = vi.hoisted(() => ({
 }));
 
 const mockLogActivity = vi.hoisted(() => vi.fn());
+const mockResolveRoleBundleConnectorCoverage = vi.hoisted(() => vi.fn());
+const mockResolveRoleBundleSkillCoverage = vi.hoisted(() => vi.fn());
 
 const mockAdapter = vi.hoisted(() => ({
   listSkills: vi.fn(),
@@ -79,14 +82,23 @@ vi.mock("../adapters/index.js", () => ({
   listAdapterModels: vi.fn(),
 }));
 
-function createDb(requireBoardApprovalForNewAgents = false) {
+vi.mock("../services/role-bundle-connectors.js", () => ({
+  resolveRoleBundleConnectorCoverage: mockResolveRoleBundleConnectorCoverage,
+}));
+
+vi.mock("../services/role-bundle-skills.js", () => ({
+  resolveRoleBundleSkillCoverage: mockResolveRoleBundleSkillCoverage,
+}));
+
+function createDb(options: { requireBoardApprovalForNewAgents?: boolean; toolInstallPolicy?: string } = {}) {
   return {
     select: vi.fn(() => ({
       from: vi.fn(() => ({
         where: vi.fn(async () => [
           {
             id: "company-1",
-            requireBoardApprovalForNewAgents,
+            requireBoardApprovalForNewAgents: options.requireBoardApprovalForNewAgents ?? false,
+            toolInstallPolicy: options.toolInstallPolicy ?? "approval_gated",
           },
         ]),
       })),
@@ -196,10 +208,21 @@ describe("agent skill routes", () => {
     mockApprovalService.create.mockImplementation(async (_companyId: string, input: Record<string, unknown>) => ({
       id: "approval-1",
       companyId: "company-1",
-      type: "hire_agent",
+      type: input.type ?? "hire_agent",
       status: "pending",
       payload: input.payload ?? {},
     }));
+    mockApprovalService.list.mockResolvedValue([]);
+    mockResolveRoleBundleConnectorCoverage.mockResolvedValue({
+      required: [],
+      installed: [],
+      missing: [],
+    });
+    mockResolveRoleBundleSkillCoverage.mockResolvedValue({
+      installedSkillKeys: ["paperclipai/paperclip/paperclip"],
+      installedReferences: ["paperclip"],
+      missing: [],
+    });
     mockAgentInstructionsService.materializeManagedBundle.mockImplementation(
       async (agent: Record<string, unknown>, files: Record<string, string>) => ({
         bundle: null,
@@ -284,7 +307,10 @@ describe("agent skill routes", () => {
       .send({ desiredSkills: ["paperclip"] });
 
     expect(res.status, JSON.stringify(res.body)).toBe(200);
-    expect(mockCompanySkillService.resolveRequestedSkillKeys).toHaveBeenCalledWith("company-1", ["paperclip"]);
+    expect(mockCompanySkillService.resolveRequestedSkillKeys).toHaveBeenCalledWith(
+      "company-1",
+      ["paperclip"],
+    );
     expect(mockAgentService.update).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
@@ -310,7 +336,10 @@ describe("agent skill routes", () => {
       });
 
     expect(res.status, JSON.stringify(res.body)).toBe(201);
-    expect(mockCompanySkillService.resolveRequestedSkillKeys).toHaveBeenCalledWith("company-1", ["paperclip"]);
+    expect(mockCompanySkillService.resolveRequestedSkillKeys).toHaveBeenCalledWith(
+      "company-1",
+      ["paperclip"],
+    );
     expect(mockAgentService.create).toHaveBeenCalledWith(
       "company-1",
       expect.objectContaining({
@@ -396,7 +425,7 @@ describe("agent skill routes", () => {
   });
 
   it("materializes the bundled default instruction set for non-CEO agents with no prompt template", async () => {
-    const res = await request(createApp())
+    const res = await request(createApp(createDb({ requireBoardApprovalForNewAgents: true })))
       .post("/api/companies/company-1/agents")
       .send({
         name: "Engineer",
@@ -423,6 +452,37 @@ describe("agent skill routes", () => {
           role: "default",
         }),
       }),
+    );
+  });
+
+  it("appends role-specific operating rules for default designer agents", async () => {
+    const res = await request(createApp(createDb({ requireBoardApprovalForNewAgents: true })))
+      .post("/api/companies/company-1/agents")
+      .send({
+        name: "Designer",
+        role: "designer",
+        adapterType: "claude_local",
+        adapterConfig: {},
+      });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(mockAgentInstructionsService.materializeManagedBundle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "11111111-1111-4111-8111-111111111111",
+        role: "designer",
+        adapterType: "claude_local",
+      }),
+      expect.objectContaining({
+        "AGENTS.md": expect.stringContaining("You own product UX quality and visible polish."),
+      }),
+      expect.any(Object),
+    );
+    expect(mockAgentInstructionsService.materializeManagedBundle).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        "AGENTS.md": expect.stringContaining("Attach primary previews, runtime links, artifacts, or docs"),
+      }),
+      expect.any(Object),
     );
   });
 
@@ -486,8 +546,31 @@ describe("agent skill routes", () => {
     }
   });
 
+  it("lists role bundle catalog entries for the requested role", async () => {
+    const res = await request(createApp())
+      .get("/api/companies/company-1/agent-role-bundles?role=general");
+
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.map((bundle: { key: string }) => bundle.key)).toEqual([
+      "content_operator",
+      "general_specialist",
+    ]);
+    expect(res.body).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: "content_operator",
+        agentRole: "general",
+        requestedSkillRefs: expect.arrayContaining(["doc-maintenance", "pr-report"]),
+      }),
+      expect.objectContaining({
+        key: "general_specialist",
+        agentRole: "general",
+        requestedSkillRefs: expect.arrayContaining(["paperclip", "playwright"]),
+      }),
+    ]));
+  });
+
   it("includes canonical desired skills in hire approvals", async () => {
-    const db = createDb(true);
+    const db = createDb({ requireBoardApprovalForNewAgents: true });
 
     const res = await request(createApp(db))
       .post("/api/companies/company-1/agent-hires")
@@ -500,7 +583,10 @@ describe("agent skill routes", () => {
       });
 
     expect(res.status, JSON.stringify(res.body)).toBe(201);
-    expect(mockCompanySkillService.resolveRequestedSkillKeys).toHaveBeenCalledWith("company-1", ["paperclip"]);
+    expect(mockCompanySkillService.resolveRequestedSkillKeys).toHaveBeenCalledWith(
+      "company-1",
+      ["paperclip", "paperclipai/paperclip/paperclip"],
+    );
     expect(mockApprovalService.create).toHaveBeenCalledWith(
       "company-1",
       expect.objectContaining({
@@ -514,8 +600,314 @@ describe("agent skill routes", () => {
     );
   });
 
+  it("creates skill install approvals for missing role bundle skills with known sources", async () => {
+    mockResolveRoleBundleSkillCoverage.mockResolvedValue({
+      installedSkillKeys: ["paperclipai/paperclip/paperclip"],
+      installedReferences: ["paperclip"],
+      missing: [
+        {
+          reference: "doc-maintenance",
+          displayName: "doc-maintenance",
+          source: "D:/new-projects/paperclip/.agents/skills/doc-maintenance",
+          sourceType: "local_path",
+        },
+      ],
+    });
+
+    const res = await request(createApp(createDb({ requireBoardApprovalForNewAgents: true })))
+      .post("/api/companies/company-1/agent-hires")
+      .send({
+        name: "PM Agent",
+        role: "pm",
+        roleBundleKey: "pm",
+        adapterType: "claude_local",
+        adapterConfig: {},
+      });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(mockApprovalService.create).toHaveBeenNthCalledWith(
+      1,
+      "company-1",
+      expect.objectContaining({
+        type: "hire_agent",
+        payload: expect.objectContaining({
+          missingRequestedSkillRefs: ["doc-maintenance"],
+          missingRequestedSkillDisplayNames: ["doc-maintenance"],
+        }),
+      }),
+    );
+    expect(mockApprovalService.create).toHaveBeenNthCalledWith(
+      2,
+      "company-1",
+      expect.objectContaining({
+        type: "install_company_skill",
+        payload: expect.objectContaining({
+          requestedRef: "doc-maintenance",
+          source: "D:/new-projects/paperclip/.agents/skills/doc-maintenance",
+          roleBundleKey: "pm",
+          relatedHireApprovalId: "approval-1",
+        }),
+      }),
+    );
+    expect(res.body.skillApprovals).toHaveLength(1);
+    expect(res.body.missingRequestedSkills).toHaveLength(1);
+  });
+
+  it("reuses existing pending skill approvals instead of duplicating them", async () => {
+    mockResolveRoleBundleSkillCoverage.mockResolvedValue({
+      installedSkillKeys: ["paperclipai/paperclip/paperclip"],
+      installedReferences: ["paperclip"],
+      missing: [
+        {
+          reference: "doc-maintenance",
+          displayName: "doc-maintenance",
+          source: "D:/new-projects/paperclip/.agents/skills/doc-maintenance",
+          sourceType: "local_path",
+        },
+      ],
+    });
+    mockApprovalService.list.mockResolvedValue([
+      {
+        id: "approval-skill-existing",
+        companyId: "company-1",
+        type: "install_company_skill",
+        status: "pending",
+        payload: {
+          requestedRef: "doc-maintenance",
+          source: "D:/new-projects/paperclip/.agents/skills/doc-maintenance",
+        },
+      },
+    ]);
+
+    const res = await request(createApp(createDb({ requireBoardApprovalForNewAgents: true })))
+      .post("/api/companies/company-1/agent-hires")
+      .send({
+        name: "PM Agent",
+        role: "pm",
+        roleBundleKey: "pm",
+        adapterType: "claude_local",
+        adapterConfig: {},
+      });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(mockApprovalService.create).toHaveBeenCalledTimes(1);
+    expect(mockApprovalService.create).toHaveBeenCalledWith(
+      "company-1",
+      expect.objectContaining({
+        type: "hire_agent",
+      }),
+    );
+    expect(res.body.skillApprovals).toHaveLength(1);
+    expect(res.body.skillApprovals[0].id).toBe("approval-skill-existing");
+  });
+
+  it("does not auto-create skill approvals when installation policy is manual only", async () => {
+    mockResolveRoleBundleSkillCoverage.mockResolvedValue({
+      installedSkillKeys: ["paperclipai/paperclip/paperclip"],
+      installedReferences: ["paperclip"],
+      missing: [
+        {
+          reference: "doc-maintenance",
+          displayName: "doc-maintenance",
+          source: "D:/new-projects/paperclip/.agents/skills/doc-maintenance",
+          sourceType: "local_path",
+        },
+      ],
+    });
+
+    const res = await request(createApp(createDb({
+      requireBoardApprovalForNewAgents: true,
+      toolInstallPolicy: "manual_only",
+    })))
+      .post("/api/companies/company-1/agent-hires")
+      .send({
+        name: "PM Agent",
+        role: "pm",
+        roleBundleKey: "pm",
+        adapterType: "claude_local",
+        adapterConfig: {},
+      });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(mockApprovalService.create).toHaveBeenCalledTimes(1);
+    expect(res.body.skillApprovals).toHaveLength(0);
+    expect(mockApprovalService.create).toHaveBeenCalledWith(
+      "company-1",
+      expect.objectContaining({
+        type: "hire_agent",
+        payload: expect.objectContaining({
+          missingRequestedSkillRefs: ["doc-maintenance"],
+        }),
+      }),
+    );
+  });
+
+  it("creates connector install approvals for missing role bundle plugins", async () => {
+    mockResolveRoleBundleConnectorCoverage.mockResolvedValue({
+      required: [
+        {
+          key: "@paperclip/plugin-linear",
+          displayName: "Linear Connector",
+          pluginKey: "@paperclip/plugin-linear",
+          packageName: "@paperclip/plugin-linear",
+          reason: "Required for issue sync",
+        },
+      ],
+      installed: [],
+      missing: [
+        {
+          key: "@paperclip/plugin-linear",
+          displayName: "Linear Connector",
+          pluginKey: "@paperclip/plugin-linear",
+          packageName: "@paperclip/plugin-linear",
+          reason: "Required for issue sync",
+        },
+      ],
+    });
+
+    const res = await request(createApp(createDb({ requireBoardApprovalForNewAgents: true })))
+      .post("/api/companies/company-1/agent-hires")
+      .send({
+        name: "PM Agent",
+        role: "pm",
+        roleBundleKey: "pm",
+        adapterType: "claude_local",
+        adapterConfig: {},
+      });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(mockApprovalService.create).toHaveBeenNthCalledWith(
+      1,
+      "company-1",
+      expect.objectContaining({
+        type: "hire_agent",
+        payload: expect.objectContaining({
+          missingConnectorPluginKeys: ["@paperclip/plugin-linear"],
+          missingConnectorPluginDisplayNames: ["Linear Connector"],
+        }),
+      }),
+    );
+    expect(mockApprovalService.create).toHaveBeenNthCalledWith(
+      2,
+      "company-1",
+      expect.objectContaining({
+        type: "install_connector_plugin",
+        payload: expect.objectContaining({
+          pluginKey: "@paperclip/plugin-linear",
+          packageName: "@paperclip/plugin-linear",
+          name: "Linear Connector",
+          relatedHireApprovalId: "approval-1",
+        }),
+      }),
+    );
+    expect(res.body.connectorApprovals).toHaveLength(1);
+  });
+
+  it("reuses existing pending connector approvals instead of duplicating them", async () => {
+    mockResolveRoleBundleConnectorCoverage.mockResolvedValue({
+      required: [
+        {
+          key: "@paperclip/plugin-linear",
+          displayName: "Linear Connector",
+          pluginKey: "@paperclip/plugin-linear",
+          packageName: "@paperclip/plugin-linear",
+        },
+      ],
+      installed: [],
+      missing: [
+        {
+          key: "@paperclip/plugin-linear",
+          displayName: "Linear Connector",
+          pluginKey: "@paperclip/plugin-linear",
+          packageName: "@paperclip/plugin-linear",
+        },
+      ],
+    });
+    mockApprovalService.list.mockResolvedValue([
+      {
+        id: "approval-existing",
+        companyId: "company-1",
+        type: "install_connector_plugin",
+        status: "pending",
+        payload: {
+          pluginKey: "@paperclip/plugin-linear",
+          packageName: "@paperclip/plugin-linear",
+        },
+      },
+    ]);
+
+    const res = await request(createApp(createDb({ requireBoardApprovalForNewAgents: true })))
+      .post("/api/companies/company-1/agent-hires")
+      .send({
+        name: "PM Agent",
+        role: "pm",
+        roleBundleKey: "pm",
+        adapterType: "claude_local",
+        adapterConfig: {},
+      });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(mockApprovalService.create).toHaveBeenCalledTimes(1);
+    expect(mockApprovalService.create).toHaveBeenCalledWith(
+      "company-1",
+      expect.objectContaining({
+        type: "hire_agent",
+      }),
+    );
+    expect(res.body.connectorApprovals).toHaveLength(1);
+    expect(res.body.connectorApprovals[0].id).toBe("approval-existing");
+  });
+
+  it("does not auto-create connector approvals when tool installation is manual only", async () => {
+    mockResolveRoleBundleConnectorCoverage.mockResolvedValue({
+      required: [
+        {
+          key: "@paperclip/plugin-linear",
+          displayName: "Linear Connector",
+          pluginKey: "@paperclip/plugin-linear",
+          packageName: "@paperclip/plugin-linear",
+        },
+      ],
+      installed: [],
+      missing: [
+        {
+          key: "@paperclip/plugin-linear",
+          displayName: "Linear Connector",
+          pluginKey: "@paperclip/plugin-linear",
+          packageName: "@paperclip/plugin-linear",
+        },
+      ],
+    });
+
+    const res = await request(createApp(createDb({
+      requireBoardApprovalForNewAgents: true,
+      toolInstallPolicy: "manual_only",
+    })))
+      .post("/api/companies/company-1/agent-hires")
+      .send({
+        name: "PM Agent",
+        role: "pm",
+        roleBundleKey: "pm",
+        adapterType: "claude_local",
+        adapterConfig: {},
+      });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(mockApprovalService.create).toHaveBeenCalledTimes(1);
+    expect(res.body.connectorApprovals).toHaveLength(0);
+    expect(mockApprovalService.create).toHaveBeenCalledWith(
+      "company-1",
+      expect.objectContaining({
+        type: "hire_agent",
+        payload: expect.objectContaining({
+          missingConnectorPluginKeys: ["@paperclip/plugin-linear"],
+        }),
+      }),
+    );
+  });
+
   it("uses managed AGENTS config in hire approval payloads", async () => {
-    const res = await request(createApp(createDb(true)))
+    const res = await request(createApp(createDb({ requireBoardApprovalForNewAgents: true })))
       .post("/api/companies/company-1/agent-hires")
       .send({
         name: "QA Agent",

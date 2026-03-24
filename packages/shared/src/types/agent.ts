@@ -3,6 +3,8 @@ import type {
   PauseReason,
   AgentRole,
   AgentStatus,
+  ReviewPolicyKey,
+  RoleBundleKey,
 } from "../constants.js";
 import type {
   CompanyMembership,
@@ -57,6 +59,25 @@ export interface AgentChainOfCommandEntry {
   name: string;
   role: AgentRole;
   title: string | null;
+}
+
+export interface RoleBundleCatalogConnectorRequirement {
+  key: string;
+  displayName: string;
+  pluginKey?: string | null;
+  packageName?: string | null;
+  reason?: string | null;
+}
+
+export interface RoleBundleCatalogEntry {
+  key: RoleBundleKey;
+  label: string;
+  agentRole: AgentRole;
+  title: string;
+  requestedSkillRefs: string[];
+  requiredConnectorPlugins: RoleBundleCatalogConnectorRequirement[];
+  defaultReviewPolicyKey: ReviewPolicyKey | null;
+  defaultReviewerRole: AgentRole | string | null;
 }
 
 export interface Agent {

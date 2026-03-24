@@ -1,13 +1,17 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "@/lib/router";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
+import { useToast } from "../context/ToastContext";
 import { agentsApi } from "../api/agents";
 import { companySkillsApi } from "../api/companySkills";
 import { instanceSettingsApi } from "../api/instanceSettings";
+import { pluginsApi } from "../api/plugins";
 import { queryKeys } from "../lib/queryKeys";
-import { AGENT_ROLES } from "@paperclipai/shared";
+import { buildAgentHireToastPlan } from "../lib/agent-hire-feedback";
+import { AGENT_ROLES, REVIEW_POLICY_LABELS } from "@paperclipai/shared";
+import { getRoleBundleReadiness } from "../lib/role-bundle-readiness";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -15,7 +19,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Shield, User } from "lucide-react";
+import { Layers3, Shield, User } from "lucide-react";
 import { cn, agentUrl } from "../lib/utils";
 import { roleLabels } from "../components/agent-config-primitives";
 import { AgentConfigForm, type CreateConfigValues } from "../components/AgentConfigForm";
@@ -60,10 +64,11 @@ function createValuesForAdapterType(
 }
 
 export function NewAgent() {
-  const { selectedCompanyId } = useCompany();
+  const { selectedCompanyId, selectedCompany } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { pushToast } = useToast();
   const [searchParams] = useSearchParams();
   const presetAdapterType = searchParams.get("adapterType");
 
@@ -73,7 +78,9 @@ export function NewAgent() {
   const [reportsTo, setReportsTo] = useState("");
   const [configValues, setConfigValues] = useState<CreateConfigValues>(defaultCreateValues);
   const [selectedSkillKeys, setSelectedSkillKeys] = useState<string[]>([]);
+  const [roleBundleKey, setRoleBundleKey] = useState("");
   const [roleOpen, setRoleOpen] = useState(false);
+  const [roleBundleOpen, setRoleBundleOpen] = useState(false);
   const [reportsToOpen, setReportsToOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const executionLocationTouchedRef = useRef(false);
@@ -114,6 +121,17 @@ export function NewAgent() {
   const isFirstAgent = !agents || agents.length === 0;
   const effectiveRole = isFirstAgent ? "ceo" : role;
 
+  const {
+    data: roleBundles,
+    error: roleBundlesError,
+  } = useQuery({
+    queryKey: selectedCompanyId
+      ? queryKeys.agents.roleBundles(selectedCompanyId, effectiveRole)
+      : ["agents", "none", "role-bundles", effectiveRole],
+    queryFn: () => agentsApi.roleBundles(selectedCompanyId!, effectiveRole),
+    enabled: Boolean(selectedCompanyId) && effectiveRole !== "ceo",
+  });
+
   useEffect(() => {
     setBreadcrumbs([
       { label: "Agents", href: "/agents" },
@@ -152,12 +170,81 @@ export function NewAgent() {
     );
   }, [defaultExecutionLocation]);
 
+  const availableRoleBundles = useMemo(
+    () => roleBundles ?? [],
+    [roleBundles],
+  );
+  const selectedRoleBundle = useMemo(
+    () => availableRoleBundles.find((bundle) => bundle.key === roleBundleKey) ?? availableRoleBundles[0] ?? null,
+    [availableRoleBundles, roleBundleKey],
+  );
+  const toolInstallPolicy = selectedCompany?.toolInstallPolicy ?? "approval_gated";
+
+  const {
+    data: installedPlugins,
+    error: installedPluginsError,
+  } = useQuery({
+    queryKey: queryKeys.plugins.all,
+    queryFn: () => pluginsApi.list(),
+    enabled: Boolean(selectedRoleBundle?.requiredConnectorPlugins.length),
+  });
+
+  const roleBundleReadiness = useMemo(
+    () =>
+      selectedRoleBundle
+        ? getRoleBundleReadiness({
+            bundle: selectedRoleBundle,
+            companySkills: companySkills ?? [],
+            installedPlugins: installedPlugins ?? [],
+            toolInstallPolicy,
+          })
+        : null,
+    [companySkills, installedPlugins, selectedRoleBundle, toolInstallPolicy],
+  );
+  const bundleIncludedSkillKeys = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          roleBundleReadiness?.installedSkills.map((entry) => entry.skill.key) ?? [],
+        ),
+      ).sort(),
+    [roleBundleReadiness],
+  );
+
+  useEffect(() => {
+    if (effectiveRole === "ceo" || availableRoleBundles.length === 0) {
+      setRoleBundleKey("");
+      setRoleBundleOpen(false);
+      return;
+    }
+    setRoleBundleKey((current) =>
+      availableRoleBundles.some((bundle) => bundle.key === current)
+        ? current
+        : availableRoleBundles[0]!.key,
+    );
+  }, [availableRoleBundles, effectiveRole]);
+
+  useEffect(() => {
+    if (bundleIncludedSkillKeys.length === 0) return;
+    const includedKeys = new Set(bundleIncludedSkillKeys);
+    setSelectedSkillKeys((prev) => prev.filter((key) => !includedKeys.has(key)));
+  }, [bundleIncludedSkillKeys]);
+
   const createAgent = useMutation({
     mutationFn: (data: Record<string, unknown>) =>
       agentsApi.hire(selectedCompanyId!, data),
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.agents.list(selectedCompanyId!) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.approvals.list(selectedCompanyId!) });
+    onSuccess: async (result) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.list(selectedCompanyId!) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.approvals.list(selectedCompanyId!) }),
+      ]);
+      pushToast(
+        buildAgentHireToastPlan({
+          hasHireApproval: Boolean(result.approval),
+          skillApprovalCount: result.skillApprovals?.length ?? 0,
+          connectorApprovalCount: result.connectorApprovals?.length ?? 0,
+        }),
+      );
       navigate(agentUrl(result.agent));
     },
     onError: (error) => {
@@ -204,6 +291,7 @@ export function NewAgent() {
     createAgent.mutate({
       name: name.trim(),
       role: effectiveRole,
+      ...(selectedRoleBundle ? { roleBundleKey: selectedRoleBundle.key } : {}),
       ...(title.trim() ? { title: title.trim() } : {}),
       ...(reportsTo ? { reportsTo } : {}),
       ...(selectedSkillKeys.length > 0 ? { desiredSkills: selectedSkillKeys } : {}),
@@ -224,6 +312,29 @@ export function NewAgent() {
 
   const currentReportsTo = (agents ?? []).find((a) => a.id === reportsTo);
   const availableSkills = (companySkills ?? []).filter((skill) => !skill.key.startsWith("paperclipai/paperclip/"));
+  const bundleCoverageCount =
+    (roleBundleReadiness?.installedSkills.length ?? 0) +
+    (roleBundleReadiness?.installedConnectors.length ?? 0);
+  const bundleApprovalCount =
+    (roleBundleReadiness?.pendingApprovalSkillRefs.length ?? 0) +
+    (roleBundleReadiness?.pendingApprovalConnectors.length ?? 0);
+  const bundleManualGapCount =
+    (roleBundleReadiness?.manualSkillRefs.length ?? 0) +
+    (roleBundleReadiness?.manualConnectorRequirements.length ?? 0);
+  const readinessHeadline = roleBundleReadiness
+    ? bundleApprovalCount > 0
+      ? `${bundleApprovalCount} ${bundleApprovalCount === 1 ? "bundle capability needs" : "bundle capabilities need"} install approval${bundleApprovalCount === 1 ? "" : "s"} on hire.`
+      : bundleManualGapCount > 0
+        ? `${bundleManualGapCount} ${bundleManualGapCount === 1 ? "bundle capability still needs" : "bundle capabilities still need"} manual setup before this role is fully ready.`
+        : "This role bundle is fully covered by the current company setup."
+    : null;
+  const readinessDetail = roleBundleReadiness
+    ? bundleApprovalCount > 0
+      ? "Paperclip will queue follow-up approvals for the missing role-bundle installs."
+      : bundleManualGapCount > 0
+        ? "This company is configured for manual installs, or the missing connector lacks an install package."
+        : `Covered now: ${bundleCoverageCount} ${bundleCoverageCount === 1 ? "capability" : "capabilities"}.`
+    : null;
 
   function toggleSkill(key: string, checked: boolean) {
     setSelectedSkillKeys((prev) => {
@@ -343,7 +454,145 @@ export function NewAgent() {
               ))}
             </PopoverContent>
           </Popover>
+
+          {!isFirstAgent && availableRoleBundles.length > 0 && (
+            <Popover open={roleBundleOpen} onOpenChange={setRoleBundleOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs hover:bg-accent/50 transition-colors",
+                    availableRoleBundles.length === 1 && "cursor-default"
+                  )}
+                  disabled={availableRoleBundles.length === 1}
+                >
+                  <Layers3 className="h-3 w-3 text-muted-foreground" />
+                  {selectedRoleBundle?.label ?? "Role bundle"}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-56 p-1" align="start">
+                {availableRoleBundles.map((bundle) => (
+                  <button
+                    key={bundle.key}
+                    className={cn(
+                      "flex w-full flex-col items-start gap-1 rounded px-2 py-2 text-left hover:bg-accent/50",
+                      bundle.key === selectedRoleBundle?.key && "bg-accent",
+                    )}
+                    onClick={() => {
+                      setRoleBundleKey(bundle.key);
+                      setRoleBundleOpen(false);
+                    }}
+                  >
+                    <span className="text-xs font-medium">{bundle.label}</span>
+                    <span className="text-[11px] text-muted-foreground">{bundle.title}</span>
+                  </button>
+                ))}
+              </PopoverContent>
+            </Popover>
+          )}
         </div>
+
+        {!isFirstAgent && selectedRoleBundle && (
+          <div className="border-t border-border px-4 py-4">
+            <div className="space-y-3 rounded-lg border border-border/70 bg-muted/20 p-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                    Role bundle
+                  </p>
+                  <p className="mt-1 text-sm font-medium">{selectedRoleBundle.label}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{selectedRoleBundle.title}</p>
+                </div>
+                <div className="text-right text-xs text-muted-foreground">
+                  {selectedRoleBundle.defaultReviewPolicyKey ? (
+                    <>
+                      <div>{REVIEW_POLICY_LABELS[selectedRoleBundle.defaultReviewPolicyKey]}</div>
+                      <div>
+                        Reviewer:{" "}
+                        {selectedRoleBundle.defaultReviewerRole
+                          ? (roleLabels[selectedRoleBundle.defaultReviewerRole] ?? selectedRoleBundle.defaultReviewerRole)
+                          : "Unassigned"}
+                      </div>
+                    </>
+                  ) : (
+                    <div>No default review gate</div>
+                  )}
+                </div>
+              </div>
+
+              {roleBundleReadiness ? (
+                <div className="rounded-md border border-border/70 bg-background/80 p-3">
+                  <p className="text-sm font-medium">{readinessHeadline}</p>
+                  {readinessDetail ? (
+                    <p className="mt-1 text-xs text-muted-foreground">{readinessDetail}</p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <div className="space-y-2">
+                <div>
+                  <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                    Auto skills
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {selectedRoleBundle.requestedSkillRefs.map((skillRef) => {
+                      const installedByCompany = roleBundleReadiness?.installedSkills.some(
+                        (entry) => entry.reference === skillRef,
+                      );
+                      return (
+                        <span
+                          key={skillRef}
+                          className={cn(
+                            "rounded-full border px-2 py-0.5 font-mono text-[10px]",
+                            installedByCompany
+                              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                              : toolInstallPolicy === "approval_gated"
+                                ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                                : "border-border bg-background text-muted-foreground",
+                          )}
+                        >
+                          {skillRef}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    Green means the skill is already installed in the company library. Amber means the hire will queue an install approval.
+                    {toolInstallPolicy === "manual_only"
+                      ? " Neutral chips still need manual setup."
+                      : ""}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                    Connector requirements
+                  </p>
+                  {selectedRoleBundle.requiredConnectorPlugins.length > 0 ? (
+                    <div className="mt-2 space-y-1.5">
+                      {selectedRoleBundle.requiredConnectorPlugins.map((requirement) => (
+                        <div key={requirement.key} className="text-xs text-muted-foreground">
+                          <span className="font-medium text-foreground">{requirement.displayName}</span>
+                          {requirement.reason ? ` · ${requirement.reason}` : ""}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      No default connector installs required for this bundle.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                Paperclip will attach installed skills automatically and create approval-gated install requests for missing bundle capabilities when needed.
+              </p>
+            </div>
+            {roleBundlesError instanceof Error ? (
+              <p className="mt-2 text-xs text-destructive">{roleBundlesError.message}</p>
+            ) : null}
+          </div>
+        )}
 
         {/* Shared config form */}
         <AgentConfigForm
@@ -413,7 +662,7 @@ export function NewAgent() {
               disabled={!name.trim() || createAgent.isPending}
               onClick={handleSubmit}
             >
-              {createAgent.isPending ? "Creating…" : "Create agent"}
+              {createAgent.isPending ? "Creating..." : "Create agent"}
             </Button>
           </div>
         </div>

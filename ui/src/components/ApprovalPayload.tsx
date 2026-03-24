@@ -105,6 +105,30 @@ function StringList({ label, values }: { label: string; values: unknown }) {
   );
 }
 
+function ConnectorList({ label, values }: { label: string; values: unknown }) {
+  if (!Array.isArray(values)) return null;
+  const items = values
+    .map((value) => {
+      if (typeof value === "string") return value.trim();
+      if (!value || typeof value !== "object") return "";
+      const record = value as Record<string, unknown>;
+      return [
+        record.displayName,
+        record.name,
+        record.pluginKey,
+        record.pluginId,
+        record.packageName,
+        record.localPath,
+        record.key,
+      ]
+        .find((candidate) => typeof candidate === "string" && candidate.trim().length > 0)?.toString().trim() ?? "";
+    })
+    .filter(Boolean);
+  if (items.length === 0) return null;
+
+  return <StringList label={label} values={items} />;
+}
+
 export function HireAgentPayload({ payload }: { payload: Record<string, unknown> }) {
   return (
     <div className="mt-3 space-y-1.5 text-sm">
@@ -135,6 +159,9 @@ export function HireAgentPayload({ payload }: { payload: Record<string, unknown>
       <PayloadField label="Issue" value={payload.followUpIssueId} />
       <SkillList values={payload.desiredSkills} />
       <StringList label="Requests" values={payload.requestedSkills} />
+      <StringList label="Missing skills" values={payload.missingRequestedSkillDisplayNames ?? payload.missingRequestedSkillRefs} />
+      <ConnectorList label="Connectors" values={payload.missingConnectorPlugins} />
+      <StringList label="Connectors" values={payload.missingConnectorPluginDisplayNames} />
     </div>
   );
 }
@@ -142,8 +169,11 @@ export function HireAgentPayload({ payload }: { payload: Record<string, unknown>
 export function InstallSkillPayload({ payload }: { payload: Record<string, unknown> }) {
   return (
     <div className="mt-3 space-y-1.5 text-sm">
-      <PayloadField label="Skill" value={payload.skillId ?? payload.slug ?? payload.name} />
+      <PayloadField label="Skill" value={payload.name ?? payload.skillId ?? payload.slug} />
+      <PayloadField label="Ref" value={payload.requestedRef ?? payload.slug} />
       <PayloadField label="Source" value={payload.source} />
+      <PayloadField label="Bundle" value={payload.roleBundleLabel ?? payload.roleBundleKey} />
+      <PayloadField label="Agent" value={payload.requiredByAgentName ?? payload.requiredByAgentId} />
       <PayloadField label="Reason" value={payload.reason} />
     </div>
   );
@@ -152,8 +182,12 @@ export function InstallSkillPayload({ payload }: { payload: Record<string, unkno
 export function InstallConnectorPayload({ payload }: { payload: Record<string, unknown> }) {
   return (
     <div className="mt-3 space-y-1.5 text-sm">
-      <PayloadField label="Plugin" value={payload.pluginId ?? payload.pluginSlug ?? payload.name} />
+      <PayloadField label="Plugin" value={payload.name ?? payload.pluginId ?? payload.pluginSlug} />
+      <PayloadField label="Key" value={payload.pluginKey ?? payload.pluginId ?? payload.pluginSlug} />
+      <PayloadField label="Package" value={payload.packageName ?? payload.localPath} />
       <PayloadField label="Source" value={payload.source} />
+      <PayloadField label="Bundle" value={payload.roleBundleLabel ?? payload.roleBundleKey} />
+      <PayloadField label="Agent" value={payload.requiredByAgentName ?? payload.requiredByAgentId} />
       <PayloadField label="Reason" value={payload.reason} />
     </div>
   );
