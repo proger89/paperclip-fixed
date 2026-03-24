@@ -5,6 +5,10 @@ import type {
   AdapterSkillEntry,
   AdapterSkillSnapshot,
 } from "./types.js";
+import {
+  parseHostRuntimePathMap,
+  type HostRuntimePathMap,
+} from "./host-runtime.js";
 
 export interface RunProcessResult {
   exitCode: number | null;
@@ -270,6 +274,18 @@ export function resolvePaperclipAgentFacingApiUrl(env: NodeJS.ProcessEnv = proce
     ?? normalizePaperclipBaseUrl(env.PAPERCLIP_PUBLIC_URL)
     ?? resolvePaperclipInternalApiUrl(env)
   );
+}
+
+export function resolvePaperclipHostRuntimePathMaps(
+  env: NodeJS.ProcessEnv = process.env,
+): HostRuntimePathMap[] {
+  const raw = env.PAPERCLIP_HOST_RUNTIME_PATH_MAPS?.trim() ?? "";
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => parseHostRuntimePathMap(entry));
 }
 
 export function buildPaperclipEnv(

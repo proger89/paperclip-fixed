@@ -3,12 +3,17 @@ import {
   type AdapterExecutionContext,
   type AdapterExecutionResult,
   type AdapterInvocationMeta,
+  type HostRuntimeHealthResponse,
   type HostRuntimeBrowserSessionRequest,
   type HostRuntimeBrowserSessionResponse,
   type HostRuntimeExecuteEvent,
   buildHostRuntimeUnavailableTestResult,
 } from "@paperclipai/adapter-utils";
 import { buildPaperclipEnv } from "@paperclipai/adapter-utils/server-utils";
+import {
+  hostRuntimePathMapsContainExpected,
+  resolveConfiguredHostRuntimePathMaps,
+} from "../local-adapter-paths.js";
 
 const activeExecutions = new Map<string, AbortController>();
 const HOST_BRIDGE_LOG_QUEUE_MAX = 64;
@@ -20,6 +25,8 @@ type BridgeErrorCode =
   | "host_bridge_unavailable"
   | "host_bridge_auth_failed"
   | "host_browser_unavailable"
+  | "host_bridge_path_map_mismatch"
+  | "host_bridge_unmapped_path"
   | "host_bridge_bad_response";
 
 class HostRuntimeBridgeError extends Error {
@@ -93,6 +100,36 @@ async function bridgeFetch(path: string, init: RequestInit = {}) {
   }
 
   return response;
+}
+
+async function readBridgeHealth() {
+  const response = await bridgeFetch("/health", {
+    method: "GET",
+    headers: {
+      accept: "application/json",
+    },
+  });
+  if (!response.ok) {
+    const body = await parseJsonResponse(response);
+    throw new HostRuntimeBridgeError(
+      "host_bridge_bad_response",
+      typeof body.error === "string" && body.error.trim()
+        ? body.error.trim()
+        : `Host runtime bridge health returned ${response.status}.`,
+    );
+  }
+  const health = await response.json() as HostRuntimeHealthResponse;
+  const expectedMaps = resolveConfiguredHostRuntimePathMaps();
+  if (
+    expectedMaps.length > 0
+    && !hostRuntimePathMapsContainExpected(expectedMaps, Array.isArray(health.pathMaps) ? health.pathMaps : [])
+  ) {
+    throw new HostRuntimeBridgeError(
+      "host_bridge_path_map_mismatch",
+      "Host runtime bridge path maps do not match PAPERCLIP_HOST_RUNTIME_PATH_MAPS. Restart the bridge with the same /paperclip and /app mappings configured on the server.",
+    );
+  }
+  return health;
 }
 
 function derivePaperclipApiUrl(ctx: Pick<AdapterExecutionContext, "agent">) {
@@ -288,6 +325,7 @@ export async function executeViaHostRuntimeBridge(
   const controller = new AbortController();
   activeExecutions.set(ctx.runId, controller);
   try {
+    await readBridgeHealth();
     const response = await bridgeFetch("/v1/execute", {
       method: "POST",
       signal: controller.signal,
@@ -306,11 +344,15 @@ export async function executeViaHostRuntimeBridge(
     });
     if (!response.ok) {
       const body = await parseJsonResponse(response);
-      throw new HostRuntimeBridgeError(
-        "host_bridge_bad_response",
+      const message =
         typeof body.error === "string" && body.error.trim()
           ? body.error.trim()
-          : `Host runtime bridge returned ${response.status}.`,
+          : `Host runtime bridge returned ${response.status}.`;
+      throw new HostRuntimeBridgeError(
+        /outside configured host-runtime path maps/i.test(message)
+          ? "host_bridge_unmapped_path"
+          : "host_bridge_bad_response",
+        message,
       );
     }
     return await readNdjsonStream(response, {
@@ -349,6 +391,7 @@ export async function testEnvironmentViaHostRuntimeBridge(input: {
   config: Record<string, unknown>;
 }): Promise<AdapterEnvironmentTestResult> {
   try {
+    await readBridgeHealth();
     const response = await bridgeFetch("/v1/test-environment", {
       method: "POST",
       body: JSON.stringify({
@@ -363,13 +406,16 @@ export async function testEnvironmentViaHostRuntimeBridge(input: {
     });
     if (!response.ok) {
       const body = await parseJsonResponse(response);
+      const message =
+        typeof body.error === "string" && body.error.trim()
+          ? body.error.trim()
+          : `Host runtime bridge returned ${response.status}.`;
       return buildHostRuntimeUnavailableTestResult({
         adapterType: input.adapterType,
-        code: "host_runtime_test_failed",
-        message:
-          typeof body.error === "string" && body.error.trim()
-            ? body.error.trim()
-            : `Host runtime bridge returned ${response.status}.`,
+        code: /outside configured host-runtime path maps/i.test(message)
+          ? "host_bridge_unmapped_path"
+          : "host_runtime_test_failed",
+        message,
       });
     }
     return await response.json() as AdapterEnvironmentTestResult;
@@ -379,7 +425,11 @@ export async function testEnvironmentViaHostRuntimeBridge(input: {
       err instanceof HostRuntimeBridgeError
         ? err.code === "host_bridge_auth_failed"
           ? "host_bridge_auth_failed"
-          : "host_bridge_unavailable"
+          : err.code === "host_bridge_path_map_mismatch"
+            ? "host_bridge_path_map_mismatch"
+            : err.code === "host_bridge_unmapped_path"
+              ? "host_bridge_unmapped_path"
+              : "host_bridge_unavailable"
         : "host_bridge_unavailable";
     return buildHostRuntimeUnavailableTestResult({
       adapterType: input.adapterType,

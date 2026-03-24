@@ -38,4 +38,13 @@ describe("run error presentation", () => {
       "Wrong Paperclip instance",
     );
   });
+
+  it("surfaces host-runtime path-map failures with actionable repair hints", () => {
+    expect(getRunStatusLabel("failed", "host_bridge_path_map_mismatch")).toBe("lost control-plane access");
+    expect(getRunStatusBody({ error: null, errorCode: "host_bridge_unmapped_path" })).toContain(
+      "persisted outside configured host-runtime path maps",
+    );
+    expect(getRunFailureHelper("host_bridge_path_map_mismatch")?.title).toContain("path maps");
+    expect(getRunFailureHelper("host_bridge_unmapped_path")?.body).toContain("omit adapterConfig.cwd");
+  });
 });

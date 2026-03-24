@@ -8,6 +8,8 @@ export function isControlPlaneFailureErrorCode(errorCode: string | null | undefi
   return (
     errorCode === "paperclip_control_plane_unavailable"
     || errorCode === "paperclip_control_plane_auth_failed"
+    || errorCode === "host_bridge_path_map_mismatch"
+    || errorCode === "host_bridge_unmapped_path"
   );
 }
 
@@ -48,6 +50,12 @@ export function getRunStatusBody(input: {
   if (input.errorCode === "paperclip_control_plane_auth_failed") {
     return "The host-executed agent reached Paperclip, but the run JWT was rejected by that instance.";
   }
+  if (input.errorCode === "host_bridge_path_map_mismatch") {
+    return "The server and host bridge disagree about configured host-runtime path maps.";
+  }
+  if (input.errorCode === "host_bridge_unmapped_path") {
+    return "The run referenced a host path that was persisted outside configured host-runtime path maps.";
+  }
   if (input.triggerDetail) return `Trigger: ${input.triggerDetail}`;
   return undefined;
 }
@@ -76,6 +84,22 @@ export function getRunFailureHelper(
       title: "Wrong Paperclip instance or rejected run auth",
       body:
         "The host-executed agent reached Paperclip, but that instance rejected the run JWT. Check PAPERCLIP_AGENT_API_URL or PAPERCLIP_PUBLIC_URL and make sure the host runtime points at the same Paperclip instance that started the run.",
+      tone: "error",
+    };
+  }
+  if (errorCode === "host_bridge_path_map_mismatch") {
+    return {
+      title: "Host bridge path maps do not match",
+      body:
+        "The Paperclip server and host bridge are using different path-map prefixes. Restart the host bridge with the same /paperclip and /app mappings configured in PAPERCLIP_HOST_RUNTIME_PATH_MAPS.",
+      tone: "error",
+    };
+  }
+  if (errorCode === "host_bridge_unmapped_path") {
+    return {
+      title: "Invalid persisted host path",
+      body:
+        "The run tried to reuse a host-only path that was saved in agent config or session state. Reset the invalid cwd/session, or omit adapterConfig.cwd when hiring managed local agents.",
       tone: "error",
     };
   }

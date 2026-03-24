@@ -133,6 +133,38 @@ process.exit(0);
   }
 }
 
+function maybeRepairPersistedLocalAdapterPaths() {
+  const inlineRepairScript = `
+import { createDb } from "./packages/db/src/index.ts";
+import { repairPersistedLocalAdapterPaths } from "./server/src/local-adapter-path-repair.ts";
+
+const db = createDb(process.env.DATABASE_URL);
+const result = await repairPersistedLocalAdapterPaths(db, process.env);
+console.log(
+  "Persisted local-adapter path repair",
+  JSON.stringify(result),
+);
+process.exit(0);
+`;
+  const result = spawnSync(
+    "node",
+    [
+      "--import",
+      "./server/node_modules/tsx/dist/loader.mjs",
+      "--input-type=module",
+      "-e",
+      inlineRepairScript,
+    ],
+    {
+      stdio: "inherit",
+      env: process.env,
+    },
+  );
+  if (result.status !== 0) {
+    console.error("Persisted local-adapter path repair failed inside docker entrypoint.");
+  }
+}
+
 async function waitForHealth(serverProcess, timeoutMs = 120_000) {
   const startedAt = Date.now();
   while (!serverProcess.killed && serverProcess.exitCode === null) {
@@ -224,6 +256,7 @@ void (async () => {
   try {
     const health = await waitForHealth(serverProcess);
     maybeRepairHybridLocalAgents();
+    maybeRepairPersistedLocalAdapterPaths();
     maybeRepairManagedInstructionBundles();
     maybeCreateBootstrapInvite(health);
   } catch (error) {

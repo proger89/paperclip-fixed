@@ -63,6 +63,10 @@ import {
   resolveDefaultAgentInstructionsBundleRole,
 } from "../services/default-agent-instructions.js";
 import { applyDefaultLocalExecutionLocation } from "../local-adapter-defaults.js";
+import {
+  canonicalizeLocalAdapterConfigPathsForPersistence,
+  LocalAdapterPathValidationError,
+} from "../local-adapter-paths.js";
 
 export function agentRoutes(db: Db) {
   const DEFAULT_INSTRUCTIONS_PATH_KEYS: Record<string, string> = {
@@ -380,6 +384,26 @@ export function agentRoutes(db: Db) {
       next.model = DEFAULT_CURSOR_LOCAL_MODEL;
     }
     return ensureGatewayDeviceKey(adapterType, next);
+  }
+
+  function canonicalizeAdapterConfigForPersistence(
+    companyId: string,
+    adapterType: string | null | undefined,
+    adapterConfig: Record<string, unknown>,
+    options: { agentId?: string | null; route: string },
+  ) {
+    try {
+      return canonicalizeLocalAdapterConfigPathsForPersistence(adapterType, adapterConfig, {
+        companyId,
+        agentId: options.agentId ?? null,
+        route: options.route,
+      });
+    } catch (err) {
+      if (err instanceof LocalAdapterPathValidationError) {
+        throw unprocessable(err.message);
+      }
+      throw err;
+    }
   }
 
   async function assertAdapterConfigConstraints(
@@ -1163,10 +1187,16 @@ export function agentRoutes(db: Db) {
       hireInput.adapterType,
       ((hireInput.adapterConfig ?? {}) as Record<string, unknown>),
     );
-    const desiredSkillAssignment = await resolveDesiredSkillAssignment(
+    const canonicalAdapterConfig = canonicalizeAdapterConfigForPersistence(
       companyId,
       hireInput.adapterType,
       requestedAdapterConfig,
+      { route: "/api/companies/:companyId/agent-hires" },
+    );
+    const desiredSkillAssignment = await resolveDesiredSkillAssignment(
+      companyId,
+      hireInput.adapterType,
+      canonicalAdapterConfig,
       Array.isArray(requestedDesiredSkills) ? requestedDesiredSkills : undefined,
     );
     const normalizedAdapterConfig = await secretsSvc.normalizeAdapterConfigForPersistence(
@@ -1323,10 +1353,16 @@ export function agentRoutes(db: Db) {
       createInput.adapterType,
       ((createInput.adapterConfig ?? {}) as Record<string, unknown>),
     );
-    const desiredSkillAssignment = await resolveDesiredSkillAssignment(
+    const canonicalAdapterConfig = canonicalizeAdapterConfigForPersistence(
       companyId,
       createInput.adapterType,
       requestedAdapterConfig,
+      { route: "/api/companies/:companyId/agents" },
+    );
+    const desiredSkillAssignment = await resolveDesiredSkillAssignment(
+      companyId,
+      createInput.adapterType,
+      canonicalAdapterConfig,
       Array.isArray(requestedDesiredSkills) ? requestedDesiredSkills : undefined,
     );
     const normalizedAdapterConfig = await secretsSvc.normalizeAdapterConfigForPersistence(
@@ -1475,9 +1511,18 @@ export function agentRoutes(db: Db) {
     }
 
     const syncedAdapterConfig = syncInstructionsBundleConfigFromFilePath(existing, nextAdapterConfig);
+    const canonicalAdapterConfig = canonicalizeAdapterConfigForPersistence(
+      existing.companyId,
+      existing.adapterType,
+      syncedAdapterConfig,
+      {
+        agentId: existing.id,
+        route: "/api/agents/:id/instructions-path",
+      },
+    );
     const normalizedAdapterConfig = await secretsSvc.normalizeAdapterConfigForPersistence(
       existing.companyId,
-      syncedAdapterConfig,
+      canonicalAdapterConfig,
       { strictMode: strictSecretsMode },
     );
     const actor = getActorInfo(req);
@@ -1727,9 +1772,18 @@ export function agentRoutes(db: Db) {
         requestedAdapterType,
         rawEffectiveAdapterConfig,
       );
+      const canonicalAdapterConfig = canonicalizeAdapterConfigForPersistence(
+        existing.companyId,
+        requestedAdapterType,
+        effectiveAdapterConfig,
+        {
+          agentId: existing.id,
+          route: "/api/agents/:id",
+        },
+      );
       const normalizedEffectiveAdapterConfig = await secretsSvc.normalizeAdapterConfigForPersistence(
         existing.companyId,
-        effectiveAdapterConfig,
+        canonicalAdapterConfig,
         { strictMode: strictSecretsMode },
       );
       patchData.adapterConfig = syncInstructionsBundleConfigFromFilePath(existing, normalizedEffectiveAdapterConfig);

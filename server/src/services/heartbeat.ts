@@ -59,6 +59,7 @@ import {
   type SessionCompactionPolicy,
 } from "@paperclipai/adapter-utils";
 import { cancelHostRuntimeExecution } from "./host-runtime-bridge.js";
+import { repairTaskSessionPathState } from "../local-adapter-paths.js";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
@@ -1277,6 +1278,17 @@ export function heartbeatService(db: Db) {
     lastRunId: string | null;
     lastError: string | null;
   }) {
+    const repairedSession = repairTaskSessionPathState(
+      input.sessionParamsJson,
+      input.sessionDisplayId,
+      {
+        companyId: input.companyId,
+        agentId: input.agentId,
+        adapterType: input.adapterType,
+        repairSource: "runtime_write",
+        taskKey: input.taskKey,
+      },
+    );
     const existing = await getTaskSession(
       input.companyId,
       input.agentId,
@@ -1287,8 +1299,8 @@ export function heartbeatService(db: Db) {
       return db
         .update(agentTaskSessions)
         .set({
-          sessionParamsJson: input.sessionParamsJson,
-          sessionDisplayId: input.sessionDisplayId,
+          sessionParamsJson: repairedSession.sessionParamsJson,
+          sessionDisplayId: repairedSession.sessionDisplayId,
           lastRunId: input.lastRunId,
           lastError: input.lastError,
           updatedAt: new Date(),
@@ -1305,8 +1317,8 @@ export function heartbeatService(db: Db) {
         agentId: input.agentId,
         adapterType: input.adapterType,
         taskKey: input.taskKey,
-        sessionParamsJson: input.sessionParamsJson,
-        sessionDisplayId: input.sessionDisplayId,
+        sessionParamsJson: repairedSession.sessionParamsJson,
+        sessionDisplayId: repairedSession.sessionDisplayId,
         lastRunId: input.lastRunId,
         lastError: input.lastError,
       })
