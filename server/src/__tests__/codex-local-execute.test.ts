@@ -485,6 +485,9 @@ describe("codex execute", () => {
       expect(capture.pythonUtf8).toBe("1");
       expect(capture.lang).toBe("C.UTF-8");
       expect(capture.lcAll).toBe("C.UTF-8");
+      expect(capture.prompt).toContain("Windows Paperclip HTTP rule:");
+      expect(capture.prompt).toContain("Prefer `curl.exe` for all Paperclip control-plane reads on Windows");
+      expect(capture.prompt).toContain("Avoid `Invoke-WebRequest` and `Invoke-RestMethod` for routine Paperclip reads");
       expect(capture.prompt).toContain("Windows PowerShell 5.1 JSON write rule:");
       expect(capture.prompt).toContain("Invoke-Utf8Json");
       expect(capture.prompt).toContain("Get-Content -Encoding utf8");

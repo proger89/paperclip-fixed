@@ -205,9 +205,26 @@ export function setupLiveEventsWebSocketServer(
       return;
     }
 
+    const cleanupSocket = () => {
+      const cleanup = cleanupByClient.get(socket);
+      if (cleanup) cleanup();
+      cleanupByClient.delete(socket);
+      aliveByClient.delete(socket);
+    };
+
     const unsubscribe = subscribeCompanyLiveEvents(context.companyId, (event) => {
       if (socket.readyState !== WebSocket.OPEN) return;
       socket.send(JSON.stringify(event));
+    }, {
+      context: "live_websocket_client",
+      onError: () => {
+        cleanupSocket();
+        try {
+          socket.terminate();
+        } catch {
+          // ignore best-effort websocket cleanup failures
+        }
+      },
     });
 
     cleanupByClient.set(socket, unsubscribe);
@@ -218,10 +235,7 @@ export function setupLiveEventsWebSocketServer(
     });
 
     socket.on("close", () => {
-      const cleanup = cleanupByClient.get(socket);
-      if (cleanup) cleanup();
-      cleanupByClient.delete(socket);
-      aliveByClient.delete(socket);
+      cleanupSocket();
     });
 
     socket.on("error", (err: Error) => {

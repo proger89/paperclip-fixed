@@ -177,11 +177,12 @@ function ensureCapability(capabilities: Set<HostRuntimeCapability>, capability: 
 }
 
 function translateExecuteContext(ctx: HostRuntimeExecuteContext, maps: HostRuntimePathMap[], paperclipApiUrl?: string | null) {
+  const normalizedPaperclipApiUrl = rewriteWindowsLoopbackHostname(paperclipApiUrl);
   const nextConfig = injectPaperclipApiUrlIntoConfig(
     translatePathBearingValue(ctx.config, maps, "container_to_host", {
       throwOnUnmapped: true,
     }),
-    paperclipApiUrl,
+    normalizedPaperclipApiUrl,
   );
   return {
     ...ctx,
@@ -208,6 +209,23 @@ function normalizeApiBaseUrl(raw: string | null | undefined): string | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
   return trimmed.replace(/\/+$/, "");
+}
+
+function rewriteWindowsLoopbackHostname(raw: string | null | undefined, platform = process.platform): string | null {
+  const baseUrl = normalizeApiBaseUrl(raw);
+  if (!baseUrl) return null;
+  if (platform !== "win32") return baseUrl;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    return baseUrl;
+  }
+
+  if (parsed.hostname.toLowerCase() !== "localhost") return baseUrl;
+  parsed.hostname = "127.0.0.1";
+  return parsed.toString().replace(/\/+$/, "");
 }
 
 function buildControlPlaneFailureResult(
@@ -249,7 +267,7 @@ async function fetchJsonWithTimeout(url: string, init: RequestInit = {}, timeout
 async function preflightPaperclipControlPlane(
   payload: HostRuntimeExecuteRequest,
 ): Promise<AdapterExecutionResult | null> {
-  const baseUrl = normalizeApiBaseUrl(payload.paperclipApiUrl);
+  const baseUrl = rewriteWindowsLoopbackHostname(payload.paperclipApiUrl);
   if (!baseUrl) {
     return buildControlPlaneFailureResult(
       "paperclip_control_plane_unavailable",
@@ -327,11 +345,12 @@ async function runEnvironmentTest(
   maps: HostRuntimePathMap[],
   capabilities: Set<HostRuntimeCapability>,
 ): Promise<AdapterEnvironmentTestResult> {
+  const normalizedPaperclipApiUrl = rewriteWindowsLoopbackHostname(payload.paperclipApiUrl);
   const translatedConfig = injectPaperclipApiUrlIntoConfig(
     translatePathBearingValue(payload.config, maps, "container_to_host", {
       throwOnUnmapped: true,
     }),
-    payload.paperclipApiUrl,
+    normalizedPaperclipApiUrl,
   );
 
   if (payload.adapterType === "codex_local") {

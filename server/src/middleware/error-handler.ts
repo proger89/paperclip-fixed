@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { ZodError } from "zod";
 import { HttpError } from "../errors.js";
+import { logger } from "./logger.js";
 
 export interface ErrorContext {
   error: { message: string; stack?: string; name?: string; details?: unknown; raw?: unknown };
@@ -65,6 +66,16 @@ export function errorHandler(
       ? { message: err.message, stack: err.stack, name: err.name }
       : { message: String(err), raw: err, stack: rootError.stack, name: rootError.name },
     rootError,
+  );
+  logger.error(
+    {
+      err: rootError,
+      method: req.method,
+      url: req.originalUrl,
+      params: req.params,
+      query: req.query,
+    },
+    "Unhandled route error",
   );
 
   res.status(500).json({ error: "Internal server error" });

@@ -119,6 +119,7 @@ describe("host-runtime serve", () => {
         "const fs = require('node:fs');",
         "const payload = {",
         "  paperclipApiKey: process.env.PAPERCLIP_API_KEY || null,",
+        "  paperclipApiUrl: process.env.PAPERCLIP_API_URL || null,",
         "  instructionsFile: process.env.PAPERCLIP_INSTRUCTIONS_FILE || null,",
         "  instructionsDir: process.env.PAPERCLIP_INSTRUCTIONS_DIR || null,",
         "  betterAuthSecret: process.env.BETTER_AUTH_SECRET || null,",
@@ -172,6 +173,9 @@ describe("host-runtime serve", () => {
     });
 
     try {
+      const incomingPaperclipApiUrl = process.platform === "win32"
+        ? controlPlane.baseUrl.replace("127.0.0.1", "localhost")
+        : controlPlane.baseUrl;
       const response = await fetch(`http://127.0.0.1:${port}/v1/execute`, {
         method: "POST",
         headers: {
@@ -180,7 +184,7 @@ describe("host-runtime serve", () => {
         },
         body: JSON.stringify({
           adapterType: "codex_local",
-          paperclipApiUrl: controlPlane.baseUrl,
+          paperclipApiUrl: incomingPaperclipApiUrl,
           ctx: {
             runId: "run-bridge-env",
             agent: {
@@ -216,6 +220,7 @@ describe("host-runtime serve", () => {
 
       const capture = JSON.parse(await fs.readFile(capturePath, "utf8")) as Record<string, string | null>;
       expect(capture.paperclipApiKey).toBe("bridge-run-jwt");
+      expect(capture.paperclipApiUrl).toBe(controlPlane.baseUrl);
       expect(capture.instructionsFile).toBe(instructionsPath);
       expect(capture.instructionsDir).toBe(instructionsDir);
       expect(capture.betterAuthSecret).toBeNull();

@@ -1064,6 +1064,11 @@ export function buildHostServices(
                 });
               }
             }
+          }, {
+            context: "plugin_host_live_subscription",
+            onError: () => {
+              cleanup();
+            },
           });
 
           // Safety-net timeout: if the run never reaches a terminal status,

@@ -40,6 +40,7 @@ Defaults:
 - persistent data dir: `./data/docker-paperclip`
 - persistent postgres dir: `./data/docker-paperclip/postgres`
 - public URL default: `http://localhost:3100`
+- host-agent URL default: `http://127.0.0.1:3100`
 - Better Auth secret default: `paperclip-docker-dev-secret`
 - sign-up mode default: `PAPERCLIP_AUTH_DISABLE_SIGN_UP=false`
 
@@ -132,6 +133,7 @@ Hybrid mode requirements:
 - `docker-compose.hybrid.yml` also defaults `PAPERCLIP_LOCAL_ADAPTER_DEFAULT_EXECUTION_LOCATION=host`, so newly created local CLI agents use the host bridge unless you explicitly set `executionLocation`.
 - Set `PAPERCLIP_HOST_BRIDGE_URL` if you do not want the default `http://host.docker.internal:4243`.
 - Host-executed agents use the agent-facing URL contract: `PAPERCLIP_AGENT_API_URL` if set, otherwise `PAPERCLIP_PUBLIC_URL`, otherwise the internal listen URL. Set `PAPERCLIP_AGENT_API_URL` whenever the host bridge must reach Paperclip through a different hostname or port than the browser.
+- On Windows host-mode setups, prefer `PAPERCLIP_AGENT_API_URL=http://127.0.0.1:3100` even when the browser uses `http://localhost:3100`; this avoids PowerShell loopback timeouts while keeping browser/auth origins unchanged.
 - Every path the host-executed adapter needs must be covered by a `--path-map` entry.
 - Absolute `command`, `cwd`, env path values, and absolute path-like `extraArgs` entries are translated through the configured path maps before the host process starts.
 - On Linux, `docker-compose.hybrid.yml` already adds `host.docker.internal:host-gateway`.

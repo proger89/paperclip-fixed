@@ -131,10 +131,14 @@ export function normalizeHighConfidenceWindowsMojibakeBlock(text: string): strin
 
 export function buildWindowsUtf8JsonHelperNote(): string {
   return [
+    "Windows Paperclip HTTP rule:",
+    "- Prefer `curl.exe` for all Paperclip control-plane reads on Windows (`GET /api/health`, `GET /api/agents/me`, `GET /api/agents/me/inbox-lite`, issue/context reads).",
+    "- Avoid `Invoke-WebRequest` and `Invoke-RestMethod` for routine Paperclip reads when `curl.exe` is available; PowerShell 5.1 can hang or time out on local loopback requests that `curl.exe` handles correctly.",
     "Windows PowerShell 5.1 JSON write rule:",
     "- Do not use `Invoke-RestMethod -Body $jsonString` for issue, comment, or document mutations.",
     "- Use a UTF-8 byte body helper instead:",
     "  `function Invoke-Utf8Json($method, $uri, $obj, $headers) { $json = $obj | ConvertTo-Json -Depth 10 -Compress; $bytes = [System.Text.Encoding]::UTF8.GetBytes($json); Invoke-RestMethod -Method $method -Uri $uri -Headers $headers -ContentType 'application/json; charset=utf-8' -Body $bytes }`",
+    "- For mutating Paperclip calls, prefer `curl.exe` with an explicit UTF-8 payload file or the `Invoke-Utf8Json` helper above.",
     "- For file reads and writes, always force UTF-8 explicitly: `Get-Content -Encoding utf8`, `Set-Content -Encoding utf8`, `Add-Content -Encoding utf8`, or `[System.IO.File]::ReadAllText/WriteAllText(..., [System.Text.Encoding]::UTF8)`.",
     "- Avoid bare `Get-Content`, `Set-Content`, `Add-Content`, or `Out-File` when touching non-ASCII text; PowerShell 5.1 defaults can corrupt UTF-8 files.",
     "- Prefer UTF-8 files or byte-encoded payloads over pipeline-encoded heredocs.",
