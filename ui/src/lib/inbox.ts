@@ -240,7 +240,21 @@ export function computeInboxBadgeData({
     monthBudgetCents > 0 &&
     monthUtilizationPercent >= 80 &&
     !dismissed.has("alert:budget");
-  const alerts = Number(showAggregateAgentError) + Number(showBudgetAlert);
+  const showReadyForReviewAlert =
+    (dashboard?.outputs?.readyForReview ?? 0) > 0 &&
+    !dismissed.has("alert:outputs-ready");
+  const showFailedOutputsAlert =
+    (dashboard?.outputs?.failed ?? 0) > 0 &&
+    !dismissed.has("alert:outputs-failed");
+  const showMissingReviewerAlert =
+    (dashboard?.reviews?.missingReviewer ?? 0) > 0 &&
+    !dismissed.has("alert:reviews-missing-reviewer");
+  const alerts =
+    Number(showAggregateAgentError)
+    + Number(showBudgetAlert)
+    + Number(showReadyForReviewAlert)
+    + Number(showFailedOutputsAlert)
+    + Number(showMissingReviewerAlert);
 
   return {
     inbox: actionableApprovals + joinRequests.length + failedRuns + unreadTouchedIssues + alerts,

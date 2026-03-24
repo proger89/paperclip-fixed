@@ -1,4 +1,4 @@
-import type { Project, ProjectWorkspace } from "@paperclipai/shared";
+import type { Project, ProjectWorkspace, WorkProductSummaryItem } from "@paperclipai/shared";
 import { api } from "./client";
 
 function withCompanyScope(path: string, companyId?: string) {
@@ -14,6 +14,8 @@ function projectPath(id: string, companyId?: string, suffix = "") {
 export const projectsApi = {
   list: (companyId: string) => api.get<Project[]>(`/companies/${companyId}/projects`),
   get: (id: string, companyId?: string) => api.get<Project>(projectPath(id, companyId)),
+  listOutputs: (id: string, companyId?: string) =>
+    api.get<WorkProductSummaryItem[]>(projectPath(id, companyId, "/outputs")),
   create: (companyId: string, data: Record<string, unknown>) =>
     api.post<Project>(`/companies/${companyId}/projects`, data),
   update: (id: string, data: Record<string, unknown>, companyId?: string) =>

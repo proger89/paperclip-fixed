@@ -67,6 +67,9 @@ import {
   canonicalizeLocalAdapterConfigPathsForPersistence,
   LocalAdapterPathValidationError,
 } from "../local-adapter-paths.js";
+import { completeHireFollowUp } from "../services/hire-follow-up.js";
+import { notifyHireApproved } from "../services/hire-hook.js";
+import { resolveRoleBundle } from "../services/role-bundles.js";
 
 export function agentRoutes(db: Db) {
   const DEFAULT_INSTRUCTIONS_PATH_KEYS: Record<string, string> = {
@@ -296,6 +299,44 @@ export function agentRoutes(db: Db) {
       values.push(input.sourceIssueId);
     }
     return Array.from(new Set(values));
+  }
+
+  function dedupeTextValues(values: Array<string | null | undefined>) {
+    return Array.from(new Set(
+      values
+        .map((value) => (typeof value === "string" ? value.trim() : ""))
+        .filter((value): value is string => value.length > 0),
+    ));
+  }
+
+  function normalizeTextKey(value: string | null | undefined): string | null {
+    if (!value) return null;
+    return deriveAgentUrlKey(value) ?? null;
+  }
+
+  async function resolveInstalledSkillRefs(companyId: string, requestedRefs: string[]) {
+    const requested = dedupeTextValues(requestedRefs);
+    if (requested.length === 0) return [];
+
+    const installedSkills = await companySkills.listFull(companyId);
+    const resolved = new Set<string>();
+    for (const reference of requested) {
+      const normalizedReference = normalizeTextKey(reference);
+      const match = installedSkills.find((skill) => {
+        if (skill.key === reference || skill.slug === reference || skill.name === reference) return true;
+        if (!normalizedReference) return false;
+        return [
+          normalizeTextKey(skill.key),
+          normalizeTextKey(skill.slug),
+          normalizeTextKey(skill.name),
+        ].includes(normalizedReference);
+      });
+      if (match) {
+        resolved.add(match.key);
+      }
+    }
+
+    return Array.from(resolved);
   }
 
   function asRecord(value: unknown): Record<string, unknown> | null {
@@ -1179,10 +1220,33 @@ export function agentRoutes(db: Db) {
     const sourceIssueIds = parseSourceIssueIds(req.body);
     const {
       desiredSkills: requestedDesiredSkills,
+      requestedSkills: requestedRoleSkills,
       sourceIssueId: _sourceIssueId,
       sourceIssueIds: _sourceIssueIds,
+      roleBundleKey: requestedRoleBundleKey,
+      staffingReason,
+      followUpIssueId,
+      followUpAction,
       ...hireInput
     } = req.body;
+    const roleBundle = resolveRoleBundle(requestedRoleBundleKey, hireInput.role);
+    const requestedSkills = dedupeTextValues([
+      ...(Array.isArray(requestedRoleSkills) ? requestedRoleSkills : []),
+      ...roleBundle.requestedSkillRefs,
+    ]);
+    const installedRoleSkills = await resolveInstalledSkillRefs(companyId, requestedSkills);
+    const desiredSkillRefs = dedupeTextValues([
+      ...(Array.isArray(requestedDesiredSkills) ? requestedDesiredSkills : []),
+      ...installedRoleSkills,
+    ]);
+    const effectiveFollowUpAction = followUpAction
+      ?? (followUpIssueId
+        ? "assign_existing_issue"
+        : sourceIssueIds.length > 0
+          ? "assign_source_issue"
+          : typeof staffingReason === "string" && staffingReason.trim().length > 0
+            ? "create_follow_up_issue"
+            : "none");
     const requestedAdapterConfig = applyCreateDefaultsByAdapterType(
       hireInput.adapterType,
       ((hireInput.adapterConfig ?? {}) as Record<string, unknown>),
@@ -1197,7 +1261,7 @@ export function agentRoutes(db: Db) {
       companyId,
       hireInput.adapterType,
       canonicalAdapterConfig,
-      Array.isArray(requestedDesiredSkills) ? requestedDesiredSkills : undefined,
+      desiredSkillRefs.length > 0 ? desiredSkillRefs : undefined,
     );
     const normalizedAdapterConfig = await secretsSvc.normalizeAdapterConfigForPersistence(
       companyId,
@@ -1271,6 +1335,12 @@ export function agentRoutes(db: Db) {
               ? normalizedHireInput.budgetMonthlyCents
               : agent.budgetMonthlyCents,
           desiredSkills: desiredSkillAssignment.desiredSkills,
+          roleBundleKey: roleBundle.key,
+          requestedSkills,
+          staffingReason: staffingReason ?? null,
+          sourceIssueIds,
+          followUpIssueId: followUpIssueId ?? null,
+          followUpAction: effectiveFollowUpAction,
           metadata: requestedMetadata,
           agentId: agent.id,
           requestedByAgentId: actor.actorType === "agent" ? actor.actorId : null,
@@ -1279,6 +1349,7 @@ export function agentRoutes(db: Db) {
             adapterConfig: requestedAdapterConfig,
             runtimeConfig: requestedRuntimeConfig,
             desiredSkills: desiredSkillAssignment.desiredSkills,
+            roleBundleKey: roleBundle.key,
           },
         },
         decisionNote: null,
@@ -1307,10 +1378,15 @@ export function agentRoutes(db: Db) {
       details: {
         name: agent.name,
         role: agent.role,
+        roleBundleKey: roleBundle.key,
         requiresApproval,
         approvalId: approval?.id ?? null,
         issueIds: sourceIssueIds,
         desiredSkills: desiredSkillAssignment.desiredSkills,
+        requestedSkills,
+        staffingReason: staffingReason ?? null,
+        followUpIssueId: followUpIssueId ?? null,
+        followUpAction: effectiveFollowUpAction,
       },
     });
 
@@ -1332,6 +1408,55 @@ export function agentRoutes(db: Db) {
         entityId: approval.id,
         details: { type: approval.type, linkedAgentId: agent.id },
       });
+    } else {
+      if (agent.budgetMonthlyCents > 0) {
+        await budgets.upsertPolicy(
+          companyId,
+          {
+            scopeType: "agent",
+            scopeId: agent.id,
+            amount: agent.budgetMonthlyCents,
+            windowKind: "calendar_month_utc",
+          },
+          actor.actorType === "user" ? actor.actorId : null,
+        );
+      }
+
+      let followUp = {
+        issueId: null as string | null,
+        issueIds: [] as string[],
+        message: "Your hire is active. Wait for a manager to assign your first task.",
+      };
+      try {
+        followUp = await completeHireFollowUp(db, heartbeat, {
+          companyId,
+          agentId: agent.id,
+          agentName: agent.name,
+          role: agent.role,
+          roleBundleKey: roleBundle.key,
+          reportsTo: agent.reportsTo,
+          staffingReason: staffingReason ?? null,
+          requestedByAgentId: actor.actorType === "agent" ? actor.actorId : null,
+          requestedByUserId: actor.actorType === "user" ? actor.actorId : null,
+          sourceIssueIds,
+          followUpIssueId: followUpIssueId ?? null,
+          followUpAction: effectiveFollowUpAction,
+          sourceId: agent.id,
+        });
+      } catch {
+        // Keep direct hires usable even if the follow-up task could not be prepared automatically.
+      }
+
+      void notifyHireApproved(db, {
+        companyId,
+        agentId: agent.id,
+        source: "approval",
+        sourceId: agent.id,
+        approvedAt: new Date(),
+        message: followUp.message,
+        issueId: followUp.issueId,
+        issueIds: followUp.issueIds,
+      }).catch(() => {});
     }
 
     res.status(201).json({ agent, approval });

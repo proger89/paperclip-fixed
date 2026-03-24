@@ -21,6 +21,7 @@ import { CommentThread } from "../components/CommentThread";
 import { IssueDocumentsSection } from "../components/IssueDocumentsSection";
 import { IssueProperties } from "../components/IssueProperties";
 import { LiveRunWidget } from "../components/LiveRunWidget";
+import { WorkProductCard } from "../components/WorkProductCard";
 import type { MentionOption } from "../components/MarkdownEditor";
 import { ScrollToBottom } from "../components/ScrollToBottom";
 import { StatusIcon } from "../components/StatusIcon";
@@ -649,6 +650,17 @@ export function IssueDetail() {
   const isImageAttachment = (attachment: IssueAttachment) => attachment.contentType.startsWith("image/");
   const attachmentList = attachments ?? [];
   const hasAttachments = attachmentList.length > 0;
+  const primaryWorkProducts = Object.values(issue.primaryWorkProducts ?? {}).filter(Boolean);
+  const visibleWorkProducts =
+    primaryWorkProducts.length > 0
+      ? primaryWorkProducts
+      : (issue.workProducts ?? []).filter((product) => product.isPrimary).slice(0, 4);
+  const reviewerName =
+    issue.reviewerAgentId
+      ? (agentMap.get(issue.reviewerAgentId)?.name ?? issue.reviewerAgentId.slice(0, 8))
+      : issue.reviewerUserId
+        ? "Board reviewer"
+        : null;
   const attachmentUploadButton = (
     <>
       <input
@@ -902,6 +914,56 @@ export function IssueDetail() {
         missingBehavior="placeholder"
       />
 
+      {(visibleWorkProducts.length > 0 || issue.reviewPolicyKey) ? (
+        <div className="space-y-3 rounded-xl border border-border/70 bg-card p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">Outputs</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Primary previews, runtime links, artifacts, and docs for this issue.
+              </p>
+            </div>
+            {issue.reviewPolicyKey ? (
+              <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                <div className="font-medium text-foreground">
+                  {issue.reviewPolicyKey.replaceAll("_", " ")}
+                </div>
+                <div className="mt-1">
+                  Reviewer: {reviewerName ?? "Not assigned"}
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          {issue.acceptanceChecklistJson && issue.acceptanceChecklistJson.length > 0 ? (
+            <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-3">
+              <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Acceptance checklist
+              </div>
+              <div className="space-y-1.5">
+                {issue.acceptanceChecklistJson.map((item) => (
+                  <div key={item} className="text-sm text-muted-foreground">
+                    {item}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {visibleWorkProducts.length > 0 ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              {visibleWorkProducts.map((product) => (
+                <WorkProductCard key={product.id} product={product} />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-border/70 px-4 py-4 text-sm text-muted-foreground">
+              No primary outputs attached yet. Add a preview, runtime link, artifact, or document before closing the issue.
+            </div>
+          )}
+        </div>
+      ) : null}
+
       <IssueDocumentsSection
         issue={issue}
         canDeleteDocuments={Boolean(session?.user?.id)}
@@ -969,12 +1031,14 @@ export function IssueDetail() {
               </p>
               {isImageAttachment(attachment) && (
                 <a href={attachment.contentPath} target="_blank" rel="noreferrer">
-                  <img
-                    src={attachment.contentPath}
-                    alt={attachment.originalFilename ?? "attachment"}
-                    className="mt-2 max-h-56 rounded border border-border object-contain bg-accent/10"
-                    loading="lazy"
-                  />
+                  <div className="mt-2 aspect-[4/3] overflow-hidden rounded border border-border bg-accent/10">
+                    <img
+                      src={attachment.contentPath}
+                      alt={attachment.originalFilename ?? "attachment"}
+                      className="h-full w-full object-contain"
+                      loading="lazy"
+                    />
+                  </div>
                 </a>
               )}
             </div>

@@ -5,17 +5,27 @@ import { notFound, unprocessable } from "../errors.js";
 import { redactCurrentUserText } from "../log-redaction.js";
 import { agentService } from "./agents.js";
 import { budgetService } from "./budgets.js";
+import { companySkillService } from "./company-skills.js";
+import { heartbeatService } from "./heartbeat.js";
+import { completeHireFollowUp } from "./hire-follow-up.js";
 import { notifyHireApproved } from "./hire-hook.js";
 import { instanceSettingsService } from "./instance-settings.js";
 
 export function approvalService(db: Db) {
   const agentsSvc = agentService(db);
   const budgets = budgetService(db);
+  const companySkills = companySkillService(db);
+  const heartbeat = heartbeatService(db);
   const instanceSettings = instanceSettingsService(db);
   const canResolveStatuses = new Set(["pending", "revision_requested"]);
   const resolvableStatuses = Array.from(canResolveStatuses);
   type ApprovalRecord = typeof approvals.$inferSelect;
-  type ResolutionResult = { approval: ApprovalRecord; applied: boolean };
+  type ResolutionResult = {
+    approval: ApprovalRecord;
+    applied: boolean;
+    followUpIssueId?: string | null;
+    followUpIssueIds?: string[];
+  };
 
   function redactApprovalComment<T extends { body: string }>(comment: T, censorUsernameInLogs: boolean): T {
     return {
@@ -108,6 +118,8 @@ export function approvalService(db: Db) {
       );
 
       let hireApprovedAgentId: string | null = null;
+      let followUpIssueId: string | null = null;
+      let followUpIssueIds: string[] = [];
       const now = new Date();
       if (applied && updated.type === "hire_agent") {
         const payload = updated.payload as Record<string, unknown>;
@@ -155,13 +167,84 @@ export function approvalService(db: Db) {
               decidedByUserId,
             );
           }
+          let followUp = {
+            issueId: null as string | null,
+            issueIds: [] as string[],
+            message: "Your hire was approved. Wait for a manager to assign your first task.",
+          };
+          try {
+            followUp = await completeHireFollowUp(db, heartbeat, {
+              companyId: updated.companyId,
+              agentId: hireApprovedAgentId,
+              agentName:
+                typeof payload.name === "string" && payload.name.trim().length > 0
+                  ? payload.name
+                  : "New Agent",
+              role:
+                typeof payload.role === "string" && payload.role.trim().length > 0
+                  ? payload.role
+                  : "general",
+              roleBundleKey:
+                typeof payload.roleBundleKey === "string" && payload.roleBundleKey.trim().length > 0
+                  ? payload.roleBundleKey
+                  : null,
+              reportsTo:
+                typeof payload.reportsTo === "string" && payload.reportsTo.trim().length > 0
+                  ? payload.reportsTo
+                  : null,
+              staffingReason:
+                typeof payload.staffingReason === "string" && payload.staffingReason.trim().length > 0
+                  ? payload.staffingReason
+                  : null,
+              requestedByAgentId:
+                typeof updated.requestedByAgentId === "string" && updated.requestedByAgentId.trim().length > 0
+                  ? updated.requestedByAgentId
+                  : null,
+              requestedByUserId:
+                typeof updated.requestedByUserId === "string" && updated.requestedByUserId.trim().length > 0
+                  ? updated.requestedByUserId
+                  : null,
+              sourceIssueIds: Array.isArray(payload.sourceIssueIds)
+                ? payload.sourceIssueIds.filter((value): value is string => typeof value === "string" && value.length > 0)
+                : [],
+              followUpIssueId:
+                typeof payload.followUpIssueId === "string" && payload.followUpIssueId.trim().length > 0
+                  ? payload.followUpIssueId
+                  : null,
+              followUpAction:
+                typeof payload.followUpAction === "string" && payload.followUpAction.trim().length > 0
+                  ? payload.followUpAction as "auto" | "assign_source_issue" | "assign_existing_issue" | "create_follow_up_issue" | "none"
+                  : null,
+              approvalId: updated.id,
+              sourceId: id,
+            });
+          } catch {
+            // Approval resolution should still succeed if automatic follow-up assignment cannot be prepared.
+          }
+          followUpIssueId = followUp.issueId;
+          followUpIssueIds = followUp.issueIds;
           void notifyHireApproved(db, {
             companyId: updated.companyId,
             agentId: hireApprovedAgentId,
             source: "approval",
             sourceId: id,
             approvedAt: now,
+            message: followUp.message,
+            issueId: followUp.issueId,
+            issueIds: followUp.issueIds,
           }).catch(() => {});
+        }
+        return { approval: updated, applied, followUpIssueId, followUpIssueIds };
+      }
+
+      if (applied && updated.type === "install_company_skill") {
+        const payload = updated.payload as Record<string, unknown>;
+        const skillId = typeof payload.skillId === "string" ? payload.skillId : null;
+        const source = typeof payload.source === "string" ? payload.source : null;
+        if (skillId) {
+          await companySkills.installUpdate(updated.companyId, skillId);
+        } else if (source) {
+          await companySkills.importFromSource(updated.companyId, source);
         }
       }
 

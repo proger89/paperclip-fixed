@@ -251,7 +251,6 @@ export function NewAgent() {
             placeholder="Agent name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            autoFocus
           />
         </div>
 

@@ -121,7 +121,7 @@ export function approvalRoutes(db: Db) {
   router.post("/approvals/:id/approve", validate(resolveApprovalSchema), async (req, res) => {
     assertBoard(req);
     const id = req.params.id as string;
-    const { approval, applied } = await svc.approve(
+    const { approval, applied, followUpIssueId, followUpIssueIds } = await svc.approve(
       id,
       req.body.decidedByUserId ?? "board",
       req.body.decisionNote,
@@ -130,7 +130,11 @@ export function approvalRoutes(db: Db) {
     if (applied) {
       const linkedIssues = await issueApprovalsSvc.listIssuesForApproval(approval.id);
       const linkedIssueIds = linkedIssues.map((issue) => issue.id);
-      const primaryIssueId = linkedIssueIds[0] ?? null;
+      const effectiveIssueIds = Array.from(new Set([
+        ...(followUpIssueIds ?? []),
+        ...linkedIssueIds,
+      ]));
+      const primaryIssueId = followUpIssueId ?? effectiveIssueIds[0] ?? null;
 
       await logActivity(db, {
         companyId: approval.companyId,
@@ -142,7 +146,7 @@ export function approvalRoutes(db: Db) {
         details: {
           type: approval.type,
           requestedByAgentId: approval.requestedByAgentId,
-          linkedIssueIds,
+          linkedIssueIds: effectiveIssueIds,
         },
       });
 
@@ -156,7 +160,7 @@ export function approvalRoutes(db: Db) {
               approvalId: approval.id,
               approvalStatus: approval.status,
               issueId: primaryIssueId,
-              issueIds: linkedIssueIds,
+              issueIds: effectiveIssueIds,
             },
             requestedByActorType: "user",
             requestedByActorId: req.actor.userId ?? "board",
@@ -165,7 +169,7 @@ export function approvalRoutes(db: Db) {
               approvalId: approval.id,
               approvalStatus: approval.status,
               issueId: primaryIssueId,
-              issueIds: linkedIssueIds,
+              issueIds: effectiveIssueIds,
               taskId: primaryIssueId,
               wakeReason: "approval_approved",
             },
@@ -181,7 +185,7 @@ export function approvalRoutes(db: Db) {
             details: {
               requesterAgentId: approval.requestedByAgentId,
               wakeRunId: wakeRun?.id ?? null,
-              linkedIssueIds,
+              linkedIssueIds: effectiveIssueIds,
             },
           });
         } catch (err) {
@@ -202,7 +206,7 @@ export function approvalRoutes(db: Db) {
             entityId: approval.id,
             details: {
               requesterAgentId: approval.requestedByAgentId,
-              linkedIssueIds,
+              linkedIssueIds: effectiveIssueIds,
               error: err instanceof Error ? err.message : String(err),
             },
           });

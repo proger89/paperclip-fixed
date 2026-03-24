@@ -1,4 +1,4 @@
-import { UserPlus, Lightbulb, ShieldAlert, ShieldCheck, Send } from "lucide-react";
+import { UserPlus, Lightbulb, ShieldAlert, ShieldCheck, Send, PlugZap, Workflow } from "lucide-react";
 import { formatCents } from "../lib/utils";
 
 export const typeLabel: Record<string, string> = {
@@ -6,6 +6,8 @@ export const typeLabel: Record<string, string> = {
   approve_ceo_strategy: "CEO Strategy",
   budget_override_required: "Budget Override",
   publish_content: "Content Publication",
+  install_company_skill: "Install Skill",
+  install_connector_plugin: "Install Connector",
 };
 
 /** Build a contextual label for an approval, e.g. "Hire Agent: Designer" */
@@ -37,6 +39,8 @@ export const typeIcon: Record<string, typeof UserPlus> = {
   approve_ceo_strategy: Lightbulb,
   budget_override_required: ShieldAlert,
   publish_content: Send,
+  install_company_skill: Workflow,
+  install_connector_plugin: PlugZap,
 };
 
 export const defaultTypeIcon = ShieldCheck;
@@ -125,7 +129,32 @@ export function HireAgentPayload({ payload }: { payload: Record<string, unknown>
           </span>
         </div>
       )}
+      <PayloadField label="Bundle" value={payload.roleBundleKey} />
+      <PayloadField label="Reason" value={payload.staffingReason} />
+      <PayloadField label="Follow-up" value={payload.followUpAction} />
+      <PayloadField label="Issue" value={payload.followUpIssueId} />
       <SkillList values={payload.desiredSkills} />
+      <StringList label="Requests" values={payload.requestedSkills} />
+    </div>
+  );
+}
+
+export function InstallSkillPayload({ payload }: { payload: Record<string, unknown> }) {
+  return (
+    <div className="mt-3 space-y-1.5 text-sm">
+      <PayloadField label="Skill" value={payload.skillId ?? payload.slug ?? payload.name} />
+      <PayloadField label="Source" value={payload.source} />
+      <PayloadField label="Reason" value={payload.reason} />
+    </div>
+  );
+}
+
+export function InstallConnectorPayload({ payload }: { payload: Record<string, unknown> }) {
+  return (
+    <div className="mt-3 space-y-1.5 text-sm">
+      <PayloadField label="Plugin" value={payload.pluginId ?? payload.pluginSlug ?? payload.name} />
+      <PayloadField label="Source" value={payload.source} />
+      <PayloadField label="Reason" value={payload.reason} />
     </div>
   );
 }
@@ -220,5 +249,7 @@ export function ApprovalPayloadRenderer({ type, payload }: { type: string; paylo
   if (type === "hire_agent") return <HireAgentPayload payload={payload} />;
   if (type === "budget_override_required") return <BudgetOverridePayload payload={payload} />;
   if (type === "publish_content") return <PublishContentPayload payload={payload} />;
+  if (type === "install_company_skill") return <InstallSkillPayload payload={payload} />;
+  if (type === "install_connector_plugin") return <InstallConnectorPayload payload={payload} />;
   return <CeoStrategyPayload payload={payload} />;
 }

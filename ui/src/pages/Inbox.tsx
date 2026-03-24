@@ -601,7 +601,24 @@ export function Inbox() {
     dashboard.costs.monthBudgetCents > 0 &&
     dashboard.costs.monthUtilizationPercent >= 80 &&
     !dismissed.has("alert:budget");
-  const hasAlerts = showAggregateAgentError || showBudgetAlert;
+  const showReadyForReviewAlert =
+    !!dashboard &&
+    (dashboard.outputs?.readyForReview ?? 0) > 0 &&
+    !dismissed.has("alert:outputs-ready");
+  const showFailedOutputsAlert =
+    !!dashboard &&
+    (dashboard.outputs?.failed ?? 0) > 0 &&
+    !dismissed.has("alert:outputs-failed");
+  const showMissingReviewerAlert =
+    !!dashboard &&
+    (dashboard.reviews?.missingReviewer ?? 0) > 0 &&
+    !dismissed.has("alert:reviews-missing-reviewer");
+  const hasAlerts =
+    showAggregateAgentError ||
+    showBudgetAlert ||
+    showReadyForReviewAlert ||
+    showFailedOutputsAlert ||
+    showMissingReviewerAlert;
   const hasJoinRequests = joinRequests.length > 0;
   const showWorkItemsSection = workItemsToRender.length > 0;
   const showJoinRequestsSection =
@@ -910,6 +927,72 @@ export function Inbox() {
                   <button
                     type="button"
                     onClick={() => dismiss("alert:budget")}
+                    className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover/alert:opacity-100"
+                    aria-label="Dismiss"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+              {showReadyForReviewAlert && (
+                <div className="group/alert relative flex items-center gap-3 px-4 py-3 transition-colors hover:bg-accent/50">
+                  <Link
+                    to="/dashboard"
+                    className="flex flex-1 cursor-pointer items-center gap-3 no-underline text-inherit"
+                  >
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-sky-500" />
+                    <span className="text-sm">
+                      <span className="font-medium">{dashboard!.outputs!.readyForReview}</span>{" "}
+                      outputs are ready for review
+                    </span>
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => dismiss("alert:outputs-ready")}
+                    className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover/alert:opacity-100"
+                    aria-label="Dismiss"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+              {showFailedOutputsAlert && (
+                <div className="group/alert relative flex items-center gap-3 px-4 py-3 transition-colors hover:bg-accent/50">
+                  <Link
+                    to="/dashboard"
+                    className="flex flex-1 cursor-pointer items-center gap-3 no-underline text-inherit"
+                  >
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+                    <span className="text-sm">
+                      <span className="font-medium">{dashboard!.outputs!.failed}</span>{" "}
+                      published outputs need attention
+                    </span>
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => dismiss("alert:outputs-failed")}
+                    className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover/alert:opacity-100"
+                    aria-label="Dismiss"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+              {showMissingReviewerAlert && (
+                <div className="group/alert relative flex items-center gap-3 px-4 py-3 transition-colors hover:bg-accent/50">
+                  <Link
+                    to="/dashboard"
+                    className="flex flex-1 cursor-pointer items-center gap-3 no-underline text-inherit"
+                  >
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
+                    <span className="text-sm">
+                      <span className="font-medium">{dashboard!.reviews!.missingReviewer}</span>{" "}
+                      review-gated issues still have no reviewer
+                    </span>
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => dismiss("alert:reviews-missing-reviewer")}
                     className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground group-hover/alert:opacity-100"
                     aria-label="Dismiss"
                   >

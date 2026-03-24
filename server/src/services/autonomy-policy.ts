@@ -73,13 +73,13 @@ export function resolveReviewRuleForRole(
 }
 
 export function normalizeCompanyAutonomySettings<
-  T extends {
-    companyArchetype?: string | null;
-    toolInstallPolicy?: string | null;
-    autoAssignApprovedHires?: boolean | null;
-    requiredReviewByRole?: unknown;
-  },
->(company: T): T & {
+  T extends object,
+>(company: T & {
+  companyArchetype?: string | null;
+  toolInstallPolicy?: string | null;
+  autoAssignApprovedHires?: boolean | null;
+  requiredReviewByRole?: unknown;
+}): T & {
   companyArchetype: string;
   toolInstallPolicy: string;
   autoAssignApprovedHires: boolean;

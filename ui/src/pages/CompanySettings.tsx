@@ -6,6 +6,8 @@ import { companiesApi } from "../api/companies";
 import { accessApi } from "../api/access";
 import { assetsApi } from "../api/assets";
 import { queryKeys } from "../lib/queryKeys";
+import type { Company, CompanyRequiredReviewByRole } from "@paperclipai/shared";
+import { COMPANY_ARCHETYPES, TOOL_INSTALL_POLICIES } from "@paperclipai/shared";
 import { Button } from "@/components/ui/button";
 import { Settings, Check, Download, Upload } from "lucide-react";
 import { CompanyPatternIcon } from "../components/CompanyPatternIcon";
@@ -22,6 +24,8 @@ type AgentSnippetInput = {
 };
 
 export function CompanySettings() {
+  type CompanyArchetypeValue = Exclude<Company["companyArchetype"], null | undefined>;
+  type ToolInstallPolicyValue = Exclude<Company["toolInstallPolicy"], null | undefined>;
   const {
     companies,
     selectedCompany,
@@ -35,7 +39,12 @@ export function CompanySettings() {
   const [description, setDescription] = useState("");
   const [brandColor, setBrandColor] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
+  const [companyArchetype, setCompanyArchetype] = useState<CompanyArchetypeValue>("general_company");
+  const [toolInstallPolicy, setToolInstallPolicy] = useState<ToolInstallPolicyValue>("approval_gated");
+  const [autoAssignApprovedHires, setAutoAssignApprovedHires] = useState(true);
+  const [requiredReviewByRoleText, setRequiredReviewByRoleText] = useState("{}");
   const [logoUploadError, setLogoUploadError] = useState<string | null>(null);
+  const [requiredReviewError, setRequiredReviewError] = useState<string | null>(null);
 
   // Sync local state from selected company
   useEffect(() => {
@@ -44,6 +53,11 @@ export function CompanySettings() {
     setDescription(selectedCompany.description ?? "");
     setBrandColor(selectedCompany.brandColor ?? "");
     setLogoUrl(selectedCompany.logoUrl ?? "");
+    setCompanyArchetype(selectedCompany.companyArchetype ?? "general_company");
+    setToolInstallPolicy(selectedCompany.toolInstallPolicy ?? "approval_gated");
+    setAutoAssignApprovedHires(selectedCompany.autoAssignApprovedHires !== false);
+    setRequiredReviewByRoleText(JSON.stringify(selectedCompany.requiredReviewByRole ?? {}, null, 2));
+    setRequiredReviewError(null);
   }, [selectedCompany]);
 
   const [inviteError, setInviteError] = useState<string | null>(null);
@@ -58,13 +72,21 @@ export function CompanySettings() {
     !!selectedCompany &&
     (companyName !== selectedCompany.name ||
       description !== (selectedCompany.description ?? "") ||
-      brandColor !== (selectedCompany.brandColor ?? ""));
+      brandColor !== (selectedCompany.brandColor ?? "") ||
+      companyArchetype !== (selectedCompany.companyArchetype ?? "general_company") ||
+      toolInstallPolicy !== (selectedCompany.toolInstallPolicy ?? "approval_gated") ||
+      autoAssignApprovedHires !== (selectedCompany.autoAssignApprovedHires !== false) ||
+      requiredReviewByRoleText !== JSON.stringify(selectedCompany.requiredReviewByRole ?? {}, null, 2));
 
   const generalMutation = useMutation({
     mutationFn: (data: {
       name: string;
       description: string | null;
       brandColor: string | null;
+      companyArchetype: CompanyArchetypeValue;
+      toolInstallPolicy: ToolInstallPolicyValue;
+      autoAssignApprovedHires: boolean;
+      requiredReviewByRole: CompanyRequiredReviewByRole;
     }) => companiesApi.update(selectedCompanyId!, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
@@ -241,10 +263,26 @@ export function CompanySettings() {
   }
 
   function handleSaveGeneral() {
+    let requiredReviewByRole: CompanyRequiredReviewByRole;
+    try {
+      const parsed = JSON.parse(requiredReviewByRoleText);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("Required review by role must be a JSON object.");
+      }
+      requiredReviewByRole = parsed as CompanyRequiredReviewByRole;
+      setRequiredReviewError(null);
+    } catch (error) {
+      setRequiredReviewError(error instanceof Error ? error.message : "Invalid JSON");
+      return;
+    }
     generalMutation.mutate({
       name: companyName.trim(),
       description: description.trim() || null,
-      brandColor: brandColor || null
+      brandColor: brandColor || null,
+      companyArchetype,
+      toolInstallPolicy,
+      autoAssignApprovedHires,
+      requiredReviewByRole,
     });
   }
 
@@ -378,6 +416,77 @@ export function CompanySettings() {
               </Field>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          Autonomy
+        </div>
+        <div className="space-y-3 rounded-md border border-border px-4 py-4">
+          <Field
+            label="Company archetype"
+            hint="Controls the default operating posture for the company."
+          >
+            <select
+              className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+              value={companyArchetype}
+              onChange={(e) => setCompanyArchetype(e.target.value as CompanyArchetypeValue)}
+            >
+              {COMPANY_ARCHETYPES.map((value) => (
+                <option key={value} value={value}>
+                  {value.replaceAll("_", " ")}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field
+            label="Tool install policy"
+            hint="New external tools should stay approval-gated by default."
+          >
+            <select
+              className="w-full rounded-md border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none"
+              value={toolInstallPolicy}
+              onChange={(e) => setToolInstallPolicy(e.target.value as ToolInstallPolicyValue)}
+            >
+              {TOOL_INSTALL_POLICIES.map((value) => (
+                <option key={value} value={value}>
+                  {value.replaceAll("_", " ")}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <ToggleField
+            label="Auto-assign approved hires"
+            hint="After a hire is approved, Paperclip should automatically land them into a follow-up issue."
+            checked={autoAssignApprovedHires}
+            onChange={setAutoAssignApprovedHires}
+          />
+
+          <Field
+            label="Required review by role"
+            hint="JSON map from role bundle key to review policy and reviewer role."
+          >
+            <div className="space-y-2">
+              <textarea
+                className="min-h-[180px] w-full rounded-md border border-border bg-transparent px-2.5 py-2 text-sm font-mono outline-none"
+                value={requiredReviewByRoleText}
+                onChange={(e) => {
+                  setRequiredReviewByRoleText(e.target.value);
+                  setRequiredReviewError(null);
+                }}
+              />
+              {requiredReviewError ? (
+                <div className="text-xs text-destructive">{requiredReviewError}</div>
+              ) : (
+                <div className="text-xs text-muted-foreground">
+                  {"Example: designer -> design_review via pm, frontend_engineer -> design_review via designer."}
+                </div>
+              )}
+            </div>
+          </Field>
         </div>
       </div>
 

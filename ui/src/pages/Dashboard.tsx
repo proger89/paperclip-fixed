@@ -23,6 +23,7 @@ import { Bot, CircleDot, DollarSign, ShieldCheck, LayoutDashboard, PauseCircle }
 import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
 import { ChartCard, RunActivityChart, PriorityChart, IssueStatusChart, SuccessRateChart } from "../components/ActivityCharts";
 import { PageSkeleton } from "../components/PageSkeleton";
+import { WorkProductCard, WorkProductReviewSummary, WorkProductStatusSummary } from "../components/WorkProductCard";
 import type { Agent, Issue } from "@paperclipai/shared";
 import { PluginSlotOutlet } from "@/plugins/slots";
 
@@ -283,6 +284,21 @@ export function Dashboard() {
             />
           </div>
 
+          {data.outputs ? (
+            <WorkProductStatusSummary
+              activePreviews={data.outputs.activePreviews}
+              readyForReview={data.outputs.readyForReview}
+              failed={data.outputs.failed}
+            />
+          ) : null}
+
+          {data.reviews ? (
+            <WorkProductReviewSummary
+              pendingCount={data.reviews.pending}
+              missingReviewerCount={data.reviews.missingReviewer}
+            />
+          ) : null}
+
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <ChartCard title="Run Activity" subtitle="Last 14 days">
               <RunActivityChart runs={runs ?? []} />
@@ -304,6 +320,88 @@ export function Dashboard() {
             className="grid gap-4 md:grid-cols-2"
             itemClassName="rounded-lg border bg-card p-4 shadow-sm"
           />
+
+          {(data.outputs?.recent?.length || data.reviews?.items?.length || data.outputs?.byProject?.length) ? (
+            <div className="grid gap-4 xl:grid-cols-3">
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                  Recent Outputs
+                </h3>
+                {data.outputs?.recent?.length ? (
+                  <div className="space-y-3">
+                    {data.outputs.recent.slice(0, 4).map((product) => (
+                      <WorkProductCard
+                        key={product.id}
+                        product={product}
+                        compact
+                        showIssueLink
+                        showProjectName
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-border/70 p-4 text-sm text-muted-foreground">
+                    No outputs published yet.
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                  Review Queue
+                </h3>
+                {data.reviews?.items?.length ? (
+                  <div className="space-y-3">
+                    {data.reviews.items.slice(0, 5).map((item) => (
+                      <Link
+                        key={item.issueId}
+                        to={`/issues/${item.identifier ?? item.issueId}`}
+                        className="block rounded-xl border border-border/70 bg-card p-4 transition-colors hover:border-border"
+                      >
+                        <div className="text-sm font-medium">
+                          {item.identifier ?? item.issueId.slice(0, 8)}: {item.title}
+                        </div>
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {item.reviewPolicyKey.replaceAll("_", " ")}
+                          {item.projectName ? ` · ${item.projectName}` : ""}
+                        </div>
+                        <div className="mt-2 text-xs text-muted-foreground">
+                          Status: {item.status.replaceAll("_", " ")}
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-border/70 p-4 text-sm text-muted-foreground">
+                    Nothing waiting for review right now.
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                  Project Output Map
+                </h3>
+                {data.outputs?.byProject?.length ? (
+                  <div className="space-y-3">
+                    {data.outputs.byProject.slice(0, 5).map((product) => (
+                      <WorkProductCard
+                        key={`${product.projectId ?? "none"}:${product.id}`}
+                        product={product}
+                        compact
+                        showIssueLink
+                        showProjectName
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-border/70 p-4 text-sm text-muted-foreground">
+                    Project-level outputs will appear after the first published preview or runtime.
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
 
           <div className="grid md:grid-cols-2 gap-4">
             {/* Recent Activity */}

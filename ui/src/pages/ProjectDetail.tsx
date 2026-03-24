@@ -14,6 +14,7 @@ import { useToast } from "../context/ToastContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { ProjectProperties, type ProjectConfigFieldKey, type ProjectFieldSaveState } from "../components/ProjectProperties";
+import { ProjectCodeOutputsPanel } from "../components/ProjectCodeOutputsPanel";
 import { InlineEditor } from "../components/InlineEditor";
 import { StatusBadge } from "../components/StatusBadge";
 import { BudgetPolicyCard } from "../components/BudgetPolicyCard";
@@ -241,6 +242,11 @@ export function ProjectDetail() {
   const canonicalProjectRef = project ? projectRouteRef(project) : routeProjectRef;
   const projectLookupRef = project?.id ?? routeProjectRef;
   const resolvedCompanyId = project?.companyId ?? selectedCompanyId;
+  const { data: projectOutputs = [] } = useQuery({
+    queryKey: queryKeys.projects.outputs(projectLookupRef),
+    queryFn: () => projectsApi.listOutputs(projectLookupRef, resolvedCompanyId ?? lookupCompanyId),
+    enabled: Boolean(projectLookupRef) && Boolean(resolvedCompanyId ?? lookupCompanyId),
+  });
   const {
     slots: pluginDetailSlots,
     isLoading: pluginDetailSlotsLoading,
@@ -575,14 +581,17 @@ export function ProjectDetail() {
       </Tabs>
 
       {activeTab === "overview" && (
-        <OverviewContent
-          project={project}
-          onUpdate={(data) => updateProject.mutate(data)}
-          imageUploadHandler={async (file) => {
-            const asset = await uploadImage.mutateAsync(file);
-            return asset.contentPath;
-          }}
-        />
+        <div className="space-y-6">
+          <ProjectCodeOutputsPanel project={project} outputs={projectOutputs} />
+          <OverviewContent
+            project={project}
+            onUpdate={(data) => updateProject.mutate(data)}
+            imageUploadHandler={async (file) => {
+              const asset = await uploadImage.mutateAsync(file);
+              return asset.contentPath;
+            }}
+          />
+        </div>
       )}
 
       {activeTab === "list" && project?.id && resolvedCompanyId && (

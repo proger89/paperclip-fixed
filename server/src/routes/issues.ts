@@ -28,7 +28,6 @@ import {
   logActivity,
   projectService,
   routineService,
-  buildPrimaryWorkProducts,
   workProductService,
 } from "../services/index.js";
 import { logger } from "../middleware/logger.js";
@@ -37,6 +36,7 @@ import { assertCompanyAccess, getActorInfo } from "./authz.js";
 import { shouldWakeAssigneeOnCheckout } from "./issues-checkout-wakeup.js";
 import { isAllowedContentType, MAX_ATTACHMENT_BYTES } from "../attachment-types.js";
 import { queueIssueAssignmentWakeup } from "../services/issue-assignment-wakeup.js";
+import { buildPrimaryWorkProducts } from "../services/work-products.js";
 
 const MAX_ISSUE_COMMENT_LIMIT = 500;
 
@@ -252,7 +252,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
       throw unprocessable("This issue requires a reviewer before it can be marked done");
     }
 
-    const workProducts = await workProductsSvc.listForIssue(existing.id);
+    const workProducts = (await workProductsSvc.listForIssue(existing.id)) ?? [];
     const reviewableTypes = reviewableWorkProductTypesForPolicy(nextReviewPolicyKey);
     const reviewableProducts = workProducts.filter((product) => reviewableTypes.includes(product.type));
     if (reviewableProducts.length === 0) {
@@ -360,7 +360,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
     const currentExecutionWorkspace = issue.executionWorkspaceId
       ? await executionWorkspacesSvc.getById(issue.executionWorkspaceId)
       : null;
-    const workProducts = await workProductsSvc.listForIssue(issue.id);
+    const workProducts = (await workProductsSvc.listForIssue(issue.id)) ?? [];
     const primaryWorkProducts = buildPrimaryWorkProducts(workProducts);
     res.json({
       ...issue,
@@ -927,6 +927,15 @@ export function issueRoutes(db: Db, storage: StorageService) {
     if (req.body.assigneeAgentId || req.body.assigneeUserId) {
       await assertCanAssignTasks(req, companyId);
     }
+    await assertIssueCanComplete(
+      {
+        id: "__new__",
+        reviewerAgentId: req.body.reviewerAgentId ?? null,
+        reviewerUserId: req.body.reviewerUserId ?? null,
+        reviewPolicyKey: req.body.reviewPolicyKey ?? null,
+      },
+      req.body,
+    );
 
     const actor = getActorInfo(req);
     const issue = await svc.create(companyId, {
@@ -988,10 +997,10 @@ export function issueRoutes(db: Db, storage: StorageService) {
     }
     if (!(await assertAgentRunCheckoutOwnership(req, res, existing))) return;
 
-    const actor = getActorInfo(req);
-    await assertIssueCanComplete(existing, updateFields);
     const isClosed = existing.status === "done" || existing.status === "cancelled";
     const { comment: commentBody, reopen: reopenRequested, hiddenAt: hiddenAtRaw, ...updateFields } = req.body;
+    await assertIssueCanComplete(existing, updateFields);
+    const actor = getActorInfo(req);
     if (hiddenAtRaw !== undefined) {
       updateFields.hiddenAt = hiddenAtRaw ? new Date(hiddenAtRaw) : null;
     }
