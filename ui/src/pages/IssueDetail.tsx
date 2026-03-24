@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "@/lib/router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { reviewableWorkProductTypesForPolicy } from "@paperclipai/shared";
 import { issuesApi } from "../api/issues";
 import { activityApi } from "../api/activity";
 import { heartbeatsApi } from "../api/heartbeats";
@@ -54,8 +55,7 @@ import {
   SlidersHorizontal,
   Trash2,
 } from "lucide-react";
-import type { ActivityEvent } from "@paperclipai/shared";
-import type { Agent, IssueAttachment } from "@paperclipai/shared";
+import type { ActivityEvent, Agent, IssueAttachment, IssueWorkProduct } from "@paperclipai/shared";
 
 type CommentReassignment = {
   assigneeAgentId: string | null;
@@ -463,6 +463,11 @@ export function IssueDetail() {
       queryClient.invalidateQueries({ queryKey: queryKeys.issues.listTouchedByMe(selectedCompanyId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.issues.listUnreadTouchedByMe(selectedCompanyId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.sidebarBadges(selectedCompanyId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(selectedCompanyId) });
+    }
+    if (issue?.projectId) {
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(issue.projectId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects.outputs(issue.projectId) });
     }
   };
 
@@ -481,6 +486,49 @@ export function IssueDetail() {
     mutationFn: (data: Record<string, unknown>) => issuesApi.update(issueId!, data),
     onSuccess: () => {
       invalidateIssue();
+    },
+  });
+
+  const updateWorkProductReview = useMutation({
+    mutationFn: async ({
+      productId,
+      patch,
+      moveIssueToReview = false,
+    }: {
+      productId: string;
+      patch: Record<string, unknown>;
+      moveIssueToReview?: boolean;
+    }) => {
+      await issuesApi.updateWorkProduct(productId, patch);
+      if (
+        moveIssueToReview
+        && issue
+        && issue.status !== "in_review"
+        && issue.status !== "done"
+        && issue.status !== "cancelled"
+      ) {
+        await issuesApi.update(issue.id, { status: "in_review" });
+      }
+    },
+    onSuccess: (_value, variables) => {
+      invalidateIssue();
+      pushToast({
+        title:
+          variables.patch.reviewState === "approved"
+            ? "Output approved"
+            : variables.patch.reviewState === "changes_requested"
+              ? "Changes requested on output"
+              : variables.patch.reviewState === "needs_board_review"
+                ? "Output sent to review"
+                : "Output review state cleared",
+        tone: "success",
+      });
+    },
+    onError: (error) => {
+      pushToast({
+        title: error instanceof Error ? error.message : "Failed to update output review state",
+        tone: "error",
+      });
     },
   });
 
@@ -656,12 +704,121 @@ export function IssueDetail() {
     primaryWorkProducts.length > 0
       ? primaryWorkProducts
       : (issue.workProducts ?? []).filter((product) => product.isPrimary).slice(0, 4);
+  const reviewableOutputTypes = new Set(reviewableWorkProductTypesForPolicy(issue.reviewPolicyKey ?? null));
   const reviewerName =
     issue.reviewerAgentId
       ? (agentMap.get(issue.reviewerAgentId)?.name ?? issue.reviewerAgentId.slice(0, 8))
       : issue.reviewerUserId
         ? "Board reviewer"
         : null;
+  const activeWorkProductReviewActionId = updateWorkProductReview.variables?.productId ?? null;
+
+  function renderWorkProductReviewActions(product: IssueWorkProduct) {
+    if (!issue?.reviewPolicyKey || !reviewableOutputTypes.has(product.type)) return null;
+    const isPending =
+      updateWorkProductReview.isPending
+      && activeWorkProductReviewActionId === product.id;
+    const canSendToReview = product.reviewState !== "approved";
+    const canApprove = product.reviewState !== "approved";
+    const canRequestChanges = product.reviewState !== "changes_requested";
+    const canClearReview = product.reviewState !== "none";
+
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="text-[11px] text-muted-foreground">
+          Reviewer actions for this output
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {canSendToReview ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={isPending}
+              onClick={() =>
+                updateWorkProductReview.mutate({
+                  productId: product.id,
+                  patch: {
+                    status: "ready_for_review",
+                    reviewState: "needs_board_review",
+                  },
+                  moveIssueToReview: true,
+                })
+              }
+            >
+              Send to review
+            </Button>
+          ) : null}
+          {canApprove ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={isPending}
+              onClick={() =>
+                updateWorkProductReview.mutate({
+                  productId: product.id,
+                  patch: {
+                    status:
+                      product.status === "merged" || product.status === "closed"
+                        ? product.status
+                        : "approved",
+                    reviewState: "approved",
+                  },
+                })
+              }
+            >
+              Approve
+            </Button>
+          ) : null}
+          {canRequestChanges ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={isPending}
+              onClick={() =>
+                updateWorkProductReview.mutate({
+                  productId: product.id,
+                  patch: {
+                    status: "changes_requested",
+                    reviewState: "changes_requested",
+                  },
+                })
+              }
+            >
+              Request changes
+            </Button>
+          ) : null}
+          {canClearReview ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={isPending}
+              onClick={() =>
+                updateWorkProductReview.mutate({
+                  productId: product.id,
+                  patch: {
+                    status:
+                      product.status === "approved"
+                      || product.status === "changes_requested"
+                      || product.status === "ready_for_review"
+                        ? "active"
+                        : product.status,
+                    reviewState: "none",
+                  },
+                })
+              }
+            >
+              Clear review
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
   const attachmentUploadButton = (
     <>
       <input
@@ -962,7 +1119,11 @@ export function IssueDetail() {
           {visibleWorkProducts.length > 0 ? (
             <div className="grid gap-3 md:grid-cols-2">
               {visibleWorkProducts.map((product) => (
-                <WorkProductCard key={product.id} product={product} />
+                <WorkProductCard
+                  key={product.id}
+                  product={product}
+                  actions={renderWorkProductReviewActions(product)}
+                />
               ))}
             </div>
           ) : (

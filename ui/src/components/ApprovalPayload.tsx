@@ -154,6 +154,8 @@ export function HireAgentPayload({ payload }: { payload: Record<string, unknown>
         </div>
       )}
       <PayloadField label="Bundle" value={payload.roleBundleKey} />
+      <PayloadField label="Bundle source" value={payload.roleBundleSelectionSource} />
+      <PayloadField label="Bundle why" value={payload.roleBundleSelectionReason} />
       <PayloadField label="Reason" value={payload.staffingReason} />
       <PayloadField label="Follow-up" value={payload.followUpAction} />
       <PayloadField label="Issue" value={payload.followUpIssueId} />

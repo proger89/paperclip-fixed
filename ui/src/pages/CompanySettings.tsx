@@ -1,10 +1,13 @@
-import { ChangeEvent, useEffect, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { companiesApi } from "../api/companies";
 import { accessApi } from "../api/access";
+import { approvalsApi } from "../api/approvals";
+import { agentsApi } from "../api/agents";
 import { assetsApi } from "../api/assets";
+import { pluginsApi } from "../api/plugins";
 import { queryKeys } from "../lib/queryKeys";
 import type { Company, CompanyRequiredReviewByRole } from "@paperclipai/shared";
 import { COMPANY_ARCHETYPES, TOOL_INSTALL_POLICIES } from "@paperclipai/shared";
@@ -24,6 +27,8 @@ import {
   ToggleField,
   HintIcon
 } from "../components/agent-config-primitives";
+import { RoleBundleConnectorSuggestionsPanel } from "../components/RoleBundleConnectorSuggestionsPanel";
+import { getRoleBundleConnectorSuggestions } from "../lib/role-bundle-connector-suggestions";
 
 type AgentSnippetInput = {
   onboardingTextUrl: string;
@@ -80,6 +85,36 @@ export function CompanySettings() {
   const [humanInviteError, setHumanInviteError] = useState<string | null>(null);
   const [humanInviteUrl, setHumanInviteUrl] = useState<string | null>(null);
   const [humanInviteCopied, setHumanInviteCopied] = useState(false);
+
+  const { data: approvals, error: approvalsError } = useQuery({
+    queryKey: queryKeys.approvals.list(selectedCompanyId!),
+    queryFn: () => approvalsApi.list(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+
+  const { data: roleBundles, error: roleBundlesError } = useQuery({
+    queryKey: queryKeys.agents.roleBundles(selectedCompanyId!),
+    queryFn: () => agentsApi.roleBundles(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+
+  const { data: installedPlugins, error: pluginsError } = useQuery({
+    queryKey: queryKeys.plugins.all,
+    queryFn: () => pluginsApi.list(),
+    enabled: !!selectedCompanyId,
+  });
+
+  const connectorSuggestions = useMemo(
+    () =>
+      getRoleBundleConnectorSuggestions({
+        roleBundles: roleBundles ?? [],
+        installedPlugins: installedPlugins ?? [],
+        approvals: approvals ?? [],
+        includeInstalled: true,
+      }),
+    [approvals, installedPlugins, roleBundles],
+  );
+  const connectorSuggestionsError = approvalsError ?? roleBundlesError ?? pluginsError;
 
   const generalDirty =
     !!selectedCompany &&
@@ -483,6 +518,25 @@ export function CompanySettings() {
               onErrorChange={setRequiredReviewError}
             />
           </Field>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          Connector Suggestions
+        </div>
+        <div className="rounded-md border border-border px-4 py-4">
+          {connectorSuggestionsError ? (
+            <p className="text-sm text-destructive">{connectorSuggestionsError.message}</p>
+          ) : (
+            <RoleBundleConnectorSuggestionsPanel
+              suggestions={connectorSuggestions}
+              title="Role bundle connector coverage"
+              description="Company-level view of curated connector suggestions for current role bundles. Installed items are shown here so you can see which capabilities are already covered and which still need approval."
+              emptyMessage="No curated connector suggestions are defined for the current role bundles."
+              showInstalled
+            />
+          )}
         </div>
       </div>
 

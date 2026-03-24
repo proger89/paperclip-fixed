@@ -3,8 +3,10 @@ import { Link } from "@/lib/router";
 import { useQuery } from "@tanstack/react-query";
 import { dashboardApi } from "../api/dashboard";
 import { activityApi } from "../api/activity";
+import { approvalsApi } from "../api/approvals";
 import { issuesApi } from "../api/issues";
 import { agentsApi } from "../api/agents";
+import { pluginsApi } from "../api/plugins";
 import { projectsApi } from "../api/projects";
 import { heartbeatsApi } from "../api/heartbeats";
 import { useCompany } from "../context/CompanyContext";
@@ -23,7 +25,9 @@ import { Bot, CircleDot, DollarSign, ShieldCheck, LayoutDashboard, PauseCircle }
 import { ActiveAgentsPanel } from "../components/ActiveAgentsPanel";
 import { ChartCard, RunActivityChart, PriorityChart, IssueStatusChart, SuccessRateChart } from "../components/ActivityCharts";
 import { PageSkeleton } from "../components/PageSkeleton";
+import { RoleBundleConnectorSuggestionsPanel } from "../components/RoleBundleConnectorSuggestionsPanel";
 import { WorkProductCard, WorkProductReviewSummary, WorkProductStatusSummary } from "../components/WorkProductCard";
+import { getRoleBundleConnectorSuggestions } from "../lib/role-bundle-connector-suggestions";
 import type { Agent, Issue } from "@paperclipai/shared";
 import { PluginSlotOutlet } from "@/plugins/slots";
 
@@ -44,6 +48,24 @@ export function Dashboard() {
   const { data: agents } = useQuery({
     queryKey: queryKeys.agents.list(selectedCompanyId!),
     queryFn: () => agentsApi.list(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+
+  const { data: approvals, error: approvalsError } = useQuery({
+    queryKey: queryKeys.approvals.list(selectedCompanyId!),
+    queryFn: () => approvalsApi.list(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+
+  const { data: roleBundles, error: roleBundlesError } = useQuery({
+    queryKey: queryKeys.agents.roleBundles(selectedCompanyId!),
+    queryFn: () => agentsApi.roleBundles(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+
+  const { data: installedPlugins, error: pluginsError } = useQuery({
+    queryKey: queryKeys.plugins.all,
+    queryFn: () => pluginsApi.list(),
     enabled: !!selectedCompanyId,
   });
 
@@ -83,6 +105,16 @@ export function Dashboard() {
 
   const recentIssues = issues ? getRecentIssues(issues) : [];
   const recentActivity = useMemo(() => (activity ?? []).slice(0, 10), [activity]);
+  const connectorSuggestions = useMemo(
+    () =>
+      getRoleBundleConnectorSuggestions({
+        roleBundles: roleBundles ?? [],
+        installedPlugins: installedPlugins ?? [],
+        approvals: approvals ?? [],
+      }),
+    [approvals, installedPlugins, roleBundles],
+  );
+  const connectorSuggestionsError = approvalsError ?? roleBundlesError ?? pluginsError;
 
   useEffect(() => {
     for (const timer of activityAnimationTimersRef.current) {
@@ -189,6 +221,9 @@ export function Dashboard() {
   return (
     <div className="space-y-6">
       {error && <p className="text-sm text-destructive">{error.message}</p>}
+      {connectorSuggestionsError ? (
+        <p className="text-sm text-destructive">{connectorSuggestionsError.message}</p>
+      ) : null}
 
       {hasNoAgents && (
         <div className="flex items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-500/25 dark:bg-amber-950/60">
@@ -296,6 +331,16 @@ export function Dashboard() {
             <WorkProductReviewSummary
               pendingCount={data.reviews.pending}
               missingReviewerCount={data.reviews.missingReviewer}
+            />
+          ) : null}
+
+          {connectorSuggestions.length > 0 ? (
+            <RoleBundleConnectorSuggestionsPanel
+              suggestions={connectorSuggestions}
+              title="Connector Suggestions"
+              description="Curated connector installs recommended by current role bundles. These do not block hires, but they reduce capability gaps before specialist work lands."
+              emptyMessage="No connector suggestions right now."
+              limit={6}
             />
           ) : null}
 

@@ -30,6 +30,9 @@ const mockHeartbeatService = vi.hoisted(() => ({}));
 const mockIssueApprovalService = vi.hoisted(() => ({
   linkManyForApproval: vi.fn(),
 }));
+const mockIssueService = vi.hoisted(() => ({
+  getById: vi.fn(),
+}));
 const mockWorkspaceOperationService = vi.hoisted(() => ({}));
 const mockAgentInstructionsService = vi.hoisted(() => ({
   getBundle: vi.fn(),
@@ -71,7 +74,7 @@ vi.mock("../services/index.js", () => ({
   budgetService: () => mockBudgetService,
   heartbeatService: () => mockHeartbeatService,
   issueApprovalService: () => mockIssueApprovalService,
-  issueService: () => ({}),
+  issueService: () => mockIssueService,
   logActivity: mockLogActivity,
   secretService: () => mockSecretService,
   syncInstructionsBundleConfigFromFilePath: vi.fn((_agent, config) => config),
@@ -228,6 +231,7 @@ describe("agent skill routes", () => {
       installedReferences: ["paperclip"],
       missing: [],
     });
+    mockIssueService.getById.mockResolvedValue(null);
     mockAgentInstructionsService.materializeManagedBundle.mockImplementation(
       async (agent: Record<string, unknown>, files: Record<string, string>) => ({
         bundle: null,
@@ -575,7 +579,17 @@ describe("agent skill routes", () => {
             key: "paperclip-kitchen-sink-example",
             source: "local_path",
           }),
+          expect.objectContaining({
+            key: "paperclipai.plugin-authoring-smoke-example",
+            source: "local_path",
+          }),
         ]),
+        requiredConnectorPlugins: [
+          expect.objectContaining({
+            key: "paperclip.telegram-channel-connector",
+            source: "local_path",
+          }),
+        ],
       }),
       expect.objectContaining({
         key: "general_specialist",
@@ -589,6 +603,10 @@ describe("agent skill routes", () => {
         suggestedConnectorPlugins: expect.arrayContaining([
           expect.objectContaining({
             key: "paperclip-kitchen-sink-example",
+            source: "local_path",
+          }),
+          expect.objectContaining({
+            key: "paperclip.telegram-channel-connector",
             source: "local_path",
           }),
         ]),
@@ -674,6 +692,39 @@ describe("agent skill routes", () => {
         }),
       }),
     );
+  });
+
+  it("routes generic engineer hires to a specialist bundle when the staffing reason signals design work", async () => {
+    const res = await request(createApp(createDb({ requireBoardApprovalForNewAgents: true })))
+      .post("/api/companies/company-1/agent-hires")
+      .send({
+        name: "UI Hire",
+        role: "engineer",
+        staffingReason: "Design a beautiful dashboard UI with stronger visual polish and clearer layout.",
+        adapterType: "claude_local",
+        adapterConfig: {},
+      });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    expect(mockAgentService.create).toHaveBeenCalledWith(
+      "company-1",
+      expect.objectContaining({
+        role: "designer",
+      }),
+    );
+    expect(mockApprovalService.create).toHaveBeenCalledWith(
+      "company-1",
+      expect.objectContaining({
+        type: "hire_agent",
+        payload: expect.objectContaining({
+          role: "designer",
+          roleBundleKey: "designer",
+          roleBundleSelectionSource: "capability_inferred",
+        }),
+      }),
+    );
+    expect(res.body.roleBundleKey).toBe("designer");
+    expect(res.body.roleBundleSelectionSource).toBe("capability_inferred");
   });
 
   it("creates skill install approvals for missing role bundle skills with known sources", async () => {

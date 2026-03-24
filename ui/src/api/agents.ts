@@ -52,6 +52,9 @@ export interface AgentHireResponse {
   connectorApprovals?: Approval[];
   missingRequestedSkills?: Record<string, unknown>[];
   missingConnectorPlugins?: Record<string, unknown>[];
+  roleBundleKey?: string;
+  roleBundleSelectionSource?: "explicit" | "role_default" | "capability_inferred";
+  roleBundleSelectionReason?: string | null;
 }
 
 export interface AgentPermissionUpdate {

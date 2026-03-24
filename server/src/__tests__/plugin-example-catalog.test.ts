@@ -15,6 +15,11 @@ describe("plugin example catalog", () => {
           packageName: "@paperclipai/plugin-authoring-smoke-example",
           categories: ["connector"],
         }),
+        expect.objectContaining({
+          packageName: "@paperclipai/plugin-telegram-channel-connector",
+          tag: "bundled",
+          categories: expect.arrayContaining(["connector", "ui"]),
+        }),
       ]),
     );
   });

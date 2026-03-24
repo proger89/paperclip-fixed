@@ -184,7 +184,7 @@ export function approvalService(db: Db, options: ApprovalServiceOptions = {}) {
           let followUp = {
             issueId: null as string | null,
             issueIds: [] as string[],
-            message: "Your hire was approved. Wait for a manager to assign your first task.",
+            message: "Your hire was approved. Paperclip could not land the first follow-up issue automatically, so a board operator should assign one.",
           };
           try {
             followUp = await completeHireFollowUp(db, heartbeat, {

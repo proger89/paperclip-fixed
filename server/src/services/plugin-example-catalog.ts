@@ -9,7 +9,7 @@ export interface BundledPluginExample {
   displayName: string;
   description: string;
   localPath: string;
-  tag: "example";
+  tag: "example" | "bundled";
   categories: PluginCategory[];
 }
 
@@ -52,6 +52,15 @@ const BUNDLED_PLUGIN_EXAMPLES: BundledPluginExample[] = [
     localPath: "packages/plugins/examples/plugin-authoring-smoke-example",
     tag: "example",
     categories: ["connector"],
+  },
+  {
+    packageName: "@paperclipai/plugin-telegram-channel-connector",
+    pluginKey: "paperclip.telegram-channel-connector",
+    displayName: "Telegram Channel Connector",
+    description: "Bundled Telegram connector with company dashboard, issue-level publish handoff, approval-aware publishing, and Telegram work product tracking.",
+    localPath: "packages/plugins/telegram-channel-connector",
+    tag: "bundled",
+    categories: ["connector", "ui"],
   },
 ];
 

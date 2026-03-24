@@ -73,6 +73,7 @@ import {
   applyRoleBundleManagedInstructions,
   listRoleBundleCatalog,
   resolveRoleBundle,
+  resolveRoleBundleSelectionForHire,
 } from "../services/role-bundles.js";
 import { resolveRoleBundleConnectorCoverage } from "../services/role-bundle-connectors.js";
 import { normalizeCompanyAutonomySettings } from "../services/autonomy-policy.js";
@@ -1321,6 +1322,7 @@ export function agentRoutes(db: Db) {
     const companyId = req.params.companyId as string;
     await assertCanCreateAgentsForCompany(req, companyId);
     const sourceIssueIds = parseSourceIssueIds(req.body);
+    const issueSvc = issueService(db);
     const {
       desiredSkills: requestedDesiredSkills,
       requestedSkills: requestedRoleSkills,
@@ -1332,7 +1334,30 @@ export function agentRoutes(db: Db) {
       followUpAction,
       ...hireInput
     } = req.body;
-    const roleBundle = resolveRoleBundle(requestedRoleBundleKey, hireInput.role);
+    const sourceIssueContexts = await Promise.all(
+      sourceIssueIds.map(async (sourceIssueId) => {
+        const sourceIssue = await issueSvc.getById(sourceIssueId);
+        if (!sourceIssue || sourceIssue.companyId !== companyId) return null;
+        return {
+          title: sourceIssue.title ?? null,
+          description: sourceIssue.description ?? null,
+          labels: (sourceIssue.labels ?? []).map((label) => label.name),
+        };
+      }),
+    ).then((rows) => rows.filter((row): row is NonNullable<typeof row> => Boolean(row)));
+    const roleBundleSelection = resolveRoleBundleSelectionForHire({
+      roleBundleKey: requestedRoleBundleKey,
+      agentRole: hireInput.role,
+      staffingReason: typeof staffingReason === "string" ? staffingReason : null,
+      capabilities: typeof hireInput.capabilities === "string" ? hireInput.capabilities : null,
+      sourceIssueContexts,
+    });
+    const roleBundle = roleBundleSelection.roleBundle;
+    const resolvedHireRole =
+      roleBundleSelection.source === "capability_inferred"
+      && (hireInput.role === "general" || hireInput.role === "engineer")
+        ? roleBundle.agentRole
+        : hireInput.role;
     const requestedSkills = dedupeTextValues([
       ...(Array.isArray(requestedRoleSkills) ? requestedRoleSkills : []),
       ...roleBundle.requestedSkillRefs,
@@ -1383,6 +1408,7 @@ export function agentRoutes(db: Db) {
     );
     const normalizedHireInput = {
       ...hireInput,
+      role: resolvedHireRole,
       adapterConfig: normalizedAdapterConfig,
     };
 
@@ -1397,8 +1423,8 @@ export function agentRoutes(db: Db) {
     }
 
     const autonomySettings = normalizeCompanyAutonomySettings(company);
-    const connectorCoverage = await resolveRoleBundleConnectorCoverage(db, roleBundle.key, hireInput.role);
-    const missingConnectorPlugins = connectorCoverage.missing;
+    const resolvedConnectorCoverage = await resolveRoleBundleConnectorCoverage(db, roleBundle.key, resolvedHireRole);
+    const missingConnectorPlugins = resolvedConnectorCoverage.missing;
     const missingConnectorPluginKeys = missingConnectorPlugins.map((requirement) => connectorRequirementKey(requirement));
     const missingConnectorPluginDisplayNames = missingConnectorPlugins
       .map((requirement) => connectorRequirementDisplayName(requirement));
@@ -1457,11 +1483,14 @@ export function agentRoutes(db: Db) {
               : agent.budgetMonthlyCents,
           desiredSkills: desiredSkillAssignment.desiredSkills,
           roleBundleKey: roleBundle.key,
+          roleBundleSelectionSource: roleBundleSelection.source,
+          roleBundleSelectionReason: roleBundleSelection.reason,
+          roleBundleMatchedTerms: roleBundleSelection.matchedTerms,
           requestedSkills,
           missingRequestedSkills,
           missingRequestedSkillRefs,
           missingRequestedSkillDisplayNames,
-          requiredConnectorPlugins: connectorCoverage.required,
+          requiredConnectorPlugins: resolvedConnectorCoverage.required,
           missingConnectorPlugins,
           missingConnectorPluginKeys,
           missingConnectorPluginDisplayNames,
@@ -1478,6 +1507,7 @@ export function agentRoutes(db: Db) {
             runtimeConfig: requestedRuntimeConfig,
             desiredSkills: desiredSkillAssignment.desiredSkills,
             roleBundleKey: roleBundle.key,
+            roleBundleSelectionSource: roleBundleSelection.source,
             missingRequestedSkillRefs,
             missingConnectorPluginKeys,
           },
@@ -1530,7 +1560,7 @@ export function agentRoutes(db: Db) {
             reason: `Required for ${roleBundle.label} role bundle`,
             roleBundleKey: roleBundle.key,
             roleBundleLabel: roleBundle.label,
-            role: hireInput.role,
+            role: resolvedHireRole,
             requiredByAgentId: agent.id,
             requiredByAgentName: agent.name,
             staffingReason: staffingReason ?? null,
@@ -1610,7 +1640,7 @@ export function agentRoutes(db: Db) {
               ?? `Required for ${roleBundle.label} role bundle`,
             roleBundleKey: roleBundle.key,
             roleBundleLabel: roleBundle.label,
-            role: hireInput.role,
+            role: resolvedHireRole,
             requiredByAgentId: agent.id,
             requiredByAgentName: agent.name,
             staffingReason: staffingReason ?? null,
@@ -1663,6 +1693,9 @@ export function agentRoutes(db: Db) {
         name: agent.name,
         role: agent.role,
         roleBundleKey: roleBundle.key,
+        roleBundleSelectionSource: roleBundleSelection.source,
+        roleBundleSelectionReason: roleBundleSelection.reason,
+        roleBundleMatchedTerms: roleBundleSelection.matchedTerms,
         requiresApproval,
         approvalId: approval?.id ?? null,
         skillApprovalIds: skillApprovals.map((entry) => entry.id),
@@ -1713,7 +1746,7 @@ export function agentRoutes(db: Db) {
       let followUp = {
         issueId: null as string | null,
         issueIds: [] as string[],
-        message: "Your hire is active. Wait for a manager to assign your first task.",
+        message: "Your hire is active. Paperclip could not land the first follow-up issue automatically, so a board operator should assign one.",
       };
       try {
         followUp = await completeHireFollowUp(db, heartbeat, {
@@ -1754,6 +1787,9 @@ export function agentRoutes(db: Db) {
       connectorApprovals,
       missingRequestedSkills,
       missingConnectorPlugins,
+      roleBundleKey: roleBundle.key,
+      roleBundleSelectionSource: roleBundleSelection.source,
+      roleBundleSelectionReason: roleBundleSelection.reason,
     });
   });
 

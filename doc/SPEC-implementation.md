@@ -59,11 +59,14 @@ V1 implementation extends this baseline into a company-centric, governance-aware
 ## 5.1 In Scope
 
 - Company lifecycle (create/list/get/update/archive)
+- Company autonomy policies (archetype, tool install policy, auto-follow-up hires, required review by role)
 - Goal hierarchy linked to company mission
 - Agent lifecycle with org structure and adapter configuration
+- Role bundles for common specialist hires (designer, QA, PM, frontend engineer, content operator, general specialist)
 - Task lifecycle with parent/child hierarchy and comments
 - Atomic task checkout and explicit task status transitions
-- Board approvals for hires, CEO strategy, and governed external publication
+- Board approvals for hires, CEO strategy, governed external publication, company skill installs, and connector installs
+- Work products and review-gated delivery (preview/runtime/artifact/document outputs with reviewer handoff)
 - Heartbeat invocation, status tracking, and cancellation
 - Cost event ingestion and rollups (agent/task/project/company)
 - Budget settings and hard-stop enforcement
@@ -124,6 +127,10 @@ Human auth tables (`users`, `sessions`, and provider-specific auth artifacts) ar
 - `name` text not null
 - `description` text null
 - `status` enum: `active | paused | archived`
+- `company_archetype` enum/text not null default `general_company`
+- `tool_install_policy` enum/text not null default `approval_gated`
+- `auto_assign_approved_hires` boolean not null default true
+- `required_review_by_role` jsonb not null default `{}`
 
 Invariant: every business record belongs to exactly one company.
 
@@ -202,6 +209,10 @@ Invariant: at least one root `company` level goal per company.
 - `created_by_user_id` uuid fk `users.id` null
 - `request_depth` int not null default 0
 - `billing_code` text null
+- `reviewer_agent_id` uuid fk `agents.id` null
+- `reviewer_user_id` uuid fk `users.id` null
+- `review_policy_key` text null
+- `acceptance_checklist_json` jsonb null
 - `started_at` timestamptz null
 - `completed_at` timestamptz null
 - `cancelled_at` timestamptz null
@@ -211,6 +222,7 @@ Invariants:
 - single assignee only
 - task must trace to company goal chain via `goal_id`, `parent_id`, or project-goal linkage
 - `in_progress` requires assignee
+- issues with `review_policy_key` cannot transition to `done` until a reviewer is assigned and at least one reviewable work product is approved
 - terminal states: `done | cancelled`
 
 ## 7.7 `issue_comments`
@@ -257,7 +269,7 @@ Invariant: each event must attach to agent and company; rollups are aggregation,
 
 - `id` uuid pk
 - `company_id` uuid fk not null
-- `type` enum: `hire_agent | approve_ceo_strategy | budget_override_required | publish_content`
+- `type` enum: `hire_agent | approve_ceo_strategy | budget_override_required | publish_content | install_company_skill | install_connector_plugin`
 - `requested_by_agent_id` uuid fk `agents.id` null
 - `requested_by_user_id` uuid fk `users.id` null
 - `status` enum: `pending | revision_requested | approved | rejected | cancelled`
@@ -372,6 +384,24 @@ Operational policy:
   - `issue_id` uuid fk not null
   - `document_id` uuid fk not null
   - `key` text not null (`plan`, `design`, `notes`, etc.)
+
+## 7.16 `issue_work_products`
+
+- `id` uuid pk
+- `company_id` uuid fk not null
+- `project_id` uuid fk `projects.id` null
+- `issue_id` uuid fk `issues.id` not null
+- `type` enum/text (`preview_url | runtime_service | pull_request | branch | commit | artifact | document`)
+- `provider` text not null
+- `url` text null
+- `status` enum/text (`active | ready_for_review | approved | changes_requested | merged | closed | failed | archived | draft`)
+- `review_state` enum/text (`none | needs_board_review | approved | changes_requested`)
+- `is_primary` boolean not null default false
+- `health_status` enum/text (`unknown | healthy | unhealthy`)
+- `summary` text null
+- `metadata` jsonb null
+
+Invariant: review-gated tasks rely on reviewable `issue_work_products` instead of hidden comments or ad-hoc links.
 
 ## 8. State Machines
 
@@ -551,6 +581,9 @@ Dashboard payload must include:
 - open/in-progress/blocked/done issue counts
 - month-to-date spend and budget utilization
 - pending approvals count
+- output summary (`activePreviews`, `readyForReview`, `failed`)
+- review summary (`pending`, `missingReviewer`)
+- recent primary outputs and project output map
 
 ## 10.9 Error Semantics
 
@@ -642,8 +675,9 @@ Scheduler must skip invocation when:
 
 1. Agent or board creates `approval(type=hire_agent, status=pending, payload=agent draft)`.
 2. Board approves or rejects.
-3. On approval, server creates agent row and initial API key (optional).
-4. Decision is logged in `activity_log`.
+3. On approval, server creates or activates the agent row, applies role bundle defaults, and prepares any linked install approvals for missing skills/connectors.
+4. Approved hires should auto-land into a concrete follow-up issue when company autonomy policy allows it.
+5. Decision is logged in `activity_log`.
 
 Board can bypass request flow and create agents directly via UI; direct create is still logged as a governance action.
 
@@ -663,6 +697,7 @@ Before first strategy approval, CEO may only draft tasks, not transition them to
 4. Only after approval may a publishing agent execute the outbound publish and write the resulting URL or external artifact back as an `issue_work_product`.
 
 V1 treats `publish_content` as the canonical governance gate for Telegram-style editorial workflows.
+The bundled Telegram channel connector plugin is the reference implementation of that flow: company settings and dashboard visibility at the connector level, issue-scoped draft and approval handoff in the work loop, and final Telegram publication captured back onto the issue as a first-class work product.
 
 Current enforcement boundary:
 
@@ -868,7 +903,7 @@ V1 is complete only when all criteria are true:
 
 ## 20. Post-V1 Backlog (Explicitly Deferred)
 
-- plugin architecture
+- public plugin marketplace and remote plugin discovery/install trust model
 - richer workflow-state customization per team
 - milestones/labels/dependency graph depth beyond V1 minimum
 - realtime transport optimization (SSE/WebSockets)

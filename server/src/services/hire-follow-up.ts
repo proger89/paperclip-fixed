@@ -172,7 +172,7 @@ export async function completeHireFollowUp(
     return {
       issueId: null,
       issueIds: [],
-      message: "Your hire was approved. Wait for a manager to assign your first task.",
+      message: "Your hire was approved. Automatic follow-up assignment is disabled for this company, so a board operator should assign the first issue.",
     };
   }
 

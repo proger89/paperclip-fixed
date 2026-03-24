@@ -52,12 +52,14 @@ const BROWSER_WORKFLOW_SKILLS = [
 const DESIGN_SYSTEM_SKILLS = [
   "web-design-guidelines",
   "frontend-skill",
+  "rknall/claude-skills/web-design-builder",
 ];
 
 const MANAGERIAL_SKILLS = [
   "paperclip-create-agent",
   "doc-maintenance",
   "pr-report",
+  "anthropics/knowledge-work-plugins/source-management",
 ];
 
 const QA_VALIDATION_SKILLS = [
@@ -66,6 +68,12 @@ const QA_VALIDATION_SKILLS = [
   "screenshot",
   "security-best-practices",
   "web-design-guidelines",
+  "jackspace/claudeskillz/playwright-browser-automation",
+];
+
+const CONTENT_WORKFLOW_SKILLS = [
+  "rickydwilson-dcs/claude-skills/content-creator",
+  "anthropics/knowledge-work-plugins/source-management",
 ];
 
 function dedupe(values: string[]) {
@@ -117,6 +125,199 @@ function appendOverlay(baseContent: string | undefined, overlayContent: string) 
   return `${normalizedBase}\n\n${overlayContent}\n`;
 }
 
+function normalizedRoutingText(values: Array<string | null | undefined>) {
+  return values
+    .map((value) => (typeof value === "string" ? value.trim().toLowerCase() : ""))
+    .filter(Boolean)
+    .join("\n");
+}
+
+const ROLE_BUNDLE_ROUTING_KEYWORDS: Array<{
+  bundleKey: RoleBundleKey;
+  keywords: string[];
+}> = [
+  {
+    bundleKey: "designer",
+    keywords: [
+      "design",
+      "designer",
+      "ux",
+      "ui",
+      "visual",
+      "figma",
+      "wireframe",
+      "beautiful",
+      "polish",
+      "landing page",
+      "layout",
+      "redesign",
+    ],
+  },
+  {
+    bundleKey: "qa",
+    keywords: [
+      "qa",
+      "quality assurance",
+      "test",
+      "testing",
+      "verify",
+      "validation",
+      "acceptance",
+      "regression",
+      "bug bash",
+      "reproduce",
+    ],
+  },
+  {
+    bundleKey: "pm",
+    keywords: [
+      "plan",
+      "planning",
+      "scope",
+      "roadmap",
+      "coordination",
+      "triage",
+      "backlog",
+      "spec",
+      "follow-up",
+      "follow up",
+      "handoff",
+      "staffing",
+    ],
+  },
+  {
+    bundleKey: "frontend_engineer",
+    keywords: [
+      "frontend",
+      "react",
+      "vite",
+      "component",
+      "components",
+      "css",
+      "responsive",
+      "dashboard",
+      "page",
+      "screen",
+      "implement ui",
+      "ui implementation",
+    ],
+  },
+  {
+    bundleKey: "content_operator",
+    keywords: [
+      "telegram",
+      "tg ",
+      "tg-",
+      "channel",
+      "channels",
+      "content",
+      "editorial",
+      "publication",
+      "publishing",
+      "post",
+      "posts",
+      "copywriting",
+      "social media",
+      "newsletter",
+    ],
+  },
+];
+
+export interface RoleBundleRoutingSelectionInput {
+  roleBundleKey?: string | null;
+  agentRole?: string | null;
+  staffingReason?: string | null;
+  capabilities?: string | null;
+  sourceIssueContexts?: Array<{
+    title?: string | null;
+    description?: string | null;
+    labels?: string[];
+  }>;
+}
+
+export interface RoleBundleRoutingSelection {
+  roleBundle: RoleBundleDefinition;
+  source: "explicit" | "role_default" | "capability_inferred";
+  reason: string | null;
+  matchedTerms: string[];
+}
+
+function inferRoleBundleFromContext(input: RoleBundleRoutingSelectionInput) {
+  const haystack = normalizedRoutingText([
+    input.staffingReason ?? null,
+    input.capabilities ?? null,
+    ...(input.sourceIssueContexts ?? []).flatMap((issue) => [
+      issue.title ?? null,
+      issue.description ?? null,
+      ...(issue.labels ?? []),
+    ]),
+  ]);
+  if (!haystack) return null;
+
+  let best:
+    | {
+        bundleKey: RoleBundleKey;
+        matchedTerms: string[];
+        score: number;
+      }
+    | null = null;
+
+  for (const candidate of ROLE_BUNDLE_ROUTING_KEYWORDS) {
+    const matchedTerms = candidate.keywords.filter((keyword) => haystack.includes(keyword));
+    if (matchedTerms.length === 0) continue;
+    const score = matchedTerms.length;
+    if (!best || score > best.score) {
+      best = {
+        bundleKey: candidate.bundleKey,
+        matchedTerms,
+        score,
+      };
+    }
+  }
+
+  return best;
+}
+
+export function resolveRoleBundleSelectionForHire(
+  input: RoleBundleRoutingSelectionInput,
+): RoleBundleRoutingSelection {
+  const roleBundle = resolveRoleBundle(input.roleBundleKey, input.agentRole);
+  const explicitRoleBundleRequested =
+    typeof input.roleBundleKey === "string"
+    && input.roleBundleKey.trim().length > 0
+    && input.roleBundleKey in ROLE_BUNDLES;
+  if (explicitRoleBundleRequested) {
+    return {
+      roleBundle,
+      source: "explicit",
+      reason: "Role bundle was explicitly requested.",
+      matchedTerms: [],
+    };
+  }
+
+  const inferred = inferRoleBundleFromContext(input);
+  const allowSpecialistOverride =
+    !input.agentRole
+    || input.agentRole === "general"
+    || input.agentRole === "engineer";
+  if (inferred && allowSpecialistOverride && inferred.bundleKey !== roleBundle.key) {
+    const inferredBundle = ROLE_BUNDLES[inferred.bundleKey];
+    return {
+      roleBundle: inferredBundle,
+      source: "capability_inferred",
+      reason: `Matched specialist work signals: ${inferred.matchedTerms.join(", ")}.`,
+      matchedTerms: inferred.matchedTerms,
+    };
+  }
+
+  return {
+    roleBundle,
+    source: "role_default",
+    reason: "Role bundle was selected from the requested role.",
+    matchedTerms: [],
+  };
+}
+
 export const ROLE_BUNDLES: Record<RoleBundleKey, RoleBundleDefinition> = {
   general_specialist: {
     key: "general_specialist",
@@ -132,6 +333,10 @@ export const ROLE_BUNDLES: Record<RoleBundleKey, RoleBundleDefinition> = {
       bundledConnectorSuggestion(
         "paperclip-kitchen-sink-example",
         "Useful sandbox for prototyping connector, automation, and workspace flows before committing to a dedicated integration.",
+      ),
+      bundledConnectorSuggestion(
+        "paperclip.telegram-channel-connector",
+        "Recommended when the company needs a real Telegram publishing path instead of ad hoc channel links and manual handoff.",
       ),
     ],
     managedInstructions: ["AGENTS.md"],
@@ -218,6 +423,10 @@ export const ROLE_BUNDLES: Record<RoleBundleKey, RoleBundleDefinition> = {
         "Good default sandbox when this role needs to validate a new connector or automation path before asking for a bespoke plugin.",
       ),
       bundledConnectorSuggestion(
+        "paperclip.telegram-channel-connector",
+        "Useful for PM-led content and distribution planning when Telegram channel workflows need a visible control-plane surface.",
+      ),
+      bundledConnectorSuggestion(
         "paperclipai.plugin-authoring-smoke-example",
         "Minimal connector starter for cases where the company needs a small custom integration and wants a safe local install path first.",
       ),
@@ -273,14 +482,24 @@ export const ROLE_BUNDLES: Record<RoleBundleKey, RoleBundleDefinition> = {
     requestedSkillRefs: dedupe([
       ...BROWSER_WORKFLOW_SKILLS,
       ...CORE_MEMORY_SKILLS,
+      ...CONTENT_WORKFLOW_SKILLS,
       "doc-maintenance",
       "pr-report",
     ]),
-    requiredConnectorPlugins: [],
+    requiredConnectorPlugins: [
+      bundledConnectorSuggestion(
+        "paperclip.telegram-channel-connector",
+        "Content and channel workflows should install the Telegram connector before this role starts faking external publishing integrations.",
+      ),
+    ],
     suggestedConnectorPlugins: [
       bundledConnectorSuggestion(
         "paperclip-kitchen-sink-example",
         "Helps prototype connector-backed publishing and automation flows before the team invests in a production channel integration.",
+      ),
+      bundledConnectorSuggestion(
+        "paperclipai.plugin-authoring-smoke-example",
+        "Keeps a minimal local connector authoring path available when the company needs a second, bespoke distribution integration after Telegram.",
       ),
     ],
     managedInstructions: ["AGENTS.md"],

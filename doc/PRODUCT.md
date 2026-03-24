@@ -106,8 +106,10 @@ Paperclip’s core identity is a **control plane for autonomous AI companies**, 
 - Stay **board-level and company-level**. Users should manage goals, orgs, budgets, approvals, and outputs.
 - Make the first five minutes feel magical: install, answer a few questions, see a CEO do something real.
 - Keep work anchored to **issues/comments/projects/goals**, even if the surface feels conversational.
+- Use **role bundles, company skills, and approval-gated connector installs** to close capability gaps before hiring another generic agent.
 - Treat **agency / internal team / startup** as the same underlying abstraction with different templates and labels.
 - Make outputs first-class: files, docs, reports, previews, links, screenshots.
+- Treat review-gated work as a real system contract: named reviewer, visible output, and explicit approval before completion.
 - Provide **hooks into engineering workflows**: worktrees, preview servers, PR links, external review tools.
 - Use **plugins** for edge cases like rich chat, knowledge bases, doc editors, custom tracing.
 
@@ -136,11 +138,15 @@ Paperclip’s core identity is a **control plane for autonomous AI companies**, 
 5. **Output-first**
    Work is not done until the user can see the result: file, document, preview link, screenshot, plan, or PR.
 
-6. **Local-first, cloud-ready**
+6. **Capability-first staffing**
+   Before hiring, Paperclip should check reusable skills, installed connectors, runtime services, and specialist role bundles. Generic hires are the fallback, not the default.
+
+7. **Local-first, cloud-ready**
    The mental model should not change between local solo use and shared/private or public/cloud deployment.
 
-7. **Safe autonomy**
+8. **Safe autonomy**
    Auto mode is allowed; hidden token burn is not.
 
-8. **Thin core, rich edges**
+9. **Thin core, rich edges**
    Put optional chat, knowledge, and special surfaces into plugins/extensions rather than bloating the control plane.
+   Bundled connectors may still deliver first-class governed workflows when they improve a core outcome, for example Telegram draft -> approval -> publish -> tracked output.

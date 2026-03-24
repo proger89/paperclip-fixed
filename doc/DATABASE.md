@@ -2,6 +2,8 @@
 
 Paperclip uses PostgreSQL via [Drizzle ORM](https://orm.drizzle.team/). There are three ways to run the database, from simplest to most production-ready.
 
+Current V1 schema also includes company-level autonomy settings, review-gated issue fields, approval-gated capability installs, and `issue_work_products` for previews/runtime links/artifacts. When changing those models, update `packages/db`, `packages/shared`, `server`, and `ui` together.
+
 ## 1. Embedded PostgreSQL — zero config
 
 If you don't set `DATABASE_URL`, the server automatically starts an embedded PostgreSQL instance and manages a local data directory.

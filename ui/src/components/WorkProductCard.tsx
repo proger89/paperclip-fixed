@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Link } from "@/lib/router";
 import type { IssueWorkProduct, WorkProductSummaryItem } from "@paperclipai/shared";
 import {
@@ -81,11 +82,13 @@ export function WorkProductCard({
   compact = false,
   showIssueLink = false,
   showProjectName = false,
+  actions,
 }: {
   product: WorkProductLike;
   compact?: boolean;
   showIssueLink?: boolean;
   showProjectName?: boolean;
+  actions?: ReactNode;
 }) {
   const Icon = TYPE_ICONS[product.type] ?? Package2;
   const openable = isOpenableUrl(product.url);
@@ -173,6 +176,12 @@ export function WorkProductCard({
           </a>
         ) : null}
       </div>
+
+      {actions ? (
+        <div className={cn("mt-3 border-t border-border/70 pt-3", compact && "mt-2 pt-2")}>
+          {actions}
+        </div>
+      ) : null}
     </div>
   );
 }
