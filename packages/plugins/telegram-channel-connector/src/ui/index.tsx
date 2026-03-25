@@ -12,10 +12,24 @@ import {
 import {
   ACTION_KEYS,
   DATA_KEYS,
+  DEFAULT_COMPANY_SETTINGS,
   DEFAULT_CONFIG,
   PAGE_ROUTE,
   PLUGIN_ID,
 } from "../constants.js";
+import type {
+  LegacyTelegramConfig,
+  TelegramCompanySettings,
+  TelegramLinkedChat,
+  TelegramOverview,
+  TelegramPublication,
+} from "../plugin-types.js";
+import {
+  companySettingsFromLegacyConfig,
+  hasLegacyTelegramConfig,
+  sanitizeLegacyTelegramConfig,
+  sanitizeTelegramCompanySettings,
+} from "../settings.js";
 
 type CompanySecret = {
   id: string;
@@ -23,58 +37,17 @@ type CompanySecret = {
   description: string | null;
 };
 
-type PluginConfigJson = {
-  botTokenSecretRef?: string;
-  defaultChatId?: string;
-  defaultPublicHandle?: string;
-  defaultParseMode?: "" | "HTML" | "MarkdownV2";
-  defaultDisableLinkPreview?: boolean;
-  defaultDisableNotification?: boolean;
-};
+type PluginConfigJson = LegacyTelegramConfig;
 
-type TelegramPublication = {
-  externalId: string;
-  issueId: string | null;
-  issueIdentifier: string | null;
-  issueTitle: string | null;
+type CompanyPluginSettingsRecord = {
+  id: string;
   companyId: string;
-  destinationLabel: string;
-  chatId: string;
-  chatTitle: string | null;
-  publicHandle: string | null;
-  messageId: number;
-  url: string | null;
-  approvalId: string | null;
-  parseMode: string | null;
-  sentAt: string;
-  summary: string;
-};
-
-type TelegramOverview = {
-  configured: boolean;
-  config?: {
-    defaultChatId?: string | null;
-    defaultPublicHandle?: string | null;
-    defaultParseMode?: string | null;
-    defaultDisableLinkPreview?: boolean;
-    defaultDisableNotification?: boolean;
-  };
-  lastValidation?: {
-    checkedAt: string;
-    connected: boolean;
-    bot?: {
-      username?: string | null;
-      firstName?: string | null;
-    } | null;
-    defaultChat?: {
-      id: string;
-      title?: string | null;
-      username?: string | null;
-      type?: string | null;
-    } | null;
-  } | null;
-  lastPublication?: TelegramPublication | null;
-  recentPublications: TelegramPublication[];
+  pluginId: string;
+  enabled: boolean;
+  settingsJson: TelegramCompanySettings;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 type IssueDocumentSummary = {
@@ -236,10 +209,28 @@ async function hostFetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   return (text.length > 0 ? JSON.parse(text) : null) as T;
 }
 
-function useSettingsConfig() {
+function cloneCompanySettings(settings?: TelegramCompanySettings | null): TelegramCompanySettings {
+  return {
+    publishing: {
+      botTokenSecretRef: settings?.publishing.botTokenSecretRef ?? DEFAULT_COMPANY_SETTINGS.publishing.botTokenSecretRef,
+      defaultChatId: settings?.publishing.defaultChatId ?? DEFAULT_COMPANY_SETTINGS.publishing.defaultChatId,
+      defaultPublicHandle: settings?.publishing.defaultPublicHandle ?? DEFAULT_COMPANY_SETTINGS.publishing.defaultPublicHandle,
+      defaultParseMode: settings?.publishing.defaultParseMode ?? DEFAULT_COMPANY_SETTINGS.publishing.defaultParseMode,
+      defaultDisableLinkPreview: settings?.publishing.defaultDisableLinkPreview ?? DEFAULT_COMPANY_SETTINGS.publishing.defaultDisableLinkPreview,
+      defaultDisableNotification: settings?.publishing.defaultDisableNotification ?? DEFAULT_COMPANY_SETTINGS.publishing.defaultDisableNotification,
+    },
+    taskBot: {
+      enabled: settings?.taskBot.enabled ?? DEFAULT_COMPANY_SETTINGS.taskBot.enabled,
+      pollingEnabled: settings?.taskBot.pollingEnabled ?? DEFAULT_COMPANY_SETTINGS.taskBot.pollingEnabled,
+      notificationMode: settings?.taskBot.notificationMode ?? DEFAULT_COMPANY_SETTINGS.taskBot.notificationMode,
+      claimCodeTtlMinutes: settings?.taskBot.claimCodeTtlMinutes ?? DEFAULT_COMPANY_SETTINGS.taskBot.claimCodeTtlMinutes,
+    },
+  };
+}
+
+function useLegacyConfig() {
   const [configJson, setConfigJson] = useState<PluginConfigJson>({ ...DEFAULT_CONFIG });
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -248,7 +239,7 @@ function useSettingsConfig() {
     hostFetchJson<{ configJson?: PluginConfigJson | null }>(`/api/plugins/${PLUGIN_ID}/config`)
       .then((result) => {
         if (cancelled) return;
-        setConfigJson({ ...DEFAULT_CONFIG, ...(result?.configJson ?? {}) });
+        setConfigJson(sanitizeLegacyTelegramConfig(result?.configJson ?? DEFAULT_CONFIG));
         setError(null);
       })
       .catch((nextError) => {
@@ -263,14 +254,59 @@ function useSettingsConfig() {
     };
   }, []);
 
-  async function save(nextConfig: PluginConfigJson) {
+  return { configJson, loading, error };
+}
+
+function useCompanySettingsConfig(companyId: string | null | undefined) {
+  const [settingsJson, setSettingsJson] = useState<TelegramCompanySettings>(cloneCompanySettings());
+  const [enabled, setEnabled] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!companyId) {
+      setSettingsJson(cloneCompanySettings());
+      setEnabled(true);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setLoading(true);
+    hostFetchJson<CompanyPluginSettingsRecord | null>(`/api/companies/${companyId}/plugins/${PLUGIN_ID}/settings`)
+      .then((result) => {
+        if (cancelled) return;
+        setSettingsJson(cloneCompanySettings(result ? sanitizeTelegramCompanySettings(result.settingsJson) : null));
+        setEnabled(result?.enabled ?? true);
+        setError(null);
+      })
+      .catch((nextError) => {
+        if (cancelled) return;
+        setError(nextError instanceof Error ? nextError.message : String(nextError));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [companyId]);
+
+  async function save(nextSettings: TelegramCompanySettings, nextEnabled = enabled) {
+    if (!companyId) throw new Error("Select a company before saving Telegram settings");
     setSaving(true);
     try {
-      await hostFetchJson(`/api/plugins/${PLUGIN_ID}/config`, {
+      await hostFetchJson(`/api/companies/${companyId}/plugins/${PLUGIN_ID}/settings`, {
         method: "POST",
-        body: JSON.stringify({ configJson: nextConfig }),
+        body: JSON.stringify({
+          enabled: nextEnabled,
+          settingsJson: nextSettings,
+        }),
       });
-      setConfigJson(nextConfig);
+      setSettingsJson(cloneCompanySettings(nextSettings));
+      setEnabled(nextEnabled);
       setError(null);
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : String(nextError));
@@ -280,7 +316,7 @@ function useSettingsConfig() {
     }
   }
 
-  return { configJson, setConfigJson, loading, saving, error, save };
+  return { settingsJson, setSettingsJson, enabled, setEnabled, loading, saving, error, save };
 }
 
 function useCompanySecrets(companyId: string | null | undefined) {
@@ -498,27 +534,66 @@ function SettingsField({
 }
 
 export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
-  const { configJson, setConfigJson, loading, saving, error, save } = useSettingsConfig();
+  const {
+    settingsJson,
+    setSettingsJson,
+    enabled,
+    setEnabled,
+    loading,
+    saving,
+    error,
+    save,
+  } = useCompanySettingsConfig(context.companyId);
+  const legacyConfig = useLegacyConfig();
+  const overview = usePluginData<TelegramOverview>(DATA_KEYS.overview, context.companyId ? { companyId: context.companyId } : {});
   const { secrets, loading: secretsLoading, error: secretsError, createSecret } = useCompanySecrets(context.companyId);
   const [secretName, setSecretName] = useState("telegram-bot-token");
   const [secretValue, setSecretValue] = useState("");
   const [secretDescription, setSecretDescription] = useState("Telegram bot token");
   const [creatingSecret, setCreatingSecret] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
+  const [linkCode, setLinkCode] = useState<{ code: string; expiresAt: string; startCommand: string } | null>(null);
+  const [importingLegacy, setImportingLegacy] = useState(false);
   const pushToast = usePluginToast();
   const testConnection = usePluginAction(ACTION_KEYS.testConnection);
+  const generateLinkCode = usePluginAction(ACTION_KEYS.generateLinkCode);
+  const revokeLinkedChat = usePluginAction(ACTION_KEYS.revokeLinkedChat);
+  const legacyDetected = hasLegacyTelegramConfig(legacyConfig.configJson);
 
-  function setField<K extends keyof PluginConfigJson>(key: K, value: PluginConfigJson[K]) {
-    setConfigJson((current) => ({ ...current, [key]: value }));
+  function setPublishingField<K extends keyof TelegramCompanySettings["publishing"]>(
+    key: K,
+    value: TelegramCompanySettings["publishing"][K],
+  ) {
+    setSettingsJson((current) => ({
+      ...current,
+      publishing: {
+        ...current.publishing,
+        [key]: value,
+      },
+    }));
+  }
+
+  function setTaskBotField<K extends keyof TelegramCompanySettings["taskBot"]>(
+    key: K,
+    value: TelegramCompanySettings["taskBot"][K],
+  ) {
+    setSettingsJson((current) => ({
+      ...current,
+      taskBot: {
+        ...current.taskBot,
+        [key]: value,
+      },
+    }));
   }
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
-    await save(configJson);
+    await save(settingsJson, enabled);
     pushToast({
       title: "Telegram settings saved",
       tone: "success",
     });
+    overview.refresh();
   }
 
   async function onCreateSecret() {
@@ -530,7 +605,7 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
         value: secretValue.trim(),
         description: secretDescription.trim() || null,
       });
-      setField("botTokenSecretRef", created.id);
+      setPublishingField("botTokenSecretRef", created.id);
       setSecretValue("");
       pushToast({
         title: "Bot token secret created",
@@ -545,6 +620,29 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
       });
     } finally {
       setCreatingSecret(false);
+    }
+  }
+
+  async function onImportLegacy() {
+    if (!context.companyId) return;
+    setImportingLegacy(true);
+    try {
+      const nextSettings = companySettingsFromLegacyConfig(legacyConfig.configJson);
+      await save(nextSettings, enabled);
+      pushToast({
+        title: "Legacy Telegram config imported",
+        body: "Company-scoped Telegram settings now mirror the previous global connector config.",
+        tone: "success",
+      });
+      overview.refresh();
+    } catch (nextError) {
+      pushToast({
+        title: "Failed to import legacy config",
+        body: nextError instanceof Error ? nextError.message : String(nextError),
+        tone: "error",
+      });
+    } finally {
+      setImportingLegacy(false);
     }
   }
 
@@ -575,6 +673,48 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
         tone: "error",
       });
     }
+    overview.refresh();
+  }
+
+  async function onGenerateLinkCode() {
+    if (!context.companyId) return;
+    try {
+      const result = await generateLinkCode({
+        companyId: context.companyId,
+        boardUserId: context.userId,
+      }) as { code: string; expiresAt: string; startCommand: string };
+      setLinkCode(result);
+      pushToast({
+        title: "Telegram link code created",
+        body: `Use ${result.startCommand} in a private chat with the bot.`,
+        tone: "success",
+      });
+    } catch (nextError) {
+      pushToast({
+        title: "Failed to generate link code",
+        body: nextError instanceof Error ? nextError.message : String(nextError),
+        tone: "error",
+      });
+    }
+  }
+
+  async function onRevokeLinkedChat(chatId: string) {
+    if (!context.companyId) return;
+    try {
+      await revokeLinkedChat({ companyId: context.companyId, chatId });
+      pushToast({
+        title: "Telegram chat revoked",
+        body: `Chat ${chatId} will stop receiving task updates.`,
+        tone: "success",
+      });
+      overview.refresh();
+    } catch (nextError) {
+      pushToast({
+        title: "Failed to revoke Telegram chat",
+        body: nextError instanceof Error ? nextError.message : String(nextError),
+        tone: "error",
+      });
+    }
   }
 
   if (loading) {
@@ -587,26 +727,36 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
         <div style={{ ...layoutStack, gap: "10px" }}>
           <div style={sectionTitleStyle}>Telegram Connector</div>
           <div style={mutedTextStyle}>
-            Configure one bot token secret plus a default channel. This plugin keeps draft outputs, publish approvals, and final Telegram post links attached to the issue instead of hiding them in comments.
+            Configure company-scoped Telegram publishing and the Paperclip task bot. Publishing stays governed through approvals; task bot access is linked chat by chat with one-time codes.
           </div>
           <div style={rowStyle}>
             <a href={pluginPagePath(context.companyPrefix)} style={{ fontSize: "12px" }}>Open Telegram dashboard</a>
             {context.companyId ? <Pill label={context.companyId} /> : <Pill label="No company selected" tone="warn" />}
+            {enabled ? <Pill label="enabled" tone="success" /> : <Pill label="disabled" tone="warn" />}
+            {overview.data?.botHealth?.ok ? <Pill label="bot healthy" tone="success" /> : null}
           </div>
         </div>
       </div>
 
       <div style={{ display: "grid", gap: "16px", gridTemplateColumns: "minmax(0, 1.2fr) minmax(280px, 0.8fr)" }}>
         <div style={{ ...cardStyle, ...layoutStack }}>
-          <div style={sectionTitleStyle}>Settings</div>
+          <div style={sectionTitleStyle}>Publishing</div>
+          <label style={rowStyle}>
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={(event) => setEnabled(event.target.checked)}
+            />
+            <span style={{ fontSize: "12px" }}>Enable this Telegram connector for the selected company</span>
+          </label>
           <SettingsField
             label="Bot token secret"
             hint="Stored as a Paperclip company secret. The worker resolves it at publish time."
           >
             <select
               style={inputStyle}
-              value={configJson.botTokenSecretRef ?? ""}
-              onChange={(event) => setField("botTokenSecretRef", event.target.value)}
+              value={settingsJson.publishing.botTokenSecretRef}
+              onChange={(event) => setPublishingField("botTokenSecretRef", event.target.value)}
             >
               <option value="">Select a secret...</option>
               {secrets.map((secret) => (
@@ -623,8 +773,8 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
           >
             <input
               style={inputStyle}
-              value={configJson.defaultChatId ?? ""}
-              onChange={(event) => setField("defaultChatId", event.target.value)}
+              value={settingsJson.publishing.defaultChatId}
+              onChange={(event) => setPublishingField("defaultChatId", event.target.value)}
               placeholder="@my_channel"
             />
           </SettingsField>
@@ -635,8 +785,8 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
           >
             <input
               style={inputStyle}
-              value={configJson.defaultPublicHandle ?? ""}
-              onChange={(event) => setField("defaultPublicHandle", event.target.value)}
+              value={settingsJson.publishing.defaultPublicHandle}
+              onChange={(event) => setPublishingField("defaultPublicHandle", event.target.value)}
               placeholder="@my_channel"
             />
           </SettingsField>
@@ -647,8 +797,8 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
           >
             <select
               style={inputStyle}
-              value={configJson.defaultParseMode ?? ""}
-              onChange={(event) => setField("defaultParseMode", event.target.value as PluginConfigJson["defaultParseMode"])}
+              value={settingsJson.publishing.defaultParseMode}
+              onChange={(event) => setPublishingField("defaultParseMode", event.target.value as TelegramCompanySettings["publishing"]["defaultParseMode"])}
             >
               <option value="">Plain text</option>
               <option value="HTML">HTML</option>
@@ -659,22 +809,61 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
           <label style={rowStyle}>
             <input
               type="checkbox"
-              checked={configJson.defaultDisableLinkPreview === true}
-              onChange={(event) => setField("defaultDisableLinkPreview", event.target.checked)}
+              checked={settingsJson.publishing.defaultDisableLinkPreview === true}
+              onChange={(event) => setPublishingField("defaultDisableLinkPreview", event.target.checked)}
             />
             <span style={{ fontSize: "12px" }}>Disable link preview by default</span>
           </label>
           <label style={rowStyle}>
             <input
               type="checkbox"
-              checked={configJson.defaultDisableNotification === true}
-              onChange={(event) => setField("defaultDisableNotification", event.target.checked)}
+              checked={settingsJson.publishing.defaultDisableNotification === true}
+              onChange={(event) => setPublishingField("defaultDisableNotification", event.target.checked)}
             />
             <span style={{ fontSize: "12px" }}>Send posts silently by default</span>
           </label>
 
+          <div style={{ ...sectionTitleStyle, marginTop: "6px" }}>Task Bot</div>
+          <label style={rowStyle}>
+            <input
+              type="checkbox"
+              checked={settingsJson.taskBot.enabled === true}
+              onChange={(event) => setTaskBotField("enabled", event.target.checked)}
+            />
+            <span style={{ fontSize: "12px" }}>Enable Paperclip task bot over Telegram getUpdates polling</span>
+          </label>
+          <label style={rowStyle}>
+            <input
+              type="checkbox"
+              checked={settingsJson.taskBot.pollingEnabled !== false}
+              onChange={(event) => setTaskBotField("pollingEnabled", event.target.checked)}
+            />
+            <span style={{ fontSize: "12px" }}>Allow minute polling for inbound Telegram commands and replies</span>
+          </label>
+          <SettingsField label="Notification mode">
+            <select
+              style={inputStyle}
+              value={settingsJson.taskBot.notificationMode}
+              onChange={(event) => setTaskBotField("notificationMode", event.target.value as TelegramCompanySettings["taskBot"]["notificationMode"])}
+            >
+              <option value="fallback_all_linked">Fallback to all linked chats</option>
+              <option value="linked_only">Linked watchers only</option>
+            </select>
+          </SettingsField>
+          <SettingsField label="Link code TTL (minutes)">
+            <input
+              style={inputStyle}
+              type="number"
+              min={5}
+              max={1440}
+              value={settingsJson.taskBot.claimCodeTtlMinutes}
+              onChange={(event) => setTaskBotField("claimCodeTtlMinutes", Math.max(5, Math.min(1440, Number(event.target.value) || DEFAULT_COMPANY_SETTINGS.taskBot.claimCodeTtlMinutes)))}
+            />
+          </SettingsField>
+
           {error ? <div style={{ color: "var(--destructive, #c00)", fontSize: "12px" }}>{error}</div> : null}
           {testResult ? <div style={mutedTextStyle}>{testResult}</div> : null}
+          {legacyConfig.error ? <div style={{ color: "var(--destructive, #c00)", fontSize: "12px" }}>{legacyConfig.error}</div> : null}
 
           <div style={rowStyle}>
             <button type="submit" style={primaryButtonStyle} disabled={saving}>
@@ -688,6 +877,16 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
             >
               Test connection
             </button>
+            {legacyDetected ? (
+              <button
+                type="button"
+                style={buttonStyle}
+                disabled={importingLegacy || legacyConfig.loading}
+                onClick={() => void onImportLegacy()}
+              >
+                {importingLegacy ? "Importing..." : "Import legacy config"}
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -736,6 +935,91 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
           ) : null}
         </div>
       </div>
+
+      <div style={{ display: "grid", gap: "16px", gridTemplateColumns: "minmax(0, 1fr) minmax(280px, 0.9fr)" }}>
+        <div style={{ ...cardStyle, ...layoutStack }}>
+          <div style={sectionTitleStyle}>Task Bot Linking</div>
+          <div style={mutedTextStyle}>
+            Generate one-time link codes for private Telegram chats. Linked users can browse tasks, create new ones, and reply directly from Telegram.
+          </div>
+          <div style={rowStyle}>
+            <button
+              type="button"
+              style={buttonStyle}
+              disabled={!context.companyId || settingsJson.taskBot.enabled !== true}
+              onClick={() => void onGenerateLinkCode()}
+            >
+              Generate link code
+            </button>
+            <span style={mutedTextStyle}>TTL: {settingsJson.taskBot.claimCodeTtlMinutes} min</span>
+          </div>
+          {linkCode ? (
+            <div style={{ border: "1px solid var(--border)", borderRadius: "12px", padding: "12px", display: "grid", gap: "6px" }}>
+              <div style={{ fontSize: "12px", fontWeight: 600 }}>Latest link code</div>
+              <div style={{ fontFamily: "monospace", fontSize: "13px" }}>{linkCode.startCommand}</div>
+              <div style={mutedTextStyle}>Expires {formatTimestamp(linkCode.expiresAt)}</div>
+            </div>
+          ) : null}
+          {overview.data?.linkedChats?.length ? (
+            <div style={{ display: "grid", gap: "8px" }}>
+              <div style={{ fontSize: "12px", fontWeight: 600 }}>Linked chats</div>
+              {overview.data.linkedChats.map((chat) => (
+                <div key={`${chat.companyId}:${chat.chatId}`} style={{ border: "1px solid var(--border)", borderRadius: "10px", padding: "10px", display: "grid", gap: "8px" }}>
+                  <div style={{ ...rowStyle, justifyContent: "space-between" }}>
+                    <strong style={{ fontSize: "12px" }}>{chat.username ? `@${chat.username}` : chat.displayName}</strong>
+                    {chat.revokedAt ? <Pill label="revoked" tone="warn" /> : <Pill label="linked" tone="success" />}
+                  </div>
+                  <div style={mutedTextStyle}>
+                    chatId: {chat.chatId} | linked {formatTimestamp(chat.linkedAt)}
+                  </div>
+                  <div style={mutedTextStyle}>
+                    board user: {chat.boardUserId ?? "unscoped"} | telegram user: {chat.telegramUserId}
+                  </div>
+                  {!chat.revokedAt ? (
+                    <div style={rowStyle}>
+                      <button type="button" style={buttonStyle} onClick={() => void onRevokeLinkedChat(chat.chatId)}>
+                        Revoke
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={mutedTextStyle}>No Telegram chats linked yet.</div>
+          )}
+        </div>
+
+        <div style={{ ...cardStyle, ...layoutStack }}>
+          <div style={sectionTitleStyle}>Bot Health</div>
+          <div style={{ display: "grid", gap: "6px", fontSize: "12px" }}>
+            <div>Last poll: {formatTimestamp(overview.data?.botHealth?.checkedAt)}</div>
+            <div>Last update offset: {overview.data?.botHealth?.lastUpdateId ?? "none"}</div>
+            <div>Last activity cursor: {overview.data?.botHealth?.lastActivityCursor ?? "none"}</div>
+            <div>Last notification: {formatTimestamp(overview.data?.botHealth?.lastNotificationAt)}</div>
+            <div>Last approval notification: {formatTimestamp(overview.data?.botHealth?.lastApprovalNotificationAt)}</div>
+            <div>Last control-plane notification: {formatTimestamp(overview.data?.botHealth?.lastControlPlaneNotificationAt)}</div>
+            <div>Blocked tasks: {overview.data?.blockedTaskCount ?? 0}</div>
+            <div>Open tasks: {overview.data?.openTaskCount ?? 0}</div>
+            <div>Open approvals: {overview.data?.botHealth?.openApprovalCount ?? 0}</div>
+            <div>Revision approvals: {overview.data?.botHealth?.revisionApprovalCount ?? 0}</div>
+            <div>Pending join requests: {overview.data?.botHealth?.openJoinRequestCount ?? 0}</div>
+            <div>Open budget incidents: {overview.data?.botHealth?.openBudgetIncidentCount ?? 0}</div>
+          </div>
+          {overview.data?.botHealth?.error ? (
+            <div style={{ color: "var(--destructive, #c00)", fontSize: "12px" }}>
+              {overview.data.botHealth.error}
+            </div>
+          ) : (
+            <div style={mutedTextStyle}>Telegram bot health looks stable.</div>
+          )}
+          {legacyDetected ? (
+            <div style={mutedTextStyle}>
+              Legacy global Telegram config was detected. Import it once to move this company fully onto scoped settings.
+            </div>
+          ) : null}
+        </div>
+      </div>
     </form>
   );
 }
@@ -751,10 +1035,15 @@ export function TelegramDashboardWidget({ context }: PluginWidgetProps) {
         {overview.data?.configured ? <Pill label="configured" tone="success" /> : <Pill label="needs setup" tone="warn" />}
       </div>
       <div style={mutedTextStyle}>
-        Governed Telegram publishing with visible draft outputs, approvals, and final post links.
+        Governed Telegram publishing plus Telegram operator coverage for tasks, approvals, joins, and budgets.
       </div>
       <div style={{ display: "grid", gap: "4px", fontSize: "12px" }}>
         <div>Default channel: {overview.data?.config?.defaultChatId ?? "not configured"}</div>
+        <div>Linked chats: {overview.data?.linkedChats.filter((chat) => !chat.revokedAt).length ?? 0}</div>
+        <div>Blocked tasks: {overview.data?.blockedTaskCount ?? 0}</div>
+        <div>Board approvals: {overview.data?.actionableApprovalCount ?? 0}</div>
+        <div>Pending joins: {overview.data?.pendingJoinRequestCount ?? 0}</div>
+        <div>Open budget incidents: {overview.data?.openBudgetIncidentCount ?? 0}</div>
         <div>Recent publishes: {overview.data?.recentPublications.length ?? 0}</div>
         <div>Last publish: {formatTimestamp(overview.data?.lastPublication?.sentAt)}</div>
       </div>
@@ -828,9 +1117,27 @@ export function TelegramPage({ context }: PluginPageProps) {
           </div>
         </div>
         <div style={cardStyle}>
-          <div style={sectionTitleStyle}>Approvals</div>
+          <div style={sectionTitleStyle}>Task Bot</div>
           <div style={{ ...layoutStack, gap: "8px", marginTop: "10px" }}>
-            <div style={{ fontSize: "12px" }}>Pending / revision requested: {pendingApprovals.length}</div>
+            <div style={{ fontSize: "12px" }}>Enabled: {overview.data?.companySettings.taskBot.enabled ? "yes" : "no"}</div>
+            <div style={{ fontSize: "12px" }}>Approvals inbox enabled: {overview.data?.approvalsInboxEnabled ? "yes" : "no"}</div>
+            <div style={{ fontSize: "12px" }}>Linked chats: {overview.data?.linkedChats.filter((chat) => !chat.revokedAt).length ?? 0}</div>
+            <div style={{ fontSize: "12px" }}>Blocked tasks: {overview.data?.blockedTaskCount ?? 0}</div>
+            <div style={{ fontSize: "12px" }}>Open tasks: {overview.data?.openTaskCount ?? 0}</div>
+            <div style={{ fontSize: "12px" }}>Tasks in review: {overview.data?.reviewTaskCount ?? 0}</div>
+            <div style={{ fontSize: "12px" }}>Last poll: {formatTimestamp(overview.data?.botHealth?.checkedAt)}</div>
+          </div>
+        </div>
+        <div style={cardStyle}>
+          <div style={sectionTitleStyle}>Approvals Inbox</div>
+          <div style={{ ...layoutStack, gap: "8px", marginTop: "10px" }}>
+            <div style={{ fontSize: "12px" }}>Board queue: {overview.data?.actionableApprovalCount ?? 0}</div>
+            <div style={{ fontSize: "12px" }}>My pending approvals: {overview.data?.myPendingApprovalCount ?? 0}</div>
+            <div style={{ fontSize: "12px" }}>My revision requests: {overview.data?.myRevisionApprovalCount ?? 0}</div>
+            <div style={{ fontSize: "12px" }}>Last approval notification: {formatTimestamp(overview.data?.botHealth?.lastApprovalNotificationAt)}</div>
+            <div style={{ fontSize: "12px" }}>Pending join requests: {overview.data?.pendingJoinRequestCount ?? 0}</div>
+            <div style={{ fontSize: "12px" }}>Open budget incidents: {overview.data?.openBudgetIncidentCount ?? 0}</div>
+            <div style={{ fontSize: "12px" }}>Last control-plane notification: {formatTimestamp(overview.data?.botHealth?.lastControlPlaneNotificationAt)}</div>
             <div style={{ fontSize: "12px" }}>Total Telegram publish approvals: {telegramApprovals.length}</div>
             {pendingApprovals[0] ? (
               <a href={`/approvals/${pendingApprovals[0].id}`} style={{ fontSize: "12px" }}>

@@ -21,8 +21,15 @@ import type {
   IssueComment,
   IssueDocument,
   IssueDocumentSummary,
+  Approval,
+  ApprovalComment,
+  JoinRequest,
+  BudgetIncident,
+  BudgetOverview,
+  BudgetIncidentResolutionInput,
   Agent,
   Goal,
+  ActivityEvent,
 } from "@paperclipai/shared";
 
 // ---------------------------------------------------------------------------
@@ -65,8 +72,15 @@ export type {
   IssueComment,
   IssueDocument,
   IssueDocumentSummary,
+  Approval,
+  ApprovalComment,
+  JoinRequest,
+  BudgetIncident,
+  BudgetOverview,
+  BudgetIncidentResolutionInput,
   Agent,
   Goal,
+  ActivityEvent,
 } from "@paperclipai/shared";
 
 // ---------------------------------------------------------------------------
@@ -323,6 +337,35 @@ export interface PluginConfigClient {
 }
 
 /**
+ * Company-scoped settings row for the current plugin.
+ */
+export interface PluginCompanySettingsRecord {
+  id: string;
+  companyId: string;
+  pluginId: string;
+  enabled: boolean;
+  settingsJson: Record<string, unknown>;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * `ctx.companySettings` — read company-scoped settings for the current plugin.
+ */
+export interface PluginCompanySettingsClient {
+  /**
+   * Get this plugin's company-scoped settings for one company.
+   */
+  get(companyId: string): Promise<PluginCompanySettingsRecord | null>;
+
+  /**
+   * List company-scoped settings rows for this plugin.
+   */
+  list(input?: { enabledOnly?: boolean }): Promise<PluginCompanySettingsRecord[]>;
+}
+
+/**
  * `ctx.events` — subscribe to and emit Paperclip domain events.
  *
  * Requires `events.subscribe` capability for `on()`.
@@ -474,6 +517,15 @@ export interface PluginActivityLogEntry {
   metadata?: Record<string, unknown>;
 }
 
+export interface PluginActivityListInput {
+  companyId: string;
+  sinceCreatedAt?: string;
+  entityType?: string;
+  entityId?: string;
+  actions?: string[];
+  limit?: number;
+}
+
 /**
  * `ctx.activity` — write plugin-originated activity log entries.
  *
@@ -491,6 +543,13 @@ export interface PluginActivityClient {
    * @param entry - The activity log entry to write
    */
   log(entry: PluginActivityLogEntry): Promise<void>;
+
+  /**
+   * Read activity log entries for reconciliation-style integrations.
+   *
+   * Requires `activity.read`.
+   */
+  list(input: PluginActivityListInput): Promise<ActivityEvent[]>;
 }
 
 /**
@@ -862,7 +921,11 @@ export interface PluginIssuesClient {
     companyId: string;
     projectId?: string;
     assigneeAgentId?: string;
+    assigneeUserId?: string;
+    touchedByUserId?: string;
+    unreadForUserId?: string;
     status?: Issue["status"];
+    q?: string;
     limit?: number;
     offset?: number;
   }): Promise<Issue[]>;
@@ -874,14 +937,16 @@ export interface PluginIssuesClient {
     parentId?: string;
     title: string;
     description?: string;
+    status?: Issue["status"];
     priority?: Issue["priority"];
     assigneeAgentId?: string;
+    assigneeUserId?: string;
   }): Promise<Issue>;
   update(
     issueId: string,
     patch: Partial<Pick<
       Issue,
-      "title" | "description" | "status" | "priority" | "assigneeAgentId"
+      "title" | "description" | "status" | "priority" | "assigneeAgentId" | "assigneeUserId"
     >>,
     companyId: string,
   ): Promise<Issue>;
@@ -889,6 +954,56 @@ export interface PluginIssuesClient {
   createComment(issueId: string, body: string, companyId: string): Promise<IssueComment>;
   /** Read and write issue documents. Requires `issue.documents.read` / `issue.documents.write`. */
   documents: PluginIssueDocumentsClient;
+}
+
+/**
+ * `ctx.approvals` - read and resolve approval queue items.
+ *
+ * Requires:
+ * - `approvals.read` for list/get/listIssues
+ * - `approval.comments.read` for `listComments`
+ * - `approval.comments.create` for `addComment`
+ * - `approvals.resolve` for `approve`, `reject`, `requestRevision`, `resubmit`
+ */
+export interface PluginApprovalsClient {
+  list(companyId: string, input?: { status?: Approval["status"] }): Promise<Approval[]>;
+  get(approvalId: string): Promise<Approval | null>;
+  listComments(approvalId: string): Promise<ApprovalComment[]>;
+  addComment(approvalId: string, input: { body: string }): Promise<ApprovalComment>;
+  approve(approvalId: string, input: { decisionNote?: string | null; decidedByUserId: string }): Promise<Approval>;
+  reject(approvalId: string, input: { decisionNote?: string | null; decidedByUserId: string }): Promise<Approval>;
+  requestRevision(approvalId: string, input: { decisionNote?: string | null; decidedByUserId: string }): Promise<Approval>;
+  resubmit(approvalId: string, input?: { payload?: Record<string, unknown> }): Promise<Approval>;
+  listIssues(approvalId: string): Promise<Issue[]>;
+}
+
+/**
+ * `ctx.joinRequests` - review and resolve company join requests.
+ *
+ * Requires:
+ * - `joins.read` for `list`
+ * - `joins.resolve` for `approve` and `reject`
+ */
+export interface PluginJoinRequestsClient {
+  list(companyId: string, input?: { status?: JoinRequest["status"] }): Promise<JoinRequest[]>;
+  approve(companyId: string, requestId: string, input: { decidedByUserId: string }): Promise<JoinRequest>;
+  reject(companyId: string, requestId: string, input: { decidedByUserId: string }): Promise<JoinRequest>;
+}
+
+/**
+ * `ctx.budgets` - inspect budget state and resolve budget incidents.
+ *
+ * Requires:
+ * - `budgets.read` for `overview`
+ * - `budgets.resolve` for `resolveIncident`
+ */
+export interface PluginBudgetsClient {
+  overview(companyId: string): Promise<BudgetOverview>;
+  resolveIncident(
+    companyId: string,
+    incidentId: string,
+    input: BudgetIncidentResolutionInput & { decidedByUserId: string },
+  ): Promise<BudgetIncident>;
 }
 
 /**
@@ -1101,6 +1216,9 @@ export interface PluginContext {
   /** Read resolved operator configuration. */
   config: PluginConfigClient;
 
+  /** Read company-scoped settings for this plugin. */
+  companySettings: PluginCompanySettingsClient;
+
   /** Subscribe to and emit domain events. Requires `events.subscribe` / `events.emit`. */
   events: PluginEventsClient;
 
@@ -1133,6 +1251,15 @@ export interface PluginContext {
 
   /** Read and write issues, comments, and documents. Requires issue capabilities. */
   issues: PluginIssuesClient;
+
+  /** Read and resolve approvals, plus approval comments. Requires approval capabilities. */
+  approvals: PluginApprovalsClient;
+
+  /** Read and resolve join requests. Requires join capabilities. */
+  joinRequests: PluginJoinRequestsClient;
+
+  /** Read and resolve budget incidents. Requires budget capabilities. */
+  budgets: PluginBudgetsClient;
 
   /** Read and manage agents. Requires `agents.read` for reads; `agents.pause` / `agents.resume` / `agents.invoke` for write ops. */
   agents: PluginAgentsClient;

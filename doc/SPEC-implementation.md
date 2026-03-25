@@ -76,7 +76,7 @@ V1 implementation extends this baseline into a company-centric, governance-aware
 
 ## 5.2 Out of Scope (V1)
 
-- Plugin framework and third-party extension SDK
+- Public plugin marketplace and fully open third-party plugin distribution
 - Revenue/expense accounting beyond model/token costs
 - Knowledge base subsystem
 - Public marketplace (ClipHub)
@@ -697,7 +697,7 @@ Before first strategy approval, CEO may only draft tasks, not transition them to
 4. Only after approval may a publishing agent execute the outbound publish and write the resulting URL or external artifact back as an `issue_work_product`.
 
 V1 treats `publish_content` as the canonical governance gate for Telegram-style editorial workflows.
-The bundled Telegram channel connector plugin is the reference implementation of that flow: company settings and dashboard visibility at the connector level, issue-scoped draft and approval handoff in the work loop, and final Telegram publication captured back onto the issue as a first-class work product.
+The bundled Telegram channel connector plugin is the reference implementation of that flow: company-scoped settings and dashboard visibility at the connector level, issue-scoped draft and approval handoff in the work loop, final Telegram publication captured back onto the issue as a first-class work product, and an optional Telegram task bot that polls `getUpdates` every minute for private-chat task plus approval control without requiring webhooks.
 
 Current enforcement boundary:
 

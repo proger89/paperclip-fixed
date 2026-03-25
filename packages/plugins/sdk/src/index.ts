@@ -159,6 +159,8 @@ export type {
 export type {
   PluginContext,
   PluginConfigClient,
+  PluginCompanySettingsClient,
+  PluginCompanySettingsRecord,
   PluginEventsClient,
   PluginJobsClient,
   PluginLaunchersClient,
@@ -166,11 +168,15 @@ export type {
   PluginSecretsClient,
   PluginActivityClient,
   PluginActivityLogEntry,
+  PluginActivityListInput,
   PluginStateClient,
   PluginEntitiesClient,
   PluginProjectsClient,
   PluginCompaniesClient,
   PluginIssuesClient,
+  PluginApprovalsClient,
+  PluginJoinRequestsClient,
+  PluginBudgetsClient,
   PluginAgentsClient,
   PluginAgentSessionsClient,
   AgentSession,
@@ -204,6 +210,12 @@ export type {
   IssueComment,
   Agent,
   Goal,
+  Approval,
+  ApprovalComment,
+  JoinRequest,
+  BudgetIncident,
+  BudgetOverview,
+  BudgetIncidentResolutionInput,
 } from "./types.js";
 
 // Manifest and constant types re-exported from @paperclipai/shared

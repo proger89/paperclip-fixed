@@ -27,8 +27,15 @@ import type {
   IssueComment,
   IssueDocument,
   IssueDocumentSummary,
+  Approval,
+  ApprovalComment,
+  JoinRequest,
+  BudgetIncident,
+  BudgetOverview,
+  BudgetIncidentResolutionInput,
   Agent,
   Goal,
+  ActivityEvent,
 } from "@paperclipai/shared";
 export type { PluginLauncherRenderContextSnapshot } from "@paperclipai/shared";
 
@@ -418,6 +425,34 @@ export interface WorkerToHostMethods {
   // Config
   "config.get": [params: Record<string, never>, result: Record<string, unknown>];
 
+  // Company-scoped plugin settings
+  "companySettings.get": [
+    params: { companyId: string },
+    result: {
+      id: string;
+      companyId: string;
+      pluginId: string;
+      enabled: boolean;
+      settingsJson: Record<string, unknown>;
+      lastError: string | null;
+      createdAt: string;
+      updatedAt: string;
+    } | null,
+  ];
+  "companySettings.list": [
+    params: { enabledOnly?: boolean },
+    result: Array<{
+      id: string;
+      companyId: string;
+      pluginId: string;
+      enabled: boolean;
+      settingsJson: Record<string, unknown>;
+      lastError: string | null;
+      createdAt: string;
+      updatedAt: string;
+    }>,
+  ];
+
   // State
   "state.get": [
     params: { scopeKind: string; scopeId?: string; namespace?: string; stateKey: string },
@@ -512,6 +547,17 @@ export interface WorkerToHostMethods {
     },
     result: void,
   ];
+  "activity.list": [
+    params: {
+      companyId: string;
+      sinceCreatedAt?: string;
+      entityType?: string;
+      entityId?: string;
+      actions?: string[];
+      limit?: number;
+    },
+    result: ActivityEvent[],
+  ];
 
   // Metrics
   "metrics.write": [
@@ -563,7 +609,11 @@ export interface WorkerToHostMethods {
       companyId: string;
       projectId?: string;
       assigneeAgentId?: string;
+      assigneeUserId?: string;
+      touchedByUserId?: string;
+      unreadForUserId?: string;
       status?: string;
+      q?: string;
       limit?: number;
       offset?: number;
     },
@@ -581,8 +631,10 @@ export interface WorkerToHostMethods {
       parentId?: string;
       title: string;
       description?: string;
+      status?: string;
       priority?: string;
       assigneeAgentId?: string;
+      assigneeUserId?: string;
     },
     result: Issue,
   ];
@@ -601,6 +653,72 @@ export interface WorkerToHostMethods {
   "issues.createComment": [
     params: { issueId: string; body: string; companyId: string },
     result: IssueComment,
+  ];
+
+  // Approvals
+  "approvals.list": [
+    params: { companyId: string; status?: string },
+    result: Approval[],
+  ];
+  "approvals.get": [
+    params: { approvalId: string },
+    result: Approval | null,
+  ];
+  "approvals.listComments": [
+    params: { approvalId: string },
+    result: ApprovalComment[],
+  ];
+  "approvals.addComment": [
+    params: { approvalId: string; body: string },
+    result: ApprovalComment,
+  ];
+  "approvals.approve": [
+    params: { approvalId: string; decisionNote?: string | null; decidedByUserId: string },
+    result: Approval,
+  ];
+  "approvals.reject": [
+    params: { approvalId: string; decisionNote?: string | null; decidedByUserId: string },
+    result: Approval,
+  ];
+  "approvals.requestRevision": [
+    params: { approvalId: string; decisionNote?: string | null; decidedByUserId: string },
+    result: Approval,
+  ];
+  "approvals.resubmit": [
+    params: { approvalId: string; payload?: Record<string, unknown> },
+    result: Approval,
+  ];
+  "approvals.listIssues": [
+    params: { approvalId: string },
+    result: Issue[],
+  ];
+
+  // Join Requests
+  "joinRequests.list": [
+    params: { companyId: string; status?: string },
+    result: JoinRequest[],
+  ];
+  "joinRequests.approve": [
+    params: { companyId: string; requestId: string; decidedByUserId: string },
+    result: JoinRequest,
+  ];
+  "joinRequests.reject": [
+    params: { companyId: string; requestId: string; decidedByUserId: string },
+    result: JoinRequest,
+  ];
+
+  // Budgets
+  "budgets.overview": [
+    params: { companyId: string },
+    result: BudgetOverview,
+  ];
+  "budgets.resolveIncident": [
+    params: {
+      companyId: string;
+      incidentId: string;
+      input: BudgetIncidentResolutionInput & { decidedByUserId: string };
+    },
+    result: BudgetIncident,
   ];
 
   // Issue Documents

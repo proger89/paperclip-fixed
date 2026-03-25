@@ -39,6 +39,7 @@ import { logActivity } from "../services/activity-log.js";
 import { publishGlobalLiveEvent } from "../services/live-events.js";
 import { installManagedPlugin } from "../services/plugin-installs.js";
 import { listBundledPluginExamples } from "../services/plugin-example-catalog.js";
+import { pluginCompanySettingsService } from "../services/plugin-company-settings.js";
 import type { PluginJobScheduler } from "../services/plugin-job-scheduler.js";
 import type { PluginJobStore } from "../services/plugin-job-store.js";
 import type { PluginWorkerManager } from "../services/plugin-worker-manager.js";
@@ -261,6 +262,7 @@ export function pluginRoutes(
 ) {
   const router = Router();
   const registry = pluginRegistryService(db);
+  const companySettings = pluginCompanySettingsService(db);
   const lifecycle = pluginLifecycleManager(db, {
     loader,
     workerManager: bridgeDeps?.workerManager ?? webhookDeps?.workerManager,
@@ -1525,6 +1527,104 @@ export function pluginRoutes(
       }
 
       res.json(result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(400).json({ error: message });
+    }
+  });
+
+  /**
+   * GET /api/companies/:companyId/plugins/:pluginId/settings
+   *
+   * Retrieve company-scoped settings for a plugin.
+   */
+  router.get("/companies/:companyId/plugins/:pluginId/settings", async (req, res) => {
+    assertBoard(req);
+    const companyId = req.params.companyId as string;
+    const { pluginId } = req.params;
+    assertCompanyAccess(req, companyId);
+
+    const plugin = await resolvePlugin(registry, pluginId);
+    if (!plugin) {
+      res.status(404).json({ error: "Plugin not found" });
+      return;
+    }
+
+    const row = await companySettings.get(plugin.id, companyId);
+    if (!row) {
+      res.json(null);
+      return;
+    }
+
+    res.json({
+      ...row,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    });
+  });
+
+  /**
+   * POST /api/companies/:companyId/plugins/:pluginId/settings
+   *
+   * Save company-scoped settings for a plugin.
+   */
+  router.post("/companies/:companyId/plugins/:pluginId/settings", async (req, res) => {
+    assertBoard(req);
+    const companyId = req.params.companyId as string;
+    const { pluginId } = req.params;
+    assertCompanyAccess(req, companyId);
+
+    const plugin = await resolvePlugin(registry, pluginId);
+    if (!plugin) {
+      res.status(404).json({ error: "Plugin not found" });
+      return;
+    }
+
+    const body = req.body as {
+      enabled?: boolean;
+      settingsJson?: Record<string, unknown>;
+      lastError?: string | null;
+    } | undefined;
+
+    if (!body?.settingsJson || typeof body.settingsJson !== "object" || Array.isArray(body.settingsJson)) {
+      res.status(400).json({ error: '"settingsJson" is required and must be an object' });
+      return;
+    }
+
+    try {
+      const result = await companySettings.upsert({
+        pluginId: plugin.id,
+        companyId,
+        enabled: typeof body.enabled === "boolean" ? body.enabled : true,
+        settingsJson: body.settingsJson,
+        lastError: body.lastError,
+      });
+
+      const actor = getActorInfo(req);
+      await logActivity(db, {
+        companyId,
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        agentId: actor.agentId,
+        runId: actor.runId,
+        action: "plugin.company_settings.updated",
+        entityType: "plugin",
+        entityId: plugin.id,
+        details: {
+          pluginId: plugin.id,
+          pluginKey: plugin.pluginKey,
+          enabled: result?.enabled ?? true,
+          settingsKeyCount: Object.keys(body.settingsJson).length,
+        },
+      });
+
+      res.json(result
+        ? {
+            ...result,
+            createdAt: result.createdAt.toISOString(),
+            updatedAt: result.updatedAt.toISOString(),
+          }
+        : null);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       res.status(400).json({ error: message });

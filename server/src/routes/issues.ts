@@ -38,6 +38,7 @@ import { shouldWakeAssigneeOnCheckout } from "./issues-checkout-wakeup.js";
 import { isAllowedContentType, MAX_ATTACHMENT_BYTES } from "../attachment-types.js";
 import { queueIssueAssignmentWakeup } from "../services/issue-assignment-wakeup.js";
 import { buildPrimaryWorkProducts } from "../services/work-products.js";
+import { assertIssueCanCompleteWithReviewGate } from "../services/issue-review-gate.js";
 
 const MAX_ISSUE_COMMENT_LIMIT = 500;
 
@@ -230,32 +231,7 @@ export function issueRoutes(db: Db, storage: StorageService) {
       reviewPolicyKey?: string | null;
     },
   ) {
-    const nextStatus = patch.status ?? null;
-    const nextReviewPolicyKey =
-      patch.reviewPolicyKey !== undefined ? patch.reviewPolicyKey : (existing.reviewPolicyKey ?? null);
-    if (nextStatus !== "done" || !nextReviewPolicyKey) return;
-
-    const nextReviewerAgentId =
-      patch.reviewerAgentId !== undefined ? patch.reviewerAgentId : (existing.reviewerAgentId ?? null);
-    const nextReviewerUserId =
-      patch.reviewerUserId !== undefined ? patch.reviewerUserId : (existing.reviewerUserId ?? null);
-    if (!nextReviewerAgentId && !nextReviewerUserId) {
-      throw unprocessable("This issue requires a reviewer before it can be marked done");
-    }
-
-    const workProducts = (await workProductsSvc.listForIssue(existing.id)) ?? [];
-    const reviewableTypes = reviewableWorkProductTypesForPolicy(nextReviewPolicyKey);
-    const reviewableProducts = workProducts.filter((product) => reviewableTypes.includes(product.type));
-    if (reviewableProducts.length === 0) {
-      throw unprocessable("This issue requires a reviewable work product before it can be marked done");
-    }
-
-    const hasApprovedReview = reviewableProducts.some((product) =>
-      product.reviewState === "approved" || product.status === "approved",
-    );
-    if (!hasApprovedReview) {
-      throw unprocessable("This issue cannot be marked done until review is approved");
-    }
+    await assertIssueCanCompleteWithReviewGate(workProductsSvc, existing, patch);
   }
 
   async function assertCanRecordGovernedPublication(

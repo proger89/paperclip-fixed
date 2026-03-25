@@ -1,18 +1,26 @@
-import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { activityLog, heartbeatRuns, issues } from "@paperclipai/db";
+import type { ActivityEvent } from "@paperclipai/shared";
 
 export interface ActivityFilters {
   companyId: string;
   agentId?: string;
   entityType?: string;
   entityId?: string;
+  sinceCreatedAt?: Date;
+  actions?: string[];
+  limit?: number;
+}
+
+function normalizeActorType(value: string): ActivityEvent["actorType"] {
+  return value === "user" || value === "agent" ? value : "system";
 }
 
 export function activityService(db: Db) {
   const issueIdAsText = sql<string>`${issues.id}::text`;
   return {
-    list: (filters: ActivityFilters) => {
+    list: async (filters: ActivityFilters): Promise<ActivityEvent[]> => {
       const conditions = [eq(activityLog.companyId, filters.companyId)];
 
       if (filters.agentId) {
@@ -24,8 +32,14 @@ export function activityService(db: Db) {
       if (filters.entityId) {
         conditions.push(eq(activityLog.entityId, filters.entityId));
       }
+      if (filters.sinceCreatedAt) {
+        conditions.push(gt(activityLog.createdAt, filters.sinceCreatedAt));
+      }
+      if (filters.actions && filters.actions.length > 0) {
+        conditions.push(inArray(activityLog.action, filters.actions));
+      }
 
-      return db
+      const query = db
         .select({ activityLog })
         .from(activityLog)
         .leftJoin(
@@ -44,8 +58,18 @@ export function activityService(db: Db) {
             ),
           ),
         )
-        .orderBy(desc(activityLog.createdAt))
-        .then((rows) => rows.map((r) => r.activityLog));
+        .orderBy(desc(activityLog.createdAt));
+
+      const rows =
+        filters.limit && filters.limit > 0
+          ? await query.limit(filters.limit)
+          : await query;
+
+      return rows.map((row) => ({
+        ...row.activityLog,
+        actorType: normalizeActorType(row.activityLog.actorType),
+        details: row.activityLog.details ?? null,
+      }));
     },
 
     forIssue: (issueId: string) =>

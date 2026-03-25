@@ -1,5 +1,10 @@
 import type { Db } from "@paperclipai/db";
-import { pluginLogs, agentTaskSessions as agentTaskSessionsTable } from "@paperclipai/db";
+import {
+  pluginLogs,
+  agentTaskSessions as agentTaskSessionsTable,
+  joinRequests as joinRequestsTable,
+  invites,
+} from "@paperclipai/db";
 import { eq, and, like, desc } from "drizzle-orm";
 import type {
   HostServices,
@@ -7,16 +12,25 @@ import type {
   Agent,
   Project,
   Issue,
+  Approval,
+  JoinRequest,
+  BudgetOverview,
+  BudgetIncident,
   Goal,
   PluginWorkspace,
   IssueComment,
+  ApprovalComment,
 } from "@paperclipai/plugin-sdk";
+import { PERMISSION_KEYS, type BudgetIncidentResolutionInput } from "@paperclipai/shared";
 import { companyService } from "./companies.js";
-import { agentService } from "./agents.js";
+import { accessService } from "./access.js";
+import { agentService, deduplicateAgentName } from "./agents.js";
+import { budgetService } from "./budgets.js";
 import { projectService } from "./projects.js";
 import { issueService } from "./issues.js";
 import { goalService } from "./goals.js";
 import { documentService } from "./documents.js";
+import { workProductService } from "./work-products.js";
 import { heartbeatService } from "./heartbeat.js";
 import { subscribeCompanyLiveEvents } from "./live-events.js";
 import { randomUUID } from "node:crypto";
@@ -24,16 +38,21 @@ import { activityService } from "./activity.js";
 import { costService } from "./costs.js";
 import { assetService } from "./assets.js";
 import { pluginRegistryService } from "./plugin-registry.js";
+import { pluginCompanySettingsService } from "./plugin-company-settings.js";
+import { approvalService } from "./approvals.js";
+import { issueApprovalService } from "./issue-approvals.js";
 import { pluginStateStore } from "./plugin-state-store.js";
 import { createPluginSecretsHandler } from "./plugin-secrets-handler.js";
 import { logActivity } from "./activity-log.js";
 import type { PluginEventBus } from "./plugin-event-bus.js";
+import { notifyHireApproved } from "./hire-hook.js";
 import { lookup as dnsLookup } from "node:dns/promises";
 import type { IncomingMessage, RequestOptions as HttpRequestOptions } from "node:http";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 import { logger } from "../middleware/logger.js";
+import { assertIssueCanCompleteWithReviewGate } from "./issue-review-gate.js";
 
 // ---------------------------------------------------------------------------
 // SSRF protection for plugin HTTP fetch
@@ -410,6 +429,52 @@ export async function flushPluginLogBuffer(): Promise<void> {
   }
 }
 
+function sanitizeJoinRequestRow(row: typeof joinRequestsTable.$inferSelect): JoinRequest {
+  const { claimSecretHash: _claimSecretHash, ...safe } = row;
+  return safe as unknown as JoinRequest;
+}
+
+function grantsFromDefaults(
+  defaultsPayload: Record<string, unknown> | null | undefined,
+  key: "human" | "agent",
+): Array<{
+  permissionKey: (typeof PERMISSION_KEYS)[number];
+  scope: Record<string, unknown> | null;
+}> {
+  if (!defaultsPayload || typeof defaultsPayload !== "object") return [];
+  const scoped = defaultsPayload[key];
+  if (!scoped || typeof scoped !== "object") return [];
+  const grants = (scoped as Record<string, unknown>).grants;
+  if (!Array.isArray(grants)) return [];
+  const validPermissionKeys = new Set<string>(PERMISSION_KEYS);
+  const result: Array<{
+    permissionKey: (typeof PERMISSION_KEYS)[number];
+    scope: Record<string, unknown> | null;
+  }> = [];
+  for (const item of grants) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    if (typeof record.permissionKey !== "string" || !validPermissionKeys.has(record.permissionKey)) continue;
+    result.push({
+      permissionKey: record.permissionKey as (typeof PERMISSION_KEYS)[number],
+      scope:
+        record.scope && typeof record.scope === "object" && !Array.isArray(record.scope)
+          ? (record.scope as Record<string, unknown>)
+          : null,
+    });
+  }
+  return result;
+}
+
+function resolveJoinRequestAgentManagerId(
+  candidates: Array<Pick<Agent, "id" | "role" | "reportsTo">>,
+): string | null {
+  const ceoCandidates = candidates.filter((candidate) => candidate.role === "ceo");
+  if (ceoCandidates.length === 0) return null;
+  const rootCeo = ceoCandidates.find((candidate) => candidate.reportsTo === null);
+  return (rootCeo ?? ceoCandidates[0] ?? null)?.id ?? null;
+}
+
 /** Interval handle for the periodic log flush. */
 const _logFlushInterval = setInterval(() => {
   flushPluginLogBuffer().catch((err) => {
@@ -444,16 +509,22 @@ export function buildHostServices(
   notifyWorker?: (method: string, params: unknown) => void,
 ): HostServices & { dispose(): void } {
   const registry = pluginRegistryService(db);
+  const companySettings = pluginCompanySettingsService(db);
   const stateStore = pluginStateStore(db);
   const secretsHandler = createPluginSecretsHandler({ db, pluginId });
   const companies = companyService(db);
+  const access = accessService(db);
   const agents = agentService(db);
+  const budgets = budgetService(db);
   const heartbeat = heartbeatService(db);
   const projects = projectService(db);
   const issues = issueService(db);
+  const approvals = approvalService(db);
+  const issueApprovals = issueApprovalService(db);
   const documents = documentService(db);
   const goals = goalService(db);
   const activity = activityService(db);
+  const workProducts = workProductService(db);
   const costs = costService(db);
   const assets = assetService(db);
   const scopedBus = eventBus.forPlugin(pluginKey);
@@ -515,6 +586,31 @@ export function buildHostServices(
       async get() {
         const configRow = await registry.getConfig(pluginId);
         return configRow?.configJson ?? {};
+      },
+    },
+
+    companySettings: {
+      async get(params) {
+        const companyId = ensureCompanyId(params.companyId);
+        await ensurePluginAvailableForCompany(companyId);
+        const row = await companySettings.get(pluginId, companyId);
+        return row
+          ? {
+              ...row,
+              createdAt: row.createdAt.toISOString(),
+              updatedAt: row.updatedAt.toISOString(),
+            }
+          : null;
+      },
+      async list(params) {
+        const rows = await companySettings.listByPlugin(pluginId, {
+          enabledOnly: params.enabledOnly,
+        });
+        return rows.map((row) => ({
+          ...row,
+          createdAt: row.createdAt.toISOString(),
+          updatedAt: row.updatedAt.toISOString(),
+        }));
       },
     },
 
@@ -608,6 +704,18 @@ export function buildHostServices(
           entityType: params.entityType ?? "plugin",
           entityId: params.entityId ?? pluginId,
           details: params.metadata,
+        });
+      },
+      async list(params) {
+        const companyId = ensureCompanyId(params.companyId);
+        await ensurePluginAvailableForCompany(companyId);
+        return await activity.list({
+          companyId,
+          entityType: params.entityType,
+          entityId: params.entityId,
+          actions: params.actions,
+          limit: params.limit,
+          sinceCreatedAt: params.sinceCreatedAt ? new Date(params.sinceCreatedAt) : undefined,
         });
       },
     },
@@ -775,7 +883,17 @@ export function buildHostServices(
       async update(params) {
         const companyId = ensureCompanyId(params.companyId);
         await ensurePluginAvailableForCompany(companyId);
-        requireInCompany("Issue", await issues.getById(params.issueId), companyId);
+        const existing = requireInCompany("Issue", await issues.getById(params.issueId), companyId);
+        await assertIssueCanCompleteWithReviewGate(
+          workProducts,
+          existing,
+          params.patch as {
+            status?: string;
+            reviewerAgentId?: string | null;
+            reviewerUserId?: string | null;
+            reviewPolicyKey?: string | null;
+          },
+        );
         return (await issues.update(params.issueId, params.patch as any)) as Issue;
       },
       async listComments(params) {
@@ -793,6 +911,354 @@ export function buildHostServices(
           params.body,
           {},
         )) as IssueComment;
+      },
+    },
+
+    approvals: {
+      async list(params) {
+        const companyId = ensureCompanyId(params.companyId);
+        await ensurePluginAvailableForCompany(companyId);
+        return (await approvals.list(companyId, params.status)) as Approval[];
+      },
+      async get(params) {
+        const approval = await approvals.getById(params.approvalId);
+        if (!approval) return null;
+        await ensurePluginAvailableForCompany(approval.companyId);
+        return approval as Approval;
+      },
+      async listComments(params) {
+        const approval = await approvals.getById(params.approvalId);
+        if (!approval) return [];
+        await ensurePluginAvailableForCompany(approval.companyId);
+        return (await approvals.listComments(params.approvalId)) as ApprovalComment[];
+      },
+      async addComment(params) {
+        const approval = await approvals.getById(params.approvalId);
+        if (!approval) throw new Error("Approval not found");
+        await ensurePluginAvailableForCompany(approval.companyId);
+        const comment = await approvals.addComment(params.approvalId, params.body, {});
+        await logActivity(db, {
+          companyId: approval.companyId,
+          actorType: "system",
+          actorId: pluginId,
+          action: "approval.comment_added",
+          entityType: "approval",
+          entityId: approval.id,
+          details: { pluginId },
+        });
+        return comment as ApprovalComment;
+      },
+      async approve(params) {
+        const existing = await approvals.getById(params.approvalId);
+        if (!existing) throw new Error("Approval not found");
+        await ensurePluginAvailableForCompany(existing.companyId);
+        const { approval, applied, followUpIssueId, followUpIssueIds } = await approvals.approve(
+          params.approvalId,
+          params.decidedByUserId,
+          params.decisionNote,
+        );
+        if (applied) {
+          const linkedIssues = await issueApprovals.listIssuesForApproval(approval.id);
+          const effectiveIssueIds = Array.from(new Set([
+            ...(followUpIssueIds ?? []),
+            ...linkedIssues.map((issue) => issue.id),
+          ]));
+          const primaryIssueId = followUpIssueId ?? effectiveIssueIds[0] ?? null;
+          await logActivity(db, {
+            companyId: approval.companyId,
+            actorType: "system",
+            actorId: pluginId,
+            action: "approval.approved",
+            entityType: "approval",
+            entityId: approval.id,
+            details: {
+              type: approval.type,
+              requestedByAgentId: approval.requestedByAgentId,
+              linkedIssueIds: effectiveIssueIds,
+              pluginId,
+            },
+          });
+          if (approval.requestedByAgentId) {
+            try {
+              await heartbeat.wakeup(approval.requestedByAgentId, {
+                source: "automation",
+                triggerDetail: "system",
+                reason: "approval_approved",
+                payload: {
+                  approvalId: approval.id,
+                  approvalStatus: approval.status,
+                  issueId: primaryIssueId,
+                  issueIds: effectiveIssueIds,
+                },
+                requestedByActorType: "system",
+                requestedByActorId: pluginId,
+                contextSnapshot: {
+                  source: "approval.approved",
+                  approvalId: approval.id,
+                  approvalStatus: approval.status,
+                  issueId: primaryIssueId,
+                  issueIds: effectiveIssueIds,
+                  taskId: primaryIssueId,
+                  wakeReason: "approval_approved",
+                },
+              });
+            } catch (error) {
+              logger.warn(
+                {
+                  err: error,
+                  approvalId: approval.id,
+                  requestedByAgentId: approval.requestedByAgentId,
+                },
+                "failed to queue requester wakeup after plugin approval",
+              );
+            }
+          }
+        }
+        return approval as Approval;
+      },
+      async reject(params) {
+        const existing = await approvals.getById(params.approvalId);
+        if (!existing) throw new Error("Approval not found");
+        await ensurePluginAvailableForCompany(existing.companyId);
+        const { approval, applied } = await approvals.reject(
+          params.approvalId,
+          params.decidedByUserId,
+          params.decisionNote,
+        );
+        if (applied) {
+          await logActivity(db, {
+            companyId: approval.companyId,
+            actorType: "system",
+            actorId: pluginId,
+            action: "approval.rejected",
+            entityType: "approval",
+            entityId: approval.id,
+            details: { type: approval.type, pluginId },
+          });
+        }
+        return approval as Approval;
+      },
+      async requestRevision(params) {
+        const existing = await approvals.getById(params.approvalId);
+        if (!existing) throw new Error("Approval not found");
+        await ensurePluginAvailableForCompany(existing.companyId);
+        const approval = await approvals.requestRevision(
+          params.approvalId,
+          params.decidedByUserId,
+          params.decisionNote,
+        );
+        await logActivity(db, {
+          companyId: approval.companyId,
+          actorType: "system",
+          actorId: pluginId,
+          action: "approval.revision_requested",
+          entityType: "approval",
+          entityId: approval.id,
+          details: { type: approval.type, pluginId },
+        });
+        return approval as Approval;
+      },
+      async resubmit(params) {
+        const existing = await approvals.getById(params.approvalId);
+        if (!existing) throw new Error("Approval not found");
+        await ensurePluginAvailableForCompany(existing.companyId);
+        const approval = await approvals.resubmit(params.approvalId, params.payload);
+        await logActivity(db, {
+          companyId: approval.companyId,
+          actorType: "system",
+          actorId: pluginId,
+          action: "approval.resubmitted",
+          entityType: "approval",
+          entityId: approval.id,
+          details: { type: approval.type, pluginId },
+        });
+        return approval as Approval;
+      },
+      async listIssues(params) {
+        const approval = await approvals.getById(params.approvalId);
+        if (!approval) return [];
+        await ensurePluginAvailableForCompany(approval.companyId);
+        const linkedIssues = await issueApprovals.listIssuesForApproval(params.approvalId);
+        const hydrated = await Promise.all(linkedIssues.map((issue) => issues.getById(issue.id)));
+        const resolved: Issue[] = [];
+        for (const issue of hydrated) {
+          if (inCompany(issue, approval.companyId)) {
+            resolved.push(issue as Issue);
+          }
+        }
+        return resolved;
+      },
+    },
+
+    joinRequests: {
+      async list(params) {
+        const companyId = ensureCompanyId(params.companyId);
+        await ensurePluginAvailableForCompany(companyId);
+        const rows = await db
+          .select()
+          .from(joinRequestsTable)
+          .where(eq(joinRequestsTable.companyId, companyId))
+          .orderBy(desc(joinRequestsTable.createdAt));
+        return rows
+          .filter((row) => !params.status || row.status === params.status)
+          .map((row) => sanitizeJoinRequestRow(row)) as JoinRequest[];
+      },
+      async approve(params) {
+        const companyId = ensureCompanyId(params.companyId);
+        await ensurePluginAvailableForCompany(companyId);
+        const existing = await db
+          .select()
+          .from(joinRequestsTable)
+          .where(and(eq(joinRequestsTable.companyId, companyId), eq(joinRequestsTable.id, params.requestId)))
+          .then((rows) => rows[0] ?? null);
+        if (!existing) throw new Error("Join request not found");
+        if (existing.status !== "pending_approval") throw new Error("Join request is not pending");
+
+        const invite = await db
+          .select()
+          .from(invites)
+          .where(eq(invites.id, existing.inviteId))
+          .then((rows) => rows[0] ?? null);
+        if (!invite) throw new Error("Invite not found");
+
+        let createdAgentId: string | null = existing.createdAgentId ?? null;
+        if (existing.requestType === "human") {
+          if (!existing.requestingUserId) throw new Error("Join request missing user identity");
+          await access.ensureMembership(companyId, "user", existing.requestingUserId, "member", "active");
+          await access.setPrincipalGrants(
+            companyId,
+            "user",
+            existing.requestingUserId,
+            grantsFromDefaults(invite.defaultsPayload as Record<string, unknown> | null, "human"),
+            params.decidedByUserId,
+          );
+        } else {
+          const existingAgents = await agents.list(companyId);
+          const managerId = resolveJoinRequestAgentManagerId(existingAgents as Agent[]);
+          if (!managerId) {
+            throw new Error("Join request cannot be approved because this company has no active CEO");
+          }
+          const agentName = deduplicateAgentName(
+            existing.agentName ?? "New Agent",
+            existingAgents.map((agent) => ({ id: agent.id, name: agent.name, status: agent.status })),
+          );
+          const created = await agents.create(companyId, {
+            name: agentName,
+            role: "general",
+            title: null,
+            status: "idle",
+            reportsTo: managerId,
+            capabilities: existing.capabilities ?? null,
+            adapterType: existing.adapterType ?? "process",
+            adapterConfig:
+              existing.agentDefaultsPayload && typeof existing.agentDefaultsPayload === "object"
+                ? (existing.agentDefaultsPayload as Record<string, unknown>)
+                : {},
+            runtimeConfig: {},
+            budgetMonthlyCents: 0,
+            spentMonthlyCents: 0,
+            permissions: {},
+            lastHeartbeatAt: null,
+            metadata: null,
+          });
+          createdAgentId = created.id;
+          await access.ensureMembership(companyId, "agent", created.id, "member", "active");
+          await access.setPrincipalPermission(companyId, "agent", created.id, "tasks:assign", true, params.decidedByUserId);
+          await access.setPrincipalGrants(
+            companyId,
+            "agent",
+            created.id,
+            grantsFromDefaults(invite.defaultsPayload as Record<string, unknown> | null, "agent"),
+            params.decidedByUserId,
+          );
+        }
+
+        const approved = await db
+          .update(joinRequestsTable)
+          .set({
+            status: "approved",
+            approvedByUserId: params.decidedByUserId,
+            approvedAt: new Date(),
+            createdAgentId,
+            updatedAt: new Date(),
+          })
+          .where(eq(joinRequestsTable.id, params.requestId))
+          .returning()
+          .then((rows) => rows[0]);
+        if (!approved) throw new Error("Join request not found");
+
+        await logActivity(db, {
+          companyId,
+          actorType: "system",
+          actorId: pluginId,
+          action: "join.approved",
+          entityType: "join_request",
+          entityId: params.requestId,
+          details: { requestType: existing.requestType, createdAgentId, pluginId },
+        });
+        if (createdAgentId) {
+          void notifyHireApproved(db, {
+            companyId,
+            agentId: createdAgentId,
+            source: "join_request",
+            sourceId: params.requestId,
+            approvedAt: new Date(),
+          }).catch(() => {});
+        }
+        return sanitizeJoinRequestRow(approved) as JoinRequest;
+      },
+      async reject(params) {
+        const companyId = ensureCompanyId(params.companyId);
+        await ensurePluginAvailableForCompany(companyId);
+        const existing = await db
+          .select()
+          .from(joinRequestsTable)
+          .where(and(eq(joinRequestsTable.companyId, companyId), eq(joinRequestsTable.id, params.requestId)))
+          .then((rows) => rows[0] ?? null);
+        if (!existing) throw new Error("Join request not found");
+        if (existing.status !== "pending_approval") throw new Error("Join request is not pending");
+
+        const rejected = await db
+          .update(joinRequestsTable)
+          .set({
+            status: "rejected",
+            rejectedByUserId: params.decidedByUserId,
+            rejectedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(joinRequestsTable.id, params.requestId))
+          .returning()
+          .then((rows) => rows[0]);
+        if (!rejected) throw new Error("Join request not found");
+
+        await logActivity(db, {
+          companyId,
+          actorType: "system",
+          actorId: pluginId,
+          action: "join.rejected",
+          entityType: "join_request",
+          entityId: params.requestId,
+          details: { requestType: existing.requestType, pluginId },
+        });
+        return sanitizeJoinRequestRow(rejected) as JoinRequest;
+      },
+    },
+
+    budgets: {
+      async overview(params) {
+        const companyId = ensureCompanyId(params.companyId);
+        await ensurePluginAvailableForCompany(companyId);
+        return (await budgets.overview(companyId)) as BudgetOverview;
+      },
+      async resolveIncident(params) {
+        const companyId = ensureCompanyId(params.companyId);
+        await ensurePluginAvailableForCompany(companyId);
+        return (await budgets.resolveIncident(
+          companyId,
+          params.incidentId,
+          params.input as BudgetIncidentResolutionInput,
+          params.input.decidedByUserId,
+        )) as BudgetIncident;
       },
     },
 

@@ -372,6 +372,18 @@ export function startWorkerRpcHost(options: WorkerRpcHostOptions): WorkerRpcHost
         },
       },
 
+      companySettings: {
+        async get(companyId: string) {
+          return callHost("companySettings.get", { companyId });
+        },
+
+        async list(input) {
+          return callHost("companySettings.list", {
+            enabledOnly: input?.enabledOnly,
+          });
+        },
+      },
+
       events: {
         on(
           name: string,
@@ -470,6 +482,17 @@ export function startWorkerRpcHost(options: WorkerRpcHostOptions): WorkerRpcHost
             entityType: entry.entityType,
             entityId: entry.entityId,
             metadata: entry.metadata,
+          });
+        },
+
+        async list(input) {
+          return callHost("activity.list", {
+            companyId: input.companyId,
+            sinceCreatedAt: input.sinceCreatedAt,
+            entityType: input.entityType,
+            entityId: input.entityId,
+            actions: input.actions,
+            limit: input.limit,
           });
         },
       },
@@ -574,7 +597,11 @@ export function startWorkerRpcHost(options: WorkerRpcHostOptions): WorkerRpcHost
             companyId: input.companyId,
             projectId: input.projectId,
             assigneeAgentId: input.assigneeAgentId,
+            assigneeUserId: input.assigneeUserId,
+            touchedByUserId: input.touchedByUserId,
+            unreadForUserId: input.unreadForUserId,
             status: input.status,
+            q: input.q,
             limit: input.limit,
             offset: input.offset,
           });
@@ -592,8 +619,10 @@ export function startWorkerRpcHost(options: WorkerRpcHostOptions): WorkerRpcHost
             parentId: input.parentId,
             title: input.title,
             description: input.description,
+            status: input.status,
             priority: input.priority,
             assigneeAgentId: input.assigneeAgentId,
+            assigneeUserId: input.assigneeUserId,
           });
         },
 
@@ -637,6 +666,106 @@ export function startWorkerRpcHost(options: WorkerRpcHostOptions): WorkerRpcHost
           async delete(issueId: string, key: string, companyId: string) {
             return callHost("issues.documents.delete", { issueId, key, companyId });
           },
+        },
+      },
+
+      approvals: {
+        async list(companyId: string, input) {
+          return callHost("approvals.list", {
+            companyId,
+            status: input?.status,
+          });
+        },
+
+        async get(approvalId: string) {
+          return callHost("approvals.get", { approvalId });
+        },
+
+        async listComments(approvalId: string) {
+          return callHost("approvals.listComments", { approvalId });
+        },
+
+        async addComment(approvalId: string, input) {
+          return callHost("approvals.addComment", {
+            approvalId,
+            body: input.body,
+          });
+        },
+
+        async approve(approvalId: string, input) {
+          return callHost("approvals.approve", {
+            approvalId,
+            decisionNote: input.decisionNote,
+            decidedByUserId: input.decidedByUserId,
+          });
+        },
+
+        async reject(approvalId: string, input) {
+          return callHost("approvals.reject", {
+            approvalId,
+            decisionNote: input.decisionNote,
+            decidedByUserId: input.decidedByUserId,
+          });
+        },
+
+        async requestRevision(approvalId: string, input) {
+          return callHost("approvals.requestRevision", {
+            approvalId,
+            decisionNote: input.decisionNote,
+            decidedByUserId: input.decidedByUserId,
+          });
+        },
+
+        async resubmit(approvalId: string, input) {
+          return callHost("approvals.resubmit", {
+            approvalId,
+            payload: input?.payload,
+          });
+        },
+
+        async listIssues(approvalId: string) {
+          return callHost("approvals.listIssues", { approvalId });
+        },
+      },
+
+      joinRequests: {
+        async list(companyId: string, input) {
+          return callHost("joinRequests.list", {
+            companyId,
+            status: input?.status,
+          });
+        },
+
+        async approve(companyId: string, requestId: string, input) {
+          return callHost("joinRequests.approve", {
+            companyId,
+            requestId,
+            decidedByUserId: input.decidedByUserId,
+          });
+        },
+
+        async reject(companyId: string, requestId: string, input) {
+          return callHost("joinRequests.reject", {
+            companyId,
+            requestId,
+            decidedByUserId: input.decidedByUserId,
+          });
+        },
+      },
+
+      budgets: {
+        async overview(companyId: string) {
+          return callHost("budgets.overview", { companyId });
+        },
+
+        async resolveIncident(companyId: string, incidentId: string, input) {
+          return callHost("budgets.resolveIncident", {
+            companyId,
+            incidentId,
+            input: {
+              ...input,
+            },
+          });
         },
       },
 

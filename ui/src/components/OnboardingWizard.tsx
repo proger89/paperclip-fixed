@@ -8,6 +8,8 @@ import { companiesApi } from "../api/companies";
 import { goalsApi } from "../api/goals";
 import { agentsApi } from "../api/agents";
 import { issuesApi } from "../api/issues";
+import { approvalsApi } from "../api/approvals";
+import { pluginsApi } from "../api/plugins";
 import { instanceSettingsApi } from "../api/instanceSettings";
 import { queryKeys } from "../lib/queryKeys";
 import { Dialog, DialogPortal } from "@/components/ui/dialog";
@@ -32,6 +34,7 @@ import {
 import { DEFAULT_CURSOR_LOCAL_MODEL } from "@paperclipai/adapter-cursor-local";
 import { DEFAULT_GEMINI_LOCAL_MODEL } from "@paperclipai/adapter-gemini-local";
 import { resolveRouteOnboardingOptions } from "../lib/onboarding-route";
+import { getTelegramConnectorRecommendation } from "../lib/onboarding-connector-recommendations";
 import { AsciiArtAnimation } from "./AsciiArtAnimation";
 import { OpenCodeLogoIcon } from "./OpenCodeLogoIcon";
 import {
@@ -268,6 +271,45 @@ export function OnboardingWizard() {
   });
   const defaultExecutionLocation =
     generalSettingsQuery.data?.defaultLocalExecutionLocation ?? defaultCreateValues.executionLocation;
+
+  const onboardingApprovalsQuery = useQuery({
+    queryKey: createdCompanyId
+      ? queryKeys.approvals.list(createdCompanyId)
+      : ["approvals", "__onboarding__", "__none__"],
+    queryFn: () => approvalsApi.list(createdCompanyId!),
+    enabled: effectiveOnboardingOpen && Boolean(createdCompanyId),
+  });
+
+  const installedPluginsQuery = useQuery({
+    queryKey: queryKeys.plugins.all,
+    queryFn: () => pluginsApi.list(),
+    enabled: effectiveOnboardingOpen,
+  });
+
+  const pluginExamplesQuery = useQuery({
+    queryKey: queryKeys.plugins.examples,
+    queryFn: () => pluginsApi.listExamples(),
+    enabled: effectiveOnboardingOpen,
+  });
+
+  const telegramConnectorRecommendation = useMemo(
+    () =>
+      getTelegramConnectorRecommendation({
+        pluginExamples: pluginExamplesQuery.data ?? [],
+        installedPlugins: installedPluginsQuery.data ?? [],
+        approvals: onboardingApprovalsQuery.data ?? [],
+      }),
+    [installedPluginsQuery.data, onboardingApprovalsQuery.data, pluginExamplesQuery.data],
+  );
+
+  const onboardingConnectorError =
+    pluginExamplesQuery.error
+    ?? installedPluginsQuery.error
+    ?? onboardingApprovalsQuery.error;
+
+  const companyScopedPath = useCallback((suffix: string) => {
+    return createdCompanyPrefix ? `/${createdCompanyPrefix}${suffix}` : suffix;
+  }, [createdCompanyPrefix]);
 
   function reset() {
     setStep(1);
@@ -1201,6 +1243,105 @@ export function OnboardingWizard() {
                       <Check className="h-4 w-4 text-green-500 shrink-0" />
                     </div>
                   </div>
+
+                  {!existingCompanyId && (
+                    <div className="rounded-md border border-border/70 bg-muted/20 p-3 space-y-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium">
+                            Optional setup: Telegram connector
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Paperclip can suggest this connector during company
+                            creation, but it will not install it automatically.
+                            Use it for Telegram channel workflows, board-gated
+                            publishing, and visible post links on issues.
+                          </p>
+                        </div>
+                        {telegramConnectorRecommendation ? (
+                          telegramConnectorRecommendation.status === "installed" ? (
+                            <span className="rounded-full border border-green-300 dark:border-green-500/40 bg-green-50 dark:bg-green-500/10 px-2 py-0.5 text-[11px] font-medium text-green-700 dark:text-green-300">
+                              Installed
+                            </span>
+                          ) : telegramConnectorRecommendation.status === "approval_open" ? (
+                            <span className="rounded-full border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                              Approval open
+                            </span>
+                          ) : (
+                            <span className="rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                              Suggested
+                            </span>
+                          )
+                        ) : null}
+                      </div>
+
+                      {onboardingConnectorError ? (
+                        <p className="text-xs text-destructive">
+                          {onboardingConnectorError instanceof Error
+                            ? onboardingConnectorError.message
+                            : "Failed to load optional connector suggestions."}
+                        </p>
+                      ) : telegramConnectorRecommendation ? (
+                        <div className="rounded-md border border-border bg-background/80 px-3 py-3 space-y-2">
+                          <p className="text-sm font-medium">
+                            {telegramConnectorRecommendation.example.displayName}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Requesting install opens a prefilled approval in a
+                            new tab, so you can keep onboarding open and finish
+                            company setup first if you want.
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {telegramConnectorRecommendation.status === "available" ? (
+                              <Button size="sm" variant="outline" asChild>
+                                <a
+                                  href={companyScopedPath(telegramConnectorRecommendation.installPath)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  Request install
+                                </a>
+                              </Button>
+                            ) : telegramConnectorRecommendation.status === "approval_open" ? (
+                              <Button size="sm" variant="outline" asChild>
+                                <a
+                                  href={companyScopedPath(`/approvals/${telegramConnectorRecommendation.openApproval?.id ?? ""}`)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  Open approval
+                                </a>
+                              </Button>
+                            ) : (
+                              <Button size="sm" variant="outline" asChild>
+                                <a
+                                  href={companyScopedPath("/plugins")}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  Open plugins
+                                </a>
+                              </Button>
+                            )}
+
+                            <Button size="sm" variant="ghost" asChild>
+                              <a
+                                href={companyScopedPath("/approvals/pending")}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Decide later
+                              </a>
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Telegram connector is not bundled in this checkout.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 

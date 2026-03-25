@@ -104,14 +104,14 @@ Paperclip’s core identity is a **control plane for autonomous AI companies**, 
 **Do**
 
 - Stay **board-level and company-level**. Users should manage goals, orgs, budgets, approvals, and outputs.
-- Make the first five minutes feel magical: install, answer a few questions, see a CEO do something real.
+- Make the first five minutes feel magical: install, answer a few questions, see a CEO do something real, and offer recommended connectors without silently installing them.
 - Keep work anchored to **issues/comments/projects/goals**, even if the surface feels conversational.
 - Use **role bundles, company skills, and approval-gated connector installs** to close capability gaps before hiring another generic agent.
 - Treat **agency / internal team / startup** as the same underlying abstraction with different templates and labels.
 - Make outputs first-class: files, docs, reports, previews, links, screenshots.
 - Treat review-gated work as a real system contract: named reviewer, visible output, and explicit approval before completion.
 - Provide **hooks into engineering workflows**: worktrees, preview servers, PR links, external review tools.
-- Use **plugins** for edge cases like rich chat, knowledge bases, doc editors, custom tracing.
+- Use **plugins** for edge cases like rich chat, knowledge bases, doc editors, custom tracing. Bundled connectors can still expose governed operator loops, for example Telegram private-chat task plus approval control over polling.
 
 **Do not**
 
@@ -149,4 +149,4 @@ Paperclip’s core identity is a **control plane for autonomous AI companies**, 
 
 9. **Thin core, rich edges**
    Put optional chat, knowledge, and special surfaces into plugins/extensions rather than bloating the control plane.
-   Bundled connectors may still deliver first-class governed workflows when they improve a core outcome, for example Telegram draft -> approval -> publish -> tracked output.
+   Bundled connectors may still deliver first-class governed workflows when they improve a core outcome, for example Telegram draft -> approval -> publish -> tracked output, plus company-scoped Telegram task-bot control over private chats through approval-safe polling.

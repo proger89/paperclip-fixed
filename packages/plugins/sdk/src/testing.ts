@@ -7,8 +7,14 @@ import type {
   Project,
   Issue,
   IssueComment,
+  Approval,
+  ApprovalComment,
+  JoinRequest,
+  BudgetOverview,
+  BudgetIncident,
   Agent,
   Goal,
+  ActivityEvent,
 } from "@paperclipai/shared";
 import type {
   EventFilter,
@@ -24,6 +30,7 @@ import type {
   PluginWorkspace,
   AgentSession,
   AgentSessionEvent,
+  PluginCompanySettingsRecord,
 } from "./types.js";
 
 export interface TestHarnessOptions {
@@ -50,8 +57,14 @@ export interface TestHarness {
     projects?: Project[];
     issues?: Issue[];
     issueComments?: IssueComment[];
+    approvals?: Approval[];
+    approvalComments?: ApprovalComment[];
+    joinRequests?: JoinRequest[];
+    budgetOverviews?: BudgetOverview[];
     agents?: Agent[];
     goals?: Goal[];
+    activityEvents?: ActivityEvent[];
+    companySettings?: PluginCompanySettingsRecord[];
   }): void;
   setConfig(config: Record<string, unknown>): void;
   /** Dispatch a host or plugin event to registered handlers. */
@@ -70,7 +83,9 @@ export interface TestHarness {
   simulateSessionEvent(sessionId: string, event: Omit<AgentSessionEvent, "sessionId">): void;
   logs: TestHarnessLogEntry[];
   activity: Array<{ message: string; entityType?: string; entityId?: string; metadata?: Record<string, unknown> }>;
+  activityEvents: ActivityEvent[];
   metrics: Array<{ name: string; value: number; tags?: Record<string, string> }>;
+  agentInvocations: Array<{ agentId: string; companyId: string; prompt: string; reason?: string }>;
 }
 
 type EventRegistration = {
@@ -131,7 +146,9 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
 
   const logs: TestHarnessLogEntry[] = [];
   const activity: TestHarness["activity"] = [];
+  const activityEvents: ActivityEvent[] = [];
   const metrics: TestHarness["metrics"] = [];
+  const agentInvocations: TestHarness["agentInvocations"] = [];
 
   const state = new Map<string, unknown>();
   const entities = new Map<string, PluginEntityRecord>();
@@ -140,9 +157,14 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
   const projects = new Map<string, Project>();
   const issues = new Map<string, Issue>();
   const issueComments = new Map<string, IssueComment[]>();
+  const approvals = new Map<string, Approval>();
+  const approvalComments = new Map<string, ApprovalComment[]>();
+  const joinRequests = new Map<string, JoinRequest>();
+  const budgetOverviews = new Map<string, BudgetOverview>();
   const agents = new Map<string, Agent>();
   const goals = new Map<string, Goal>();
   const projectWorkspaces = new Map<string, PluginWorkspace[]>();
+  const companySettings = new Map<string, PluginCompanySettingsRecord>();
 
   const sessions = new Map<string, AgentSession>();
   const sessionEventCallbacks = new Map<string, (event: AgentSessionEvent) => void>();
@@ -159,6 +181,18 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
     config: {
       async get() {
         return { ...currentConfig };
+      },
+    },
+    companySettings: {
+      async get(companyId) {
+        return companySettings.get(companyId) ?? null;
+      },
+      async list(input) {
+        let rows = [...companySettings.values()];
+        if (input?.enabledOnly) {
+          rows = rows.filter((row) => row.enabled);
+        }
+        return rows;
       },
     },
     events: {
@@ -209,6 +243,28 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
       async log(entry) {
         requireCapability(manifest, capabilitySet, "activity.log.write");
         activity.push(entry);
+      },
+      async list(input) {
+        requireCapability(manifest, capabilitySet, "activity.read");
+        let rows = [...activityEvents];
+        rows = rows.filter((entry) => entry.companyId === input.companyId);
+        if (input.sinceCreatedAt) {
+          const since = new Date(input.sinceCreatedAt).getTime();
+          rows = rows.filter((entry) => entry.createdAt.getTime() > since);
+        }
+        if (input.entityType) {
+          rows = rows.filter((entry) => entry.entityType === input.entityType);
+        }
+        if (input.entityId) {
+          rows = rows.filter((entry) => entry.entityId === input.entityId);
+        }
+        if (input.actions?.length) {
+          const allowed = new Set(input.actions);
+          rows = rows.filter((entry) => allowed.has(entry.action));
+        }
+        rows.sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+        if (input.limit) rows = rows.slice(0, input.limit);
+        return rows;
       },
     },
     state: {
@@ -336,7 +392,30 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
         out = out.filter((issue) => issue.companyId === companyId);
         if (input?.projectId) out = out.filter((issue) => issue.projectId === input.projectId);
         if (input?.assigneeAgentId) out = out.filter((issue) => issue.assigneeAgentId === input.assigneeAgentId);
+        if (input?.assigneeUserId) out = out.filter((issue) => issue.assigneeUserId === input.assigneeUserId);
+        if (input?.touchedByUserId) {
+          const touched = input.touchedByUserId;
+          out = out.filter((issue) =>
+            issue.assigneeUserId === touched
+            || issue.createdByUserId === touched
+            || (issueComments.get(issue.id) ?? []).some((comment) => comment.authorUserId === touched),
+          );
+        }
+        if (input?.unreadForUserId) {
+          const targetUserId = input.unreadForUserId;
+          out = out.filter((issue) =>
+            (issueComments.get(issue.id) ?? []).some((comment) => comment.authorUserId !== targetUserId),
+          );
+        }
         if (input?.status) out = out.filter((issue) => issue.status === input.status);
+        if (input?.q) {
+          const needle = input.q.toLowerCase();
+          out = out.filter((issue) =>
+            issue.title.toLowerCase().includes(needle)
+            || (issue.identifier ?? "").toLowerCase().includes(needle)
+            || (issue.description ?? "").toLowerCase().includes(needle),
+          );
+        }
         if (input?.offset) out = out.slice(input.offset);
         if (input?.limit) out = out.slice(0, input.limit);
         return out;
@@ -358,10 +437,10 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
           parentId: input.parentId ?? null,
           title: input.title,
           description: input.description ?? null,
-          status: "todo",
+          status: input.status ?? "todo",
           priority: input.priority ?? "medium",
           assigneeAgentId: input.assigneeAgentId ?? null,
-          assigneeUserId: null,
+          assigneeUserId: input.assigneeUserId ?? null,
           checkoutRunId: null,
           executionRunId: null,
           executionAgentNameKey: null,
@@ -453,6 +532,208 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
         },
       },
     },
+    approvals: {
+      async list(companyId, input) {
+        requireCapability(manifest, capabilitySet, "approvals.read");
+        let out = [...approvals.values()].filter((approval) => approval.companyId === companyId);
+        if (input?.status) out = out.filter((approval) => approval.status === input.status);
+        out.sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime());
+        return out;
+      },
+      async get(approvalId) {
+        requireCapability(manifest, capabilitySet, "approvals.read");
+        return approvals.get(approvalId) ?? null;
+      },
+      async listComments(approvalId) {
+        requireCapability(manifest, capabilitySet, "approval.comments.read");
+        if (!approvals.has(approvalId)) return [];
+        return approvalComments.get(approvalId) ?? [];
+      },
+      async addComment(approvalId, input) {
+        requireCapability(manifest, capabilitySet, "approval.comments.create");
+        const approval = approvals.get(approvalId);
+        if (!approval) throw new Error(`Approval not found: ${approvalId}`);
+        const now = new Date();
+        const comment: ApprovalComment = {
+          id: randomUUID(),
+          companyId: approval.companyId,
+          approvalId,
+          authorAgentId: null,
+          authorUserId: null,
+          body: input.body,
+          createdAt: now,
+          updatedAt: now,
+        };
+        const current = approvalComments.get(approvalId) ?? [];
+        current.push(comment);
+        approvalComments.set(approvalId, current);
+        return comment;
+      },
+      async approve(approvalId, input) {
+        requireCapability(manifest, capabilitySet, "approvals.resolve");
+        const approval = approvals.get(approvalId);
+        if (!approval) throw new Error(`Approval not found: ${approvalId}`);
+        if (approval.status !== "pending" && approval.status !== "revision_requested") {
+          throw new Error("Only pending or revision requested approvals can be approved");
+        }
+        const updated: Approval = {
+          ...approval,
+          status: "approved",
+          decisionNote: input.decisionNote ?? null,
+          decidedByUserId: input.decidedByUserId,
+          decidedAt: new Date(),
+          updatedAt: new Date(),
+        };
+        approvals.set(approvalId, updated);
+        return updated;
+      },
+      async reject(approvalId, input) {
+        requireCapability(manifest, capabilitySet, "approvals.resolve");
+        const approval = approvals.get(approvalId);
+        if (!approval) throw new Error(`Approval not found: ${approvalId}`);
+        if (approval.status !== "pending" && approval.status !== "revision_requested") {
+          throw new Error("Only pending or revision requested approvals can be rejected");
+        }
+        const updated: Approval = {
+          ...approval,
+          status: "rejected",
+          decisionNote: input.decisionNote ?? null,
+          decidedByUserId: input.decidedByUserId,
+          decidedAt: new Date(),
+          updatedAt: new Date(),
+        };
+        approvals.set(approvalId, updated);
+        return updated;
+      },
+      async requestRevision(approvalId, input) {
+        requireCapability(manifest, capabilitySet, "approvals.resolve");
+        const approval = approvals.get(approvalId);
+        if (!approval) throw new Error(`Approval not found: ${approvalId}`);
+        if (approval.status !== "pending") {
+          throw new Error("Only pending approvals can request revision");
+        }
+        const updated: Approval = {
+          ...approval,
+          status: "revision_requested",
+          decisionNote: input.decisionNote ?? null,
+          decidedByUserId: input.decidedByUserId,
+          decidedAt: new Date(),
+          updatedAt: new Date(),
+        };
+        approvals.set(approvalId, updated);
+        return updated;
+      },
+      async resubmit(approvalId, input) {
+        requireCapability(manifest, capabilitySet, "approvals.resolve");
+        const approval = approvals.get(approvalId);
+        if (!approval) throw new Error(`Approval not found: ${approvalId}`);
+        if (approval.status !== "revision_requested") {
+          throw new Error("Only revision requested approvals can be resubmitted");
+        }
+        const updated: Approval = {
+          ...approval,
+          status: "pending",
+          payload: (input?.payload ?? approval.payload) as Approval["payload"],
+          decisionNote: null,
+          decidedByUserId: null,
+          decidedAt: null,
+          updatedAt: new Date(),
+        };
+        approvals.set(approvalId, updated);
+        return updated;
+      },
+      async listIssues(approvalId) {
+        requireCapability(manifest, capabilitySet, "approvals.read");
+        const approval = approvals.get(approvalId);
+        if (!approval) return [];
+        const payload = approval.payload as Record<string, unknown>;
+        const issueIds = Array.isArray(payload.issueIds)
+          ? payload.issueIds.filter((value): value is string => typeof value === "string")
+          : Array.isArray(payload.sourceIssueIds)
+            ? payload.sourceIssueIds.filter((value): value is string => typeof value === "string")
+            : [];
+        return issueIds
+          .map((issueId) => issues.get(issueId))
+          .filter((issue): issue is Issue => Boolean(issue && issue.companyId === approval.companyId));
+      },
+    },
+    joinRequests: {
+      async list(companyId, input) {
+        requireCapability(manifest, capabilitySet, "joins.read");
+        let out = [...joinRequests.values()].filter((request) => request.companyId === companyId);
+        if (input?.status) out = out.filter((request) => request.status === input.status);
+        out.sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+        return out;
+      },
+      async approve(companyId, requestId, input) {
+        requireCapability(manifest, capabilitySet, "joins.resolve");
+        const request = joinRequests.get(requestId);
+        if (!isInCompany(request, companyId)) throw new Error(`Join request not found: ${requestId}`);
+        if (request!.status !== "pending_approval") throw new Error("Join request is not pending");
+        const updated: JoinRequest = {
+          ...request!,
+          status: "approved",
+          approvedByUserId: input.decidedByUserId,
+          approvedAt: new Date(),
+          updatedAt: new Date(),
+        };
+        joinRequests.set(requestId, updated);
+        return updated;
+      },
+      async reject(companyId, requestId, input) {
+        requireCapability(manifest, capabilitySet, "joins.resolve");
+        const request = joinRequests.get(requestId);
+        if (!isInCompany(request, companyId)) throw new Error(`Join request not found: ${requestId}`);
+        if (request!.status !== "pending_approval") throw new Error("Join request is not pending");
+        const updated: JoinRequest = {
+          ...request!,
+          status: "rejected",
+          rejectedByUserId: input.decidedByUserId,
+          rejectedAt: new Date(),
+          updatedAt: new Date(),
+        };
+        joinRequests.set(requestId, updated);
+        return updated;
+      },
+    },
+    budgets: {
+      async overview(companyId) {
+        requireCapability(manifest, capabilitySet, "budgets.read");
+        return budgetOverviews.get(companyId) ?? {
+          companyId,
+          policies: [],
+          activeIncidents: [],
+          pausedAgentCount: 0,
+          pausedProjectCount: 0,
+          pendingApprovalCount: 0,
+        };
+      },
+      async resolveIncident(companyId, incidentId, input) {
+        requireCapability(manifest, capabilitySet, "budgets.resolve");
+        const overview = budgetOverviews.get(companyId);
+        const incident = overview?.activeIncidents.find((entry) => entry.id === incidentId);
+        if (!overview || !incident) throw new Error(`Budget incident not found: ${incidentId}`);
+        if (input.action === "raise_budget_and_resume") {
+          const nextAmount = Math.max(0, Math.floor(input.amount ?? 0));
+          if (nextAmount <= incident.amountObserved) {
+            throw new Error("New budget must exceed current observed spend");
+          }
+        }
+        const nextStatus: BudgetIncident["status"] =
+          input.action === "raise_budget_and_resume" ? "resolved" : "dismissed";
+        const updatedIncident: BudgetIncident = {
+          ...incident,
+          status: nextStatus,
+          resolvedAt: new Date(),
+          updatedAt: new Date(),
+        };
+        budgetOverviews.set(companyId, {
+          ...overview,
+          activeIncidents: overview.activeIncidents.filter((entry) => entry.id !== incidentId),
+        });
+        return updatedIncident;
+      },
+    },
     agents: {
       async list(input) {
         requireCapability(manifest, capabilitySet, "agents.read");
@@ -502,6 +783,12 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
         ) {
           throw new Error(`Agent is not invokable in its current state: ${agent!.status}`);
         }
+        agentInvocations.push({
+          agentId,
+          companyId: cid,
+          prompt: opts.prompt,
+          reason: opts.reason,
+        });
         return { runId: randomUUID() };
       },
       sessions: {
@@ -658,8 +945,18 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
         list.push(row);
         issueComments.set(row.issueId, list);
       }
+      for (const row of input.approvals ?? []) approvals.set(row.id, row);
+      for (const row of input.approvalComments ?? []) {
+        const list = approvalComments.get(row.approvalId) ?? [];
+        list.push(row);
+        approvalComments.set(row.approvalId, list);
+      }
+      for (const row of input.joinRequests ?? []) joinRequests.set(row.id, row);
+      for (const row of input.budgetOverviews ?? []) budgetOverviews.set(row.companyId, row);
       for (const row of input.agents ?? []) agents.set(row.id, row);
       for (const row of input.goals ?? []) goals.set(row.id, row);
+      for (const row of input.activityEvents ?? []) activityEvents.push(row);
+      for (const row of input.companySettings ?? []) companySettings.set(row.companyId, row);
     },
     setConfig(config) {
       currentConfig = { ...config };
@@ -728,7 +1025,9 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
     },
     logs,
     activity,
+    activityEvents,
     metrics,
+    agentInvocations,
   };
 
   return harness;
