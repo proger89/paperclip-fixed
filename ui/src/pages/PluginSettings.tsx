@@ -7,6 +7,7 @@ import { Link, Navigate, useParams } from "@/lib/router";
 import { PluginSlotMount, usePluginSlots } from "@/plugins/slots";
 import { pluginsApi } from "@/api/plugins";
 import { queryKeys } from "@/lib/queryKeys";
+import { getPluginCompanyPagePath, getPluginPageLinkLabel } from "@/lib/plugin-pages";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -142,25 +143,33 @@ export function PluginSettings() {
         : "secondary";
   const pluginDescription = plugin.manifestJson.description || "No description provided.";
   const pluginCapabilities = plugin.manifestJson.capabilities ?? [];
+  const companyPluginPagePath = getPluginCompanyPagePath(plugin, selectedCompany?.issuePrefix ?? companyPrefix ?? null);
 
   return (
     <div className="space-y-6 max-w-5xl">
-      <div className="flex items-center gap-4">
-        <Link to="/instance/settings/plugins">
-          <Button variant="outline" size="icon" className="h-8 w-8">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        <div className="flex items-center gap-2">
-          <Puzzle className="h-6 w-6 text-muted-foreground" />
-          <h1 className="text-xl font-semibold">{plugin.manifestJson.displayName ?? plugin.packageName}</h1>
-          <Badge variant={statusVariant} className="ml-2">
-            {displayStatus}
-          </Badge>
-          <Badge variant="outline" className="ml-1">
-            v{plugin.manifestJson.version ?? plugin.version}
-          </Badge>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <Link to="/instance/settings/plugins">
+            <Button variant="outline" size="icon" className="h-8 w-8">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          </Link>
+          <div className="flex items-center gap-2">
+            <Puzzle className="h-6 w-6 text-muted-foreground" />
+            <h1 className="text-xl font-semibold">{plugin.manifestJson.displayName ?? plugin.packageName}</h1>
+            <Badge variant={statusVariant} className="ml-2">
+              {displayStatus}
+            </Badge>
+            <Badge variant="outline" className="ml-1">
+              v{plugin.manifestJson.version ?? plugin.version}
+            </Badge>
+          </div>
         </div>
+        {plugin.status === "ready" && companyPluginPagePath ? (
+          <Button variant="outline" size="sm" asChild>
+            <Link to={companyPluginPagePath}>{getPluginPageLinkLabel(plugin)}</Link>
+          </Button>
+        ) : null}
       </div>
 
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "configuration" | "status")} className="space-y-6">

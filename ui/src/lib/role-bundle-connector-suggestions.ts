@@ -18,6 +18,11 @@ export interface RoleBundleConnectorSuggestionItem {
   bundleKey: string;
   bundleLabel: string;
   bundleTitle: string;
+  bundles: Array<{
+    key: string;
+    label: string;
+    title: string;
+  }>;
   requirement: RoleBundleCatalogConnectorRequirement;
   status: RoleBundleConnectorSuggestionStatus;
   installedPlugin: PluginRecord | null;
@@ -30,10 +35,15 @@ export function getRoleBundleConnectorSuggestions(input: {
   approvals: Approval[];
   includeInstalled?: boolean;
 }): RoleBundleConnectorSuggestionItem[] {
-  const items: RoleBundleConnectorSuggestionItem[] = [];
+  const items = new Map<string, RoleBundleConnectorSuggestionItem>();
 
   for (const bundle of input.roleBundles) {
     for (const requirement of bundle.suggestedConnectorPlugins) {
+      const suggestionKey = [
+        requirement.pluginKey ?? requirement.key,
+        requirement.packageName ?? "",
+        requirement.localPath ?? "",
+      ].join("::");
       const installedPlugin =
         findInstalledConnector(input.installedPlugins, {
           pluginKey: requirement.pluginKey ?? requirement.key,
@@ -58,10 +68,25 @@ export function getRoleBundleConnectorSuggestions(input: {
 
       if (status === "installed" && !input.includeInstalled) continue;
 
-      items.push({
+      const bundleRef = {
+        key: bundle.key,
+        label: bundle.label,
+        title: bundle.title,
+      };
+      const existing = items.get(suggestionKey);
+
+      if (existing) {
+        if (!existing.bundles.some((entry) => entry.key === bundle.key)) {
+          existing.bundles.push(bundleRef);
+        }
+        continue;
+      }
+
+      items.set(suggestionKey, {
         bundleKey: bundle.key,
         bundleLabel: bundle.label,
         bundleTitle: bundle.title,
+        bundles: [bundleRef],
         requirement,
         status,
         installedPlugin,
@@ -70,7 +95,7 @@ export function getRoleBundleConnectorSuggestions(input: {
     }
   }
 
-  return items.sort((left, right) => {
+  return Array.from(items.values()).sort((left, right) => {
     const statusWeight = {
       available: 0,
       approval_open: 1,
@@ -79,7 +104,12 @@ export function getRoleBundleConnectorSuggestions(input: {
     const leftWeight = statusWeight[left.status];
     const rightWeight = statusWeight[right.status];
     if (leftWeight !== rightWeight) return leftWeight - rightWeight;
-    const bundleOrder = left.bundleLabel.localeCompare(right.bundleLabel);
+    const bundleOrder = left.bundles
+      .map((bundle) => bundle.label)
+      .join(", ")
+      .localeCompare(
+        right.bundles.map((bundle) => bundle.label).join(", "),
+      );
     if (bundleOrder !== 0) return bundleOrder;
     return left.requirement.displayName.localeCompare(right.requirement.displayName);
   });

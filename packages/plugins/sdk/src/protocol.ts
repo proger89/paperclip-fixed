@@ -27,6 +27,7 @@ import type {
   IssueComment,
   IssueDocument,
   IssueDocumentSummary,
+  IssueWorkProduct,
   Approval,
   ApprovalComment,
   JoinRequest,
@@ -36,6 +37,16 @@ import type {
   Agent,
   Goal,
   ActivityEvent,
+  Routine,
+  RoutineDetail,
+  RoutineListItem,
+  RoutineRun,
+  RoutineRunSummary,
+  RoutineTrigger,
+  CreateRoutine,
+  CreateRoutineTrigger,
+  UpdateRoutine,
+  RunRoutine,
 } from "@paperclipai/shared";
 export type { PluginLauncherRenderContextSnapshot } from "@paperclipai/shared";
 
@@ -603,6 +614,39 @@ export interface WorkerToHostMethods {
     result: PluginWorkspace | null,
   ];
 
+  // Routines
+  "routines.list": [
+    params: { companyId: string; limit?: number; offset?: number },
+    result: RoutineListItem[],
+  ];
+  "routines.get": [
+    params: { routineId: string; companyId: string },
+    result: RoutineDetail | null,
+  ];
+  "routines.create": [
+    params: { companyId: string; data: CreateRoutine },
+    result: Routine,
+  ];
+  "routines.update": [
+    params: { routineId: string; companyId: string; patch: UpdateRoutine },
+    result: Routine | null,
+  ];
+  "routines.listRuns": [
+    params: { routineId: string; companyId: string; limit?: number },
+    result: RoutineRunSummary[],
+  ];
+  "routines.createTrigger": [
+    params: { routineId: string; companyId: string; data: CreateRoutineTrigger },
+    result: {
+      trigger: RoutineTrigger;
+      secretMaterial: { webhookUrl: string; webhookSecret: string } | null;
+    },
+  ];
+  "routines.run": [
+    params: { routineId: string; companyId: string; data?: RunRoutine },
+    result: RoutineRun,
+  ];
+
   // Issues
   "issues.list": [
     params: {
@@ -745,6 +789,58 @@ export interface WorkerToHostMethods {
   "issues.documents.delete": [
     params: { issueId: string; key: string; companyId: string },
     result: void,
+  ];
+  "issues.workProducts.list": [
+    params: { issueId: string; companyId: string },
+    result: IssueWorkProduct[],
+  ];
+  "issues.workProducts.create": [
+    params: {
+      issueId: string;
+      companyId: string;
+      data: {
+        type: IssueWorkProduct["type"];
+        provider: IssueWorkProduct["provider"];
+        title: string;
+        status: IssueWorkProduct["status"];
+        reviewState: IssueWorkProduct["reviewState"];
+        isPrimary?: boolean;
+        healthStatus?: IssueWorkProduct["healthStatus"];
+        url?: string | null;
+        externalId?: string | null;
+        summary?: string | null;
+        metadata?: Record<string, unknown> | null;
+        projectId?: string | null;
+        executionWorkspaceId?: string | null;
+        runtimeServiceId?: string | null;
+        createdByRunId?: string | null;
+      };
+    },
+    result: IssueWorkProduct | null,
+  ];
+  "issues.workProducts.update": [
+    params: {
+      workProductId: string;
+      companyId: string;
+      patch: {
+        type?: IssueWorkProduct["type"];
+        provider?: IssueWorkProduct["provider"];
+        title?: string;
+        status?: IssueWorkProduct["status"];
+        reviewState?: IssueWorkProduct["reviewState"];
+        isPrimary?: boolean;
+        healthStatus?: IssueWorkProduct["healthStatus"];
+        url?: string | null;
+        externalId?: string | null;
+        summary?: string | null;
+        metadata?: Record<string, unknown> | null;
+        projectId?: string | null;
+        executionWorkspaceId?: string | null;
+        runtimeServiceId?: string | null;
+        createdByRunId?: string | null;
+      };
+    },
+    result: IssueWorkProduct | null,
   ];
 
   // Agents (read)

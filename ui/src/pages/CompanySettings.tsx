@@ -535,6 +535,7 @@ export function CompanySettings() {
               description="Company-level view of curated connector suggestions for current role bundles. Installed items are shown here so you can see which capabilities are already covered and which still need approval."
               emptyMessage="No curated connector suggestions are defined for the current role bundles."
               showInstalled
+              companyPrefix={selectedCompany.issuePrefix}
             />
           )}
         </div>

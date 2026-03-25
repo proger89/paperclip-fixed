@@ -21,6 +21,7 @@ import type {
   IssueComment,
   IssueDocument,
   IssueDocumentSummary,
+  IssueWorkProduct,
   Approval,
   ApprovalComment,
   JoinRequest,
@@ -30,6 +31,16 @@ import type {
   Agent,
   Goal,
   ActivityEvent,
+  Routine,
+  RoutineDetail,
+  RoutineListItem,
+  RoutineRun,
+  RoutineRunSummary,
+  RoutineTrigger,
+  CreateRoutine,
+  CreateRoutineTrigger,
+  UpdateRoutine,
+  RunRoutine,
 } from "@paperclipai/shared";
 
 // ---------------------------------------------------------------------------
@@ -81,6 +92,16 @@ export type {
   Agent,
   Goal,
   ActivityEvent,
+  Routine,
+  RoutineDetail,
+  RoutineListItem,
+  RoutineRun,
+  RoutineRunSummary,
+  RoutineTrigger,
+  CreateRoutine,
+  CreateRoutineTrigger,
+  UpdateRoutine,
+  RunRoutine,
 } from "@paperclipai/shared";
 
 // ---------------------------------------------------------------------------
@@ -905,6 +926,74 @@ export interface PluginIssueDocumentsClient {
 }
 
 /**
+ * `ctx.issues.workProducts` — read and write issue work products.
+ *
+ * Requires:
+ * - `issues.read` for `list`
+ * - `issues.update` for `create` and `update`
+ */
+export interface PluginIssueWorkProductsClient {
+  /**
+   * List work products attached to an issue.
+   *
+   * Requires the `issues.read` capability.
+   */
+  list(issueId: string, companyId: string): Promise<IssueWorkProduct[]>;
+
+  /**
+   * Create a new work product on an issue.
+   *
+   * Requires the `issues.update` capability.
+   */
+  create(input: {
+    issueId: string;
+    companyId: string;
+    type: IssueWorkProduct["type"];
+    provider: IssueWorkProduct["provider"];
+    title: string;
+    status: IssueWorkProduct["status"];
+    reviewState: IssueWorkProduct["reviewState"];
+    isPrimary?: boolean;
+    healthStatus?: IssueWorkProduct["healthStatus"];
+    url?: string | null;
+    externalId?: string | null;
+    summary?: string | null;
+    metadata?: Record<string, unknown> | null;
+    projectId?: string | null;
+    executionWorkspaceId?: string | null;
+    runtimeServiceId?: string | null;
+    createdByRunId?: string | null;
+  }): Promise<IssueWorkProduct | null>;
+
+  /**
+   * Update an existing work product.
+   *
+   * Requires the `issues.update` capability.
+   */
+  update(
+    workProductId: string,
+    companyId: string,
+    patch: {
+      type?: IssueWorkProduct["type"];
+      provider?: IssueWorkProduct["provider"];
+      title?: string;
+      status?: IssueWorkProduct["status"];
+      reviewState?: IssueWorkProduct["reviewState"];
+      isPrimary?: boolean;
+      healthStatus?: IssueWorkProduct["healthStatus"];
+      url?: string | null;
+      externalId?: string | null;
+      summary?: string | null;
+      metadata?: Record<string, unknown> | null;
+      projectId?: string | null;
+      executionWorkspaceId?: string | null;
+      runtimeServiceId?: string | null;
+      createdByRunId?: string | null;
+    },
+  ): Promise<IssueWorkProduct | null>;
+}
+
+/**
  * `ctx.issues` — read and mutate issues plus comments.
  *
  * Requires:
@@ -915,6 +1004,8 @@ export interface PluginIssueDocumentsClient {
  * - `issue.comments.create` for `createComment`
  * - `issue.documents.read` for `documents.list` and `documents.get`
  * - `issue.documents.write` for `documents.upsert` and `documents.delete`
+ * - `issues.read` for `workProducts.list`
+ * - `issues.update` for `workProducts.create` and `workProducts.update`
  */
 export interface PluginIssuesClient {
   list(input: {
@@ -954,6 +1045,29 @@ export interface PluginIssuesClient {
   createComment(issueId: string, body: string, companyId: string): Promise<IssueComment>;
   /** Read and write issue documents. Requires `issue.documents.read` / `issue.documents.write`. */
   documents: PluginIssueDocumentsClient;
+  /** Read and write issue work products. Requires `issues.read` / `issues.update`. */
+  workProducts: PluginIssueWorkProductsClient;
+}
+
+/**
+ * `ctx.routines` — read and manage company-scoped routines.
+ *
+ * Requires:
+ * - `routines.read` for `list`, `get`, and `listRuns`
+ * - `routines.write` for `create`, `update`, `createTrigger`, and `run`
+ */
+export interface PluginRoutinesClient {
+  list(input: { companyId: string; limit?: number; offset?: number }): Promise<RoutineListItem[]>;
+  get(routineId: string, companyId: string): Promise<RoutineDetail | null>;
+  create(companyId: string, data: CreateRoutine): Promise<Routine>;
+  update(routineId: string, companyId: string, patch: UpdateRoutine): Promise<Routine | null>;
+  listRuns(routineId: string, companyId: string, limit?: number): Promise<RoutineRunSummary[]>;
+  createTrigger(
+    routineId: string,
+    companyId: string,
+    data: CreateRoutineTrigger,
+  ): Promise<{ trigger: RoutineTrigger; secretMaterial: { webhookUrl: string; webhookSecret: string } | null }>;
+  run(routineId: string, companyId: string, data?: RunRoutine): Promise<RoutineRun>;
 }
 
 /**
@@ -1245,6 +1359,9 @@ export interface PluginContext {
 
   /** Read project and workspace metadata. Requires `projects.read` / `project.workspaces.read`. */
   projects: PluginProjectsClient;
+
+  /** Read and manage routines. Requires `routines.read` / `routines.write`. */
+  routines: PluginRoutinesClient;
 
   /** Read company metadata. Requires `companies.read`. */
   companies: PluginCompaniesClient;

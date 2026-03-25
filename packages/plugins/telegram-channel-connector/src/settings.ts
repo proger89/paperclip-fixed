@@ -1,5 +1,7 @@
 import { DEFAULT_COMPANY_SETTINGS, DEFAULT_CONFIG } from "./constants.js";
 import type {
+  TelegramDestination,
+  TelegramIngestionSource,
   LegacyTelegramConfig,
   TelegramCompanySettings,
   TelegramParseMode,
@@ -11,6 +13,61 @@ function trimString(value: unknown): string {
 
 function normalizeParseMode(value: unknown): TelegramParseMode {
   return value === "HTML" || value === "MarkdownV2" ? value : "";
+}
+
+function normalizeDestination(input: unknown, index: number): TelegramDestination {
+  const record = typeof input === "object" && input !== null ? input as Record<string, unknown> : {};
+  const id = trimString(record.id) || `destination-${index + 1}`;
+  const chatId = trimString(record.chatId);
+  const publicHandle = trimString(record.publicHandle);
+  return {
+    id,
+    label: trimString(record.label) || publicHandle || chatId || `Destination ${index + 1}`,
+    chatId,
+    publicHandle,
+    parseMode: normalizeParseMode(record.parseMode),
+    disableLinkPreview: record.disableLinkPreview === true,
+    disableNotification: record.disableNotification === true,
+    enabled: record.enabled !== false,
+    isDefault: record.isDefault === true,
+  };
+}
+
+function normalizeSource(input: unknown, index: number): TelegramIngestionSource {
+  const record = typeof input === "object" && input !== null ? input as Record<string, unknown> : {};
+  const id = trimString(record.id) || `source-${index + 1}`;
+  const chatId = trimString(record.chatId);
+  const publicHandle = trimString(record.publicHandle);
+  return {
+    id,
+    label: trimString(record.label) || publicHandle || chatId || `Source ${index + 1}`,
+    chatId,
+    publicHandle,
+    discussionChatId: trimString(record.discussionChatId),
+    mode: record.mode === "discussion_replies" || record.mode === "both" ? record.mode : "channel_posts",
+    enabled: record.enabled !== false,
+    projectId: trimString(record.projectId),
+    assigneeAgentId: trimString(record.assigneeAgentId),
+    routineId: trimString(record.routineId),
+    issueTemplateKey: trimString(record.issueTemplateKey),
+  };
+}
+
+function materializeLegacyDestinations(input: LegacyTelegramConfig): TelegramDestination[] {
+  const chatId = trimString(input.defaultChatId);
+  const publicHandle = trimString(input.defaultPublicHandle);
+  if (!chatId && !publicHandle) return [];
+  return [{
+    id: "legacy-default",
+    label: publicHandle || chatId || "Default destination",
+    chatId,
+    publicHandle,
+    parseMode: normalizeParseMode(input.defaultParseMode),
+    disableLinkPreview: input.defaultDisableLinkPreview === true,
+    disableNotification: input.defaultDisableNotification === true,
+    enabled: true,
+    isDefault: true,
+  }];
 }
 
 export function sanitizeLegacyTelegramConfig(input: unknown): LegacyTelegramConfig {
@@ -35,8 +92,29 @@ export function sanitizeTelegramCompanySettings(input: unknown): TelegramCompany
     typeof record.taskBot === "object" && record.taskBot !== null
       ? record.taskBot as Record<string, unknown>
       : {};
+  const ingestionInput =
+    typeof record.ingestion === "object" && record.ingestion !== null
+      ? record.ingestion as Record<string, unknown>
+      : {};
   const ttlRaw = Number(taskBotInput.claimCodeTtlMinutes);
   const ttl = Number.isFinite(ttlRaw) ? Math.min(Math.max(Math.floor(ttlRaw), 5), 24 * 60) : DEFAULT_COMPANY_SETTINGS.taskBot.claimCodeTtlMinutes;
+  const legacy = sanitizeLegacyTelegramConfig(input);
+  const destinationInputs = Array.isArray(publishingInput.destinations) ? publishingInput.destinations : [];
+  const destinations = destinationInputs.length > 0
+    ? destinationInputs.map((entry, index) => normalizeDestination(entry, index)).filter((entry) => entry.chatId || entry.publicHandle)
+    : materializeLegacyDestinations(legacy);
+  const explicitDefaultId = trimString(publishingInput.defaultDestinationId);
+  const defaultDestinationId = (
+    (explicitDefaultId && destinations.some((entry) => entry.id === explicitDefaultId) ? explicitDefaultId : "")
+    || destinations.find((entry) => entry.isDefault)?.id
+    || destinations[0]?.id
+    || ""
+  );
+  const normalizedDestinations = destinations.map((entry) => ({
+    ...entry,
+    isDefault: defaultDestinationId !== "" && entry.id === defaultDestinationId,
+  }));
+  const sourceInputs = Array.isArray(ingestionInput.sources) ? ingestionInput.sources : [];
 
   return {
     publishing: {
@@ -46,6 +124,8 @@ export function sanitizeTelegramCompanySettings(input: unknown): TelegramCompany
       defaultParseMode: normalizeParseMode(publishingInput.defaultParseMode),
       defaultDisableLinkPreview: publishingInput.defaultDisableLinkPreview === true,
       defaultDisableNotification: publishingInput.defaultDisableNotification === true,
+      destinations: normalizedDestinations,
+      defaultDestinationId,
     },
     taskBot: {
       enabled: taskBotInput.enabled === true,
@@ -56,11 +136,15 @@ export function sanitizeTelegramCompanySettings(input: unknown): TelegramCompany
           : DEFAULT_COMPANY_SETTINGS.taskBot.notificationMode,
       claimCodeTtlMinutes: ttl,
     },
+    ingestion: {
+      sources: sourceInputs.map((entry, index) => normalizeSource(entry, index)).filter((entry) => entry.chatId),
+    },
   };
 }
 
 export function companySettingsFromLegacyConfig(input: unknown): TelegramCompanySettings {
   const legacy = sanitizeLegacyTelegramConfig(input);
+  const destinations = materializeLegacyDestinations(legacy);
   return {
     publishing: {
       botTokenSecretRef: legacy.botTokenSecretRef ?? DEFAULT_CONFIG.botTokenSecretRef ?? "",
@@ -69,8 +153,11 @@ export function companySettingsFromLegacyConfig(input: unknown): TelegramCompany
       defaultParseMode: legacy.defaultParseMode ?? DEFAULT_CONFIG.defaultParseMode ?? "",
       defaultDisableLinkPreview: legacy.defaultDisableLinkPreview ?? DEFAULT_CONFIG.defaultDisableLinkPreview ?? false,
       defaultDisableNotification: legacy.defaultDisableNotification ?? DEFAULT_CONFIG.defaultDisableNotification ?? false,
+      destinations,
+      defaultDestinationId: destinations[0]?.id ?? "",
     },
     taskBot: { ...DEFAULT_COMPANY_SETTINGS.taskBot },
+    ingestion: { ...DEFAULT_COMPANY_SETTINGS.ingestion },
   };
 }
 

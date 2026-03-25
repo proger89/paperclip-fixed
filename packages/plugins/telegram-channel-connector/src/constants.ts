@@ -6,6 +6,7 @@ export const PAGE_ROUTE = "telegram";
 export const TELEGRAM_MAX_MESSAGE_LENGTH = 4096;
 export const JOB_KEYS = {
   syncTelegram: "sync-telegram",
+  dispatchTelegramPublications: "dispatch-telegram-publications",
 } as const;
 
 export const SLOT_IDS = {
@@ -27,6 +28,9 @@ export const EXPORT_NAMES = {
 export const ACTION_KEYS = {
   testConnection: "test-connection",
   publishMessage: "publish-message",
+  scheduleMessage: "schedule-message",
+  cancelPublicationJob: "cancel-publication-job",
+  reschedulePublicationJob: "reschedule-publication-job",
   generateLinkCode: "generate-link-code",
   revokeLinkedChat: "revoke-linked-chat",
 } as const;
@@ -34,6 +38,7 @@ export const ACTION_KEYS = {
 export const DATA_KEYS = {
   overview: "overview",
   issuePublications: "issue-publications",
+  issuePublicationJobs: "issue-publication-jobs",
 } as const;
 
 export const DEFAULT_CONFIG: LegacyTelegramConfig = {
@@ -53,11 +58,16 @@ export const DEFAULT_COMPANY_SETTINGS: TelegramCompanySettings = {
     defaultParseMode: "",
     defaultDisableLinkPreview: false,
     defaultDisableNotification: false,
+    destinations: [],
+    defaultDestinationId: "",
   },
   taskBot: {
     enabled: false,
     pollingEnabled: true,
     notificationMode: "fallback_all_linked",
     claimCodeTtlMinutes: 30,
+  },
+  ingestion: {
+    sources: [],
   },
 };

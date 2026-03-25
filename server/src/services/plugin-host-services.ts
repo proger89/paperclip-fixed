@@ -41,6 +41,7 @@ import { pluginRegistryService } from "./plugin-registry.js";
 import { pluginCompanySettingsService } from "./plugin-company-settings.js";
 import { approvalService } from "./approvals.js";
 import { issueApprovalService } from "./issue-approvals.js";
+import { routineService } from "./routines.js";
 import { pluginStateStore } from "./plugin-state-store.js";
 import { createPluginSecretsHandler } from "./plugin-secrets-handler.js";
 import { logActivity } from "./activity-log.js";
@@ -518,6 +519,7 @@ export function buildHostServices(
   const budgets = budgetService(db);
   const heartbeat = heartbeatService(db);
   const projects = projectService(db);
+  const routines = routineService(db);
   const issues = issueService(db);
   const approvals = approvalService(db);
   const issueApprovals = issueApprovalService(db);
@@ -860,6 +862,49 @@ export function buildHostServices(
           createdAt: (row?.createdAt ?? project.createdAt).toISOString(),
           updatedAt: (row?.updatedAt ?? project.updatedAt).toISOString(),
         };
+      },
+    },
+
+    routines: {
+      async list(params) {
+        const companyId = ensureCompanyId(params.companyId);
+        await ensurePluginAvailableForCompany(companyId);
+        return applyWindow((await routines.list(companyId)) as any, params);
+      },
+      async get(params) {
+        const companyId = ensureCompanyId(params.companyId);
+        await ensurePluginAvailableForCompany(companyId);
+        const routine = await routines.getDetail(params.routineId);
+        return inCompany(routine, companyId) ? routine as any : null;
+      },
+      async create(params) {
+        const companyId = ensureCompanyId(params.companyId);
+        await ensurePluginAvailableForCompany(companyId);
+        return await routines.create(companyId, params.data as any, {});
+      },
+      async update(params) {
+        const companyId = ensureCompanyId(params.companyId);
+        await ensurePluginAvailableForCompany(companyId);
+        requireInCompany("Routine", await routines.get(params.routineId), companyId);
+        return await routines.update(params.routineId, params.patch as any, {});
+      },
+      async listRuns(params) {
+        const companyId = ensureCompanyId(params.companyId);
+        await ensurePluginAvailableForCompany(companyId);
+        requireInCompany("Routine", await routines.get(params.routineId), companyId);
+        return await routines.listRuns(params.routineId, params.limit);
+      },
+      async createTrigger(params) {
+        const companyId = ensureCompanyId(params.companyId);
+        await ensurePluginAvailableForCompany(companyId);
+        requireInCompany("Routine", await routines.get(params.routineId), companyId);
+        return await routines.createTrigger(params.routineId, params.data as any, {});
+      },
+      async run(params) {
+        const companyId = ensureCompanyId(params.companyId);
+        await ensurePluginAvailableForCompany(companyId);
+        requireInCompany("Routine", await routines.get(params.routineId), companyId);
+        return await routines.runRoutine(params.routineId, params.data ?? { source: "api" });
       },
     },
 
@@ -1296,6 +1341,31 @@ export function buildHostServices(
         await ensurePluginAvailableForCompany(companyId);
         requireInCompany("Issue", await issues.getById(params.issueId), companyId);
         await documents.deleteIssueDocument(params.issueId, params.key);
+      },
+    },
+
+    issueWorkProducts: {
+      async list(params) {
+        const companyId = ensureCompanyId(params.companyId);
+        await ensurePluginAvailableForCompany(companyId);
+        requireInCompany("Issue", await issues.getById(params.issueId), companyId);
+        return await workProducts.listForIssue(params.issueId) as any;
+      },
+      async create(params) {
+        const companyId = ensureCompanyId(params.companyId);
+        await ensurePluginAvailableForCompany(companyId);
+        const issue = requireInCompany("Issue", await issues.getById(params.issueId), companyId);
+        return await workProducts.createForIssue(params.issueId, companyId, {
+          ...params.data,
+          projectId: params.data.projectId ?? issue.projectId ?? null,
+        } as any) as any;
+      },
+      async update(params) {
+        const companyId = ensureCompanyId(params.companyId);
+        await ensurePluginAvailableForCompany(companyId);
+        const existing = await workProducts.getById(params.workProductId);
+        requireInCompany("Work product", existing, companyId);
+        return await workProducts.update(params.workProductId, params.patch as any) as any;
       },
     },
 

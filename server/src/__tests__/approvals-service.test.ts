@@ -97,7 +97,7 @@ describe("approvalService resolution idempotency", () => {
 
   it("still performs side effects when the resolution update is newly applied", async () => {
     const approved = createApproval("approved");
-    const dbStub = createDbStub([[createApproval("pending")]], [approved]);
+    const dbStub = createDbStub([[createApproval("pending")], [createApproval("pending")]], [approved]);
 
     const svc = approvalService(dbStub.db as any);
     const result = await svc.approve("approval-1", "board", "ship it");
@@ -110,6 +110,13 @@ describe("approvalService resolution idempotency", () => {
   it("installs connector plugins on approval using the normalized install payload", async () => {
     const dbStub = createDbStub(
       [[{
+        ...createApproval("pending"),
+        type: "install_connector_plugin",
+        payload: {
+          localPath: "D:/plugins/linear",
+          version: "1.2.3",
+        },
+      }], [{
         ...createApproval("pending"),
         type: "install_connector_plugin",
         payload: {
@@ -139,5 +146,28 @@ describe("approvalService resolution idempotency", () => {
       isLocalPath: true,
       source: "local_path",
     });
+  });
+
+  it("does not mark a connector install approval approved when installation fails", async () => {
+    const dbStub = createDbStub(
+      [[{
+        ...createApproval("pending"),
+        type: "install_connector_plugin",
+        payload: {
+          localPath: "D:/plugins/missing",
+        },
+      }]],
+      [],
+    );
+    mockInstallConnectorPlugin.mockRejectedValueOnce(new Error("Local plugin path does not exist"));
+
+    const svc = approvalService(dbStub.db as any, {
+      installConnectorPlugin: mockInstallConnectorPlugin,
+    });
+
+    await expect(svc.approve("approval-1", "board", "install it")).rejects.toThrow(
+      "Local plugin path does not exist",
+    );
+    expect(dbStub.returning).not.toHaveBeenCalled();
   });
 });

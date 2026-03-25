@@ -162,6 +162,17 @@ export interface HostServices {
     getWorkspaceForIssue(params: WorkerToHostMethods["projects.getWorkspaceForIssue"][0]): Promise<WorkerToHostMethods["projects.getWorkspaceForIssue"][1]>;
   };
 
+  /** Provides `routines.*`. */
+  routines: {
+    list(params: WorkerToHostMethods["routines.list"][0]): Promise<WorkerToHostMethods["routines.list"][1]>;
+    get(params: WorkerToHostMethods["routines.get"][0]): Promise<WorkerToHostMethods["routines.get"][1]>;
+    create(params: WorkerToHostMethods["routines.create"][0]): Promise<WorkerToHostMethods["routines.create"][1]>;
+    update(params: WorkerToHostMethods["routines.update"][0]): Promise<WorkerToHostMethods["routines.update"][1]>;
+    listRuns(params: WorkerToHostMethods["routines.listRuns"][0]): Promise<WorkerToHostMethods["routines.listRuns"][1]>;
+    createTrigger(params: WorkerToHostMethods["routines.createTrigger"][0]): Promise<WorkerToHostMethods["routines.createTrigger"][1]>;
+    run(params: WorkerToHostMethods["routines.run"][0]): Promise<WorkerToHostMethods["routines.run"][1]>;
+  };
+
   /** Provides `issues.list`, `issues.get`, `issues.create`, `issues.update`, `issues.listComments`, `issues.createComment`. */
   issues: {
     list(params: WorkerToHostMethods["issues.list"][0]): Promise<WorkerToHostMethods["issues.list"][1]>;
@@ -206,6 +217,13 @@ export interface HostServices {
     get(params: WorkerToHostMethods["issues.documents.get"][0]): Promise<WorkerToHostMethods["issues.documents.get"][1]>;
     upsert(params: WorkerToHostMethods["issues.documents.upsert"][0]): Promise<WorkerToHostMethods["issues.documents.upsert"][1]>;
     delete(params: WorkerToHostMethods["issues.documents.delete"][0]): Promise<WorkerToHostMethods["issues.documents.delete"][1]>;
+  };
+
+  /** Provides `issues.workProducts.list`, `issues.workProducts.create`, `issues.workProducts.update`. */
+  issueWorkProducts: {
+    list(params: WorkerToHostMethods["issues.workProducts.list"][0]): Promise<WorkerToHostMethods["issues.workProducts.list"][1]>;
+    create(params: WorkerToHostMethods["issues.workProducts.create"][0]): Promise<WorkerToHostMethods["issues.workProducts.create"][1]>;
+    update(params: WorkerToHostMethods["issues.workProducts.update"][0]): Promise<WorkerToHostMethods["issues.workProducts.update"][1]>;
   };
 
   /** Provides `agents.list`, `agents.get`, `agents.pause`, `agents.resume`, `agents.invoke`. */
@@ -335,6 +353,13 @@ const METHOD_CAPABILITY_MAP: Record<WorkerToHostMethodName, PluginCapability | n
   "projects.listWorkspaces": "project.workspaces.read",
   "projects.getPrimaryWorkspace": "project.workspaces.read",
   "projects.getWorkspaceForIssue": "project.workspaces.read",
+  "routines.list": "routines.read",
+  "routines.get": "routines.read",
+  "routines.listRuns": "routines.read",
+  "routines.create": "routines.write",
+  "routines.update": "routines.write",
+  "routines.createTrigger": "routines.write",
+  "routines.run": "routines.write",
 
   // Issues
   "issues.list": "issues.read",
@@ -365,6 +390,9 @@ const METHOD_CAPABILITY_MAP: Record<WorkerToHostMethodName, PluginCapability | n
   "issues.documents.get": "issue.documents.read",
   "issues.documents.upsert": "issue.documents.write",
   "issues.documents.delete": "issue.documents.write",
+  "issues.workProducts.list": "issues.read",
+  "issues.workProducts.create": "issues.update",
+  "issues.workProducts.update": "issues.update",
 
   // Agents
   "agents.list": "agents.read",
@@ -540,6 +568,29 @@ export function createHostClientHandlers(
       return services.projects.getWorkspaceForIssue(params);
     }),
 
+    // Routines
+    "routines.list": gated("routines.list", async (params) => {
+      return services.routines.list(params);
+    }),
+    "routines.get": gated("routines.get", async (params) => {
+      return services.routines.get(params);
+    }),
+    "routines.create": gated("routines.create", async (params) => {
+      return services.routines.create(params);
+    }),
+    "routines.update": gated("routines.update", async (params) => {
+      return services.routines.update(params);
+    }),
+    "routines.listRuns": gated("routines.listRuns", async (params) => {
+      return services.routines.listRuns(params);
+    }),
+    "routines.createTrigger": gated("routines.createTrigger", async (params) => {
+      return services.routines.createTrigger(params);
+    }),
+    "routines.run": gated("routines.run", async (params) => {
+      return services.routines.run(params);
+    }),
+
     // Issues
     "issues.list": gated("issues.list", async (params) => {
       return services.issues.list(params);
@@ -620,6 +671,15 @@ export function createHostClientHandlers(
     }),
     "issues.documents.delete": gated("issues.documents.delete", async (params) => {
       return services.issueDocuments.delete(params);
+    }),
+    "issues.workProducts.list": gated("issues.workProducts.list", async (params) => {
+      return services.issueWorkProducts.list(params);
+    }),
+    "issues.workProducts.create": gated("issues.workProducts.create", async (params) => {
+      return services.issueWorkProducts.create(params);
+    }),
+    "issues.workProducts.update": gated("issues.workProducts.update", async (params) => {
+      return services.issueWorkProducts.update(params);
     }),
 
     // Agents

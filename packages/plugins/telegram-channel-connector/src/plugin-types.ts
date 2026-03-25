@@ -11,11 +11,13 @@ export type LegacyTelegramConfig = {
 
 export type TelegramPublishingSettings = {
   botTokenSecretRef: string;
-  defaultChatId: string;
-  defaultPublicHandle: string;
-  defaultParseMode: TelegramParseMode;
-  defaultDisableLinkPreview: boolean;
-  defaultDisableNotification: boolean;
+  defaultChatId?: string;
+  defaultPublicHandle?: string;
+  defaultParseMode?: TelegramParseMode;
+  defaultDisableLinkPreview?: boolean;
+  defaultDisableNotification?: boolean;
+  destinations: TelegramDestination[];
+  defaultDestinationId: string;
 };
 
 export type TelegramTaskBotSettings = {
@@ -25,9 +27,40 @@ export type TelegramTaskBotSettings = {
   claimCodeTtlMinutes: number;
 };
 
+export type TelegramIngestionSourceMode = "channel_posts" | "discussion_replies" | "both";
+
+export type TelegramDestination = {
+  id: string;
+  label: string;
+  chatId: string;
+  publicHandle: string;
+  parseMode: TelegramParseMode;
+  disableLinkPreview: boolean;
+  disableNotification: boolean;
+  enabled: boolean;
+  isDefault: boolean;
+};
+
+export type TelegramIngestionSource = {
+  id: string;
+  label: string;
+  chatId: string;
+  publicHandle: string;
+  discussionChatId: string;
+  mode: TelegramIngestionSourceMode;
+  enabled: boolean;
+  projectId: string;
+  assigneeAgentId: string;
+  routineId: string;
+  issueTemplateKey: string;
+};
+
 export type TelegramCompanySettings = {
   publishing: TelegramPublishingSettings;
   taskBot: TelegramTaskBotSettings;
+  ingestion: {
+    sources: TelegramIngestionSource[];
+  };
 };
 
 export type TelegramPublication = {
@@ -46,6 +79,7 @@ export type TelegramPublication = {
   parseMode: string | null;
   sentAt: string;
   summary: string;
+  destinationId: string | null;
 };
 
 export type TelegramLinkedChat = {
@@ -67,10 +101,15 @@ export type TelegramBotHealth = {
   lastNotificationAt: string | null;
   lastApprovalNotificationAt: string | null;
   lastControlPlaneNotificationAt: string | null;
+  lastIngestionAt: string | null;
+  lastPublishDispatchAt: string | null;
   openApprovalCount: number;
   revisionApprovalCount: number;
   openJoinRequestCount: number;
   openBudgetIncidentCount: number;
+  scheduledPublishCount: number;
+  failedPublishCount: number;
+  ingestedStoryCount: number;
   error: string | null;
 };
 
@@ -93,6 +132,48 @@ export type TelegramApprovalThreadLink = TelegramThreadLinkRecord & {
   resourceType: "approval";
   resourceId: string;
   approvalId: string;
+};
+
+export type TelegramPublicationJobStatus =
+  | "pending"
+  | "scheduled"
+  | "sending"
+  | "published"
+  | "failed"
+  | "cancelled";
+
+export type TelegramPublicationJob = {
+  id?: string;
+  companyId: string;
+  issueId: string;
+  approvalId: string | null;
+  destinationId: string;
+  publishAt: string;
+  status: TelegramPublicationJobStatus;
+  attemptCount: number;
+  lastAttemptAt: string | null;
+  failureReason: string | null;
+  publishedMessageId: number | null;
+  publishedUrl: string | null;
+  createdByUserId: string | null;
+  createdByAgentId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TelegramSourceMessageRecord = {
+  companyId: string;
+  sourceId: string;
+  chatId: string;
+  messageId: number;
+  routineRunId: string | null;
+  issueId: string | null;
+  messageDate: string | null;
+  discussionChatId: string | null;
+  excerpt: string | null;
+  hash: string | null;
+  direction: "inbound";
+  linkedAt: string;
 };
 
 export type TelegramInboxSummary = {
@@ -126,6 +207,8 @@ export type TelegramOverview = {
   };
   companySettings: TelegramCompanySettings;
   legacyConfigDetected: boolean;
+  destinations: TelegramDestination[];
+  sources: TelegramIngestionSource[];
   linkedChats: TelegramLinkedChat[];
   botHealth: TelegramBotHealth | null;
   lastValidation?: {
@@ -144,6 +227,8 @@ export type TelegramOverview = {
   } | null;
   lastPublication?: TelegramPublication | null;
   recentPublications: TelegramPublication[];
+  scheduledPublications: TelegramPublicationJob[];
+  recentIngestedStories: TelegramSourceMessageRecord[];
   blockedTaskCount: number;
   openTaskCount: number;
   reviewTaskCount: number;
@@ -153,4 +238,7 @@ export type TelegramOverview = {
   myRevisionApprovalCount: number;
   pendingJoinRequestCount: number;
   openBudgetIncidentCount: number;
+  scheduledPublishCount: number;
+  failedPublishCount: number;
+  ingestedStoryCount: number;
 };

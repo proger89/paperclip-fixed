@@ -1,10 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createTestHarness } from "@paperclipai/plugin-sdk/testing";
 import manifest from "../src/manifest.js";
 import plugin from "../src/worker.js";
 import { DEFAULT_COMPANY_SETTINGS } from "../src/constants.js";
 
 const originalFetch = globalThis.fetch;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const packageRoot = path.resolve(__dirname, "..");
 
 function enabledCompanySettings(companyId: string) {
   return {
@@ -22,6 +27,9 @@ function enabledCompanySettings(companyId: string) {
         enabled: true,
         pollingEnabled: true,
       },
+      ingestion: {
+        ...DEFAULT_COMPANY_SETTINGS.ingestion,
+      },
     },
     lastError: null,
     createdAt: "2026-03-25T10:00:00.000Z",
@@ -33,6 +41,23 @@ describe("telegram channel connector plugin", () => {
   afterEach(() => {
     globalThis.fetch = originalFetch;
     vi.restoreAllMocks();
+  });
+
+  it("keeps install metadata aligned with built manifest and worker entrypoints", () => {
+    const packageJson = JSON.parse(
+      readFileSync(path.join(packageRoot, "package.json"), "utf-8"),
+    ) as {
+      paperclipPlugin?: {
+        manifest?: string;
+        worker?: string;
+      };
+    };
+
+    expect(packageJson.paperclipPlugin?.manifest).toBeTruthy();
+    expect(packageJson.paperclipPlugin?.worker).toBeTruthy();
+    expect(existsSync(path.resolve(packageRoot, packageJson.paperclipPlugin!.manifest!))).toBe(true);
+    expect(existsSync(path.resolve(packageRoot, packageJson.paperclipPlugin!.worker!))).toBe(true);
+    expect(existsSync(path.resolve(packageRoot, manifest.entrypoints.worker))).toBe(true);
   });
 
   it("tests Telegram connectivity with getMe and getChat", async () => {
@@ -160,6 +185,214 @@ describe("telegram channel connector plugin", () => {
         name: "telegram.publish",
       }),
     ]));
+  });
+
+  it("schedules and dispatches Telegram publication jobs into issue work products", async () => {
+    const sentMessages: Array<{ text?: string }> = [];
+    const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
+      if (!input.includes("/sendMessage")) {
+        throw new Error(`Unexpected fetch: ${input}`);
+      }
+      const body = init?.body ? JSON.parse(String(init.body)) as { text?: string } : {};
+      sentMessages.push(body);
+      return new Response(JSON.stringify({
+        ok: true,
+        result: {
+          message_id: 91,
+          date: 1710000500,
+          text: body.text ?? "",
+          chat: {
+            id: -1001234567890,
+            type: "channel",
+            title: "Paperclip News",
+            username: "paperclip_news",
+          },
+        },
+      }));
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const settings = enabledCompanySettings("company-1");
+    settings.settingsJson.publishing.destinations = [{
+      id: "dest-news",
+      label: "Paperclip News",
+      chatId: "@paperclip_news",
+      publicHandle: "paperclip_news",
+      parseMode: "",
+      disableLinkPreview: false,
+      disableNotification: false,
+      enabled: true,
+      isDefault: true,
+    }];
+    settings.settingsJson.publishing.defaultDestinationId = "dest-news";
+
+    const harness = createTestHarness({ manifest });
+    harness.seed({
+      companySettings: [settings],
+      approvals: [
+        {
+          id: "approval-scheduled",
+          companyId: "company-1",
+          type: "publish_content",
+          requestedByAgentId: null,
+          requestedByUserId: "user-1",
+          status: "approved",
+          payload: {
+            channel: "telegram",
+            destinationId: "dest-news",
+            destinationLabel: "Paperclip News",
+          },
+          decisionNote: null,
+          decidedByUserId: "user-2",
+          decidedAt: new Date("2026-03-25T09:10:00.000Z"),
+          createdAt: new Date("2026-03-25T09:00:00.000Z"),
+          updatedAt: new Date("2026-03-25T09:10:00.000Z"),
+        },
+      ],
+    });
+
+    await plugin.definition.setup(harness.ctx);
+    const issue = await harness.ctx.issues.create({
+      companyId: "company-1",
+      title: "Scheduled Telegram publish",
+      status: "todo",
+    });
+    await harness.ctx.issues.documents.upsert({
+      issueId: issue.id,
+      companyId: "company-1",
+      key: "telegram-final-copy",
+      title: "Telegram Final Copy",
+      format: "markdown",
+      body: "Scheduled publish body",
+    });
+
+    const job = await harness.performAction<{ id: string; status: string }>("schedule-message", {
+      companyId: "company-1",
+      issueId: issue.id,
+      approvalId: "approval-scheduled",
+      destinationId: "dest-news",
+      publishAt: "2020-01-01T00:00:00.000Z",
+      createdByUserId: "user-1",
+    });
+
+    const queuedJobs = await harness.getData<Array<{ id: string; status: string }>>("issue-publication-jobs", {
+      companyId: "company-1",
+      issueId: issue.id,
+    });
+    expect(queuedJobs).toEqual([
+      expect.objectContaining({
+        id: job.id,
+        status: "scheduled",
+      }),
+    ]);
+
+    await harness.runJob("dispatch-telegram-publications");
+    await harness.runJob("dispatch-telegram-publications");
+
+    const publications = await harness.getData<Array<{ summary: string; destinationId: string | null }>>("issue-publications", {
+      companyId: "company-1",
+      issueId: issue.id,
+    });
+    expect(publications).toHaveLength(1);
+    expect(publications[0]?.summary).toBe("Scheduled publish body");
+    expect(publications[0]?.destinationId).toBe("dest-news");
+    expect(sentMessages).toHaveLength(1);
+    expect(sentMessages[0]?.text).toBe("Scheduled publish body");
+
+    const workProducts = await harness.ctx.issues.workProducts.list(issue.id, "company-1");
+    expect(workProducts).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        provider: "telegram",
+        status: "approved",
+      }),
+    ]));
+  });
+
+  it("ingests configured Telegram channel posts into source records and routine runs", async () => {
+    const fetchMock = vi.fn(async (input: string, init?: RequestInit) => {
+      if (input.includes("/getUpdates")) {
+        const body = init?.body ? JSON.parse(String(init.body)) as { offset?: number } : {};
+        if ((body.offset ?? 0) <= 0) {
+          return new Response(JSON.stringify({
+            ok: true,
+            result: [
+              {
+                update_id: 401,
+                channel_post: {
+                  message_id: 51,
+                  date: 1710004000,
+                  text: "Breaking: Telegram roadmap shipped.",
+                  chat: {
+                    id: -100200300,
+                    type: "channel",
+                    title: "Paperclip Signals",
+                    username: "paperclip_signals",
+                  },
+                },
+              },
+            ],
+          }));
+        }
+        return new Response(JSON.stringify({ ok: true, result: [] }));
+      }
+      throw new Error(`Unexpected fetch: ${input}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const settings = enabledCompanySettings("company-1");
+    settings.settingsJson.taskBot.enabled = false;
+    settings.settingsJson.ingestion.sources = [{
+      id: "source-signals",
+      label: "Signals Feed",
+      chatId: "-100200300",
+      publicHandle: "paperclip_signals",
+      discussionChatId: "",
+      mode: "channel_posts",
+      enabled: true,
+      projectId: "project-1",
+      assigneeAgentId: "agent-1",
+      routineId: "",
+      issueTemplateKey: "",
+    }];
+
+    const harness = createTestHarness({ manifest });
+    harness.seed({
+      companySettings: [settings],
+    });
+
+    await plugin.definition.setup(harness.ctx);
+    await harness.runJob("sync-telegram");
+    await harness.runJob("sync-telegram");
+
+    const overview = await harness.getData<{
+      sources: Array<{ id: string }>;
+      recentIngestedStories: Array<{ sourceId: string; chatId: string; messageId: number }>;
+      ingestedStoryCount: number;
+      botHealth: { lastIngestionAt: string | null } | null;
+    }>("overview", {
+      companyId: "company-1",
+    });
+    expect(overview.sources).toEqual([
+      expect.objectContaining({ id: "source-signals" }),
+    ]);
+    expect(overview.recentIngestedStories).toEqual([
+      expect.objectContaining({
+        sourceId: "source-signals",
+        chatId: "-100200300",
+        messageId: 51,
+      }),
+    ]);
+    expect(overview.ingestedStoryCount).toBe(1);
+    expect(overview.botHealth?.lastIngestionAt).not.toBeNull();
+
+    const routines = await harness.ctx.routines.list({ companyId: "company-1", limit: 20, offset: 0 });
+    expect(routines).toHaveLength(1);
+    const runs = await harness.ctx.routines.listRuns(routines[0].id, "company-1", 10);
+    expect(runs).toEqual([
+      expect.objectContaining({
+        idempotencyKey: "telegram:-100200300:51",
+      }),
+    ]);
   });
 
   it("links a Telegram private chat via /start code and persists update offsets in company state", async () => {

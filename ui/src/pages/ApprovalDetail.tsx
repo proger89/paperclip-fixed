@@ -3,9 +3,11 @@ import { Link, useNavigate, useParams, useSearchParams } from "@/lib/router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { approvalsApi } from "../api/approvals";
 import { agentsApi } from "../api/agents";
+import { pluginsApi } from "../api/plugins";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
+import { getPluginCompanyPagePath, getPluginPageLinkLabel } from "../lib/plugin-pages";
 import { StatusBadge } from "../components/StatusBadge";
 import { Identity } from "../components/Identity";
 import { approvalLabel, typeIcon, defaultTypeIcon, ApprovalPayloadRenderer } from "../components/ApprovalPayload";
@@ -17,8 +19,8 @@ import type { ApprovalComment } from "@paperclipai/shared";
 import { MarkdownBody } from "../components/MarkdownBody";
 
 export function ApprovalDetail() {
-  const { approvalId } = useParams<{ approvalId: string }>();
-  const { selectedCompanyId, setSelectedCompanyId } = useCompany();
+  const { approvalId, companyPrefix } = useParams<{ approvalId: string; companyPrefix?: string }>();
+  const { selectedCompany, selectedCompanyId, setSelectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -51,6 +53,11 @@ export function ApprovalDetail() {
     queryFn: () => agentsApi.list(resolvedCompanyId ?? ""),
     enabled: !!resolvedCompanyId,
   });
+  const { data: installedPlugins } = useQuery({
+    queryKey: queryKeys.plugins.all,
+    queryFn: () => pluginsApi.list(),
+    enabled: approval?.type === "install_connector_plugin",
+  });
 
   useEffect(() => {
     if (!approval?.companyId || approval.companyId === selectedCompanyId) return;
@@ -81,7 +88,11 @@ export function ApprovalDetail() {
         queryKey: queryKeys.approvals.list(approval.companyId, "pending"),
       });
       queryClient.invalidateQueries({ queryKey: queryKeys.agents.list(approval.companyId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard(approval.companyId) });
     }
+    queryClient.invalidateQueries({ queryKey: queryKeys.plugins.all });
+    queryClient.invalidateQueries({ queryKey: queryKeys.plugins.uiContributions });
+    queryClient.invalidateQueries({ queryKey: queryKeys.plugins.examples });
   };
 
   const approveMutation = useMutation({
@@ -146,13 +157,35 @@ export function ApprovalDetail() {
 
   const payload = approval.payload as Record<string, unknown>;
   const linkedAgentId = typeof payload.agentId === "string" ? payload.agentId : null;
+  const installedConnectorPlugin =
+    approval.type === "install_connector_plugin"
+      ? (installedPlugins ?? []).find((plugin) => {
+          const expectedPluginKey = typeof payload.pluginKey === "string" ? payload.pluginKey : null;
+          const expectedPackage = typeof payload.packageName === "string" ? payload.packageName : null;
+          return plugin.pluginKey === expectedPluginKey || plugin.packageName === expectedPackage;
+        }) ?? null
+      : null;
+  const installedConnectorPluginPagePath = getPluginCompanyPagePath(
+    installedConnectorPlugin,
+    companyPrefix ?? selectedCompany?.issuePrefix ?? null,
+  );
   const isActionable = approval.status === "pending" || approval.status === "revision_requested";
   const isBudgetApproval = approval.type === "budget_override_required";
   const TypeIcon = typeIcon[approval.type] ?? defaultTypeIcon;
   const showApprovedBanner = searchParams.get("resolved") === "approved" && approval.status === "approved";
   const primaryLinkedIssue = linkedIssues?.[0] ?? null;
   const resolvedCta =
-    primaryLinkedIssue
+    approval.type === "install_connector_plugin" && installedConnectorPluginPagePath
+      ? {
+          label: getPluginPageLinkLabel(installedConnectorPlugin),
+          to: installedConnectorPluginPagePath,
+        }
+      : approval.type === "install_connector_plugin" && installedConnectorPlugin
+        ? {
+            label: "Open plugin settings",
+            to: `/instance/settings/plugins/${installedConnectorPlugin.id}`,
+          }
+        : primaryLinkedIssue
       ? {
           label:
             (linkedIssues?.length ?? 0) > 1

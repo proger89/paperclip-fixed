@@ -25,9 +25,13 @@ import type {
   TelegramBotHealth,
   TelegramBudgetWizardState,
   TelegramCompanySettings,
+  TelegramDestination,
+  TelegramIngestionSource,
   TelegramLinkedChat,
   TelegramOverview,
   TelegramPublication,
+  TelegramPublicationJob,
+  TelegramSourceMessageRecord,
 } from "./plugin-types.js";
 import {
   companySettingsFromLegacyConfig,
@@ -38,6 +42,8 @@ import {
 
 const ENTITY_TYPES = {
   publication: "telegram-message",
+  publicationJob: "telegram-publication-job",
+  sourceMessage: "telegram-source-message",
   linkedChat: "telegram-linked-chat",
   claimCode: "telegram-claim-code",
   threadLink: "telegram-thread-link",
@@ -116,6 +122,8 @@ type TelegramUpdate = {
   update_id: number;
   message?: TelegramMessage;
   edited_message?: TelegramMessage;
+  channel_post?: TelegramMessage;
+  edited_channel_post?: TelegramMessage;
   callback_query?: TelegramCallbackQuery;
 };
 
@@ -205,6 +213,10 @@ function toIsoString(value: Date | string | null | undefined): string | null {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function formatTimestamp(value: Date | string | null | undefined): string {
+  return toIsoString(value) ?? "unknown";
 }
 
 function getDisplayName(user: TelegramUser | undefined): string {
@@ -409,12 +421,443 @@ function getBotHealthDefaults(previous: TelegramBotHealth | null | undefined): T
     lastNotificationAt: previous?.lastNotificationAt ?? null,
     lastApprovalNotificationAt: previous?.lastApprovalNotificationAt ?? null,
     lastControlPlaneNotificationAt: previous?.lastControlPlaneNotificationAt ?? null,
+    lastIngestionAt: previous?.lastIngestionAt ?? null,
+    lastPublishDispatchAt: previous?.lastPublishDispatchAt ?? null,
     openApprovalCount: previous?.openApprovalCount ?? 0,
     revisionApprovalCount: previous?.revisionApprovalCount ?? 0,
     openJoinRequestCount: previous?.openJoinRequestCount ?? 0,
     openBudgetIncidentCount: previous?.openBudgetIncidentCount ?? 0,
+    scheduledPublishCount: previous?.scheduledPublishCount ?? 0,
+    failedPublishCount: previous?.failedPublishCount ?? 0,
+    ingestedStoryCount: previous?.ingestedStoryCount ?? 0,
     error: previous?.error ?? null,
   };
+}
+
+function getConfiguredDestinations(settings: TelegramCompanySettings): TelegramDestination[] {
+  return [...settings.publishing.destinations]
+    .filter((destination) => destination.chatId || destination.publicHandle)
+    .sort((left, right) => Number(right.isDefault) - Number(left.isDefault) || left.label.localeCompare(right.label));
+}
+
+function getEnabledDestinations(settings: TelegramCompanySettings): TelegramDestination[] {
+  return getConfiguredDestinations(settings).filter((destination) => destination.enabled);
+}
+
+function getDefaultDestination(settings: TelegramCompanySettings): TelegramDestination | null {
+  const destinations = getEnabledDestinations(settings);
+  const explicit = destinations.find((destination) => destination.id === settings.publishing.defaultDestinationId);
+  return explicit ?? destinations.find((destination) => destination.isDefault) ?? destinations[0] ?? null;
+}
+
+function getConfiguredSources(settings: TelegramCompanySettings): TelegramIngestionSource[] {
+  return [...settings.ingestion.sources]
+    .filter((source) => source.chatId)
+    .sort((left, right) => left.label.localeCompare(right.label));
+}
+
+function findDestinationById(settings: TelegramCompanySettings, destinationId: string | null | undefined): TelegramDestination | null {
+  if (!destinationId) return null;
+  return getConfiguredDestinations(settings).find((destination) => destination.id === destinationId) ?? null;
+}
+
+function resolveDestinationForParams(
+  settings: TelegramCompanySettings,
+  params: Record<string, unknown>,
+): TelegramDestination | null {
+  const explicitDestination = findDestinationById(settings, trimToNull(params.destinationId));
+  if (explicitDestination) return explicitDestination;
+
+  const chatId = trimToNull(params.chatId);
+  const publicHandle = sanitizePublicHandle(trimToNull(params.publicHandle));
+  if (chatId || publicHandle) {
+    return {
+      id: trimToNull(params.destinationId) ?? "ad-hoc",
+      label: trimToNull(params.destinationLabel) ?? publicHandle ?? chatId ?? "Telegram destination",
+      chatId: chatId ?? "",
+      publicHandle: publicHandle ?? "",
+      parseMode: (trimToNull(params.parseMode) ?? "") as TelegramDestination["parseMode"],
+      disableLinkPreview: params.disableLinkPreview === true,
+      disableNotification: params.disableNotification === true,
+      enabled: true,
+      isDefault: false,
+    };
+  }
+  return getDefaultDestination(settings);
+}
+
+async function getRuntimeSourceRoutineId(
+  ctx: PluginContext,
+  companyId: string,
+  sourceId: string,
+): Promise<string | null> {
+  return await getCompanyState<string>(ctx, companyId, `source-routine:${sourceId}`);
+}
+
+async function setRuntimeSourceRoutineId(
+  ctx: PluginContext,
+  companyId: string,
+  sourceId: string,
+  routineId: string,
+): Promise<void> {
+  await setCompanyState(ctx, companyId, `source-routine:${sourceId}`, routineId);
+}
+
+async function listPublicationJobs(
+  ctx: PluginContext,
+  companyId: string,
+  input?: { issueId?: string; limit?: number },
+): Promise<TelegramPublicationJob[]> {
+  const entities = await ctx.entities.list({
+    entityType: ENTITY_TYPES.publicationJob,
+    ...(input?.issueId
+      ? {
+        scopeKind: "issue" as const,
+        scopeId: input.issueId,
+      }
+      : {}),
+    limit: 500,
+    offset: 0,
+  });
+  return entities
+    .map((entity) => {
+      const record = entity.data as TelegramPublicationJob;
+      return {
+        ...record,
+        id: record.id ?? entity.id,
+      };
+    })
+    .filter((entry) => entry.companyId === companyId && (!input?.issueId || entry.issueId === input.issueId))
+    .sort((left, right) => right.publishAt.localeCompare(left.publishAt))
+    .slice(0, input?.limit ?? 100);
+}
+
+async function getPublicationJobById(
+  ctx: PluginContext,
+  companyId: string,
+  jobId: string,
+): Promise<TelegramPublicationJob | null> {
+  const jobs = await listPublicationJobs(ctx, companyId);
+  return jobs.find((job) => job.id === jobId) ?? null;
+}
+
+async function upsertPublicationJob(
+  ctx: PluginContext,
+  record: TelegramPublicationJob,
+): Promise<TelegramPublicationJob> {
+  const stableId = record.id ?? randomUUID();
+  const entity = await ctx.entities.upsert({
+    entityType: ENTITY_TYPES.publicationJob,
+    scopeKind: "issue",
+    scopeId: record.issueId,
+    externalId: stableId,
+    title: `Telegram publish job for ${record.issueId}`,
+    status: record.status,
+    data: {
+      ...record,
+      id: stableId,
+    },
+  });
+  return {
+    ...record,
+    id: stableId ?? entity.id,
+  };
+}
+
+function isQueuedPublicationStatus(status: TelegramPublicationJob["status"]) {
+  return status === "pending" || status === "scheduled" || status === "sending";
+}
+
+function normalizePublishAt(value: unknown): string {
+  const raw = trimToNull(value);
+  if (!raw) return new Date().toISOString();
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
+}
+
+async function loadTelegramPublicationDocuments(
+  ctx: PluginContext,
+  issueId: string,
+  companyId: string,
+): Promise<{
+  text: string | null;
+  sourceDocumentId: string | null;
+  draftDocumentId: string | null;
+  finalDocumentId: string | null;
+}> {
+  const [sourceDocument, draftDocument, finalDocument] = await Promise.all([
+    ctx.issues.documents.get(issueId, "telegram-source", companyId),
+    ctx.issues.documents.get(issueId, "telegram-draft", companyId),
+    ctx.issues.documents.get(issueId, "telegram-final-copy", companyId),
+  ]);
+  const text = trimToNull(finalDocument?.body) ?? trimToNull(draftDocument?.body);
+  return {
+    text,
+    sourceDocumentId: sourceDocument?.id ?? null,
+    draftDocumentId: draftDocument?.id ?? null,
+    finalDocumentId: finalDocument?.id ?? draftDocument?.id ?? null,
+  };
+}
+
+async function upsertTelegramPublishedWorkProduct(
+  ctx: PluginContext,
+  issue: Issue,
+  publication: TelegramPublication,
+  documents: {
+    sourceDocumentId: string | null;
+    draftDocumentId: string | null;
+    finalDocumentId: string | null;
+  },
+): Promise<void> {
+  const existingProducts = await ctx.issues.workProducts.list(issue.id, issue.companyId);
+  const existing = existingProducts.find((product) =>
+    product.provider.toLowerCase() === "telegram" && product.type === "artifact",
+  ) ?? null;
+  const payload = {
+    type: "artifact" as const,
+    provider: "telegram",
+    title: issue.identifier ? `Telegram post for ${issue.identifier}` : `Telegram post for ${issue.title}`,
+    status: "approved" as const,
+    reviewState: "approved" as const,
+    isPrimary: true,
+    healthStatus: "healthy" as const,
+    url: publication.url,
+    externalId: publication.externalId,
+    summary: publication.summary,
+    metadata: {
+      publication: {
+        channel: "telegram",
+        destinationId: publication.destinationId,
+        destinationLabel: publication.destinationLabel,
+        approvalId: publication.approvalId,
+        messageId: publication.messageId,
+        chatId: publication.chatId,
+        sentAt: publication.sentAt,
+        sourceDocumentId: documents.sourceDocumentId,
+        draftDocumentId: documents.draftDocumentId,
+        finalDocumentId: documents.finalDocumentId,
+      },
+      publicHandle: publication.publicHandle,
+      parseMode: publication.parseMode,
+      chatTitle: publication.chatTitle,
+    },
+  };
+  if (existing) {
+    await ctx.issues.workProducts.update(existing.id, issue.companyId, payload);
+    return;
+  }
+  await ctx.issues.workProducts.create({
+    issueId: issue.id,
+    companyId: issue.companyId,
+    projectId: issue.projectId,
+    ...payload,
+  });
+}
+
+async function noteBotHealth(
+  ctx: PluginContext,
+  companyId: string,
+  patch: Partial<TelegramBotHealth>,
+): Promise<void> {
+  const current = getBotHealthDefaults(await getBotHealth(ctx, companyId));
+  await setBotHealth(ctx, companyId, {
+    ...current,
+    ...patch,
+  });
+}
+
+async function dispatchPublicationJob(
+  ctx: PluginContext,
+  effective: EffectiveCompanySettings,
+  token: string,
+  job: TelegramPublicationJob,
+): Promise<TelegramPublicationJob> {
+  const now = new Date().toISOString();
+  const fail = async (reason: string) => {
+    const failed = await upsertPublicationJob(ctx, {
+      ...job,
+      status: "failed",
+      failureReason: reason,
+      lastAttemptAt: now,
+      attemptCount: job.attemptCount + 1,
+      updatedAt: now,
+    });
+    await ctx.activity.log({
+      companyId: job.companyId,
+      entityType: "issue",
+      entityId: job.issueId,
+      message: `Telegram publication job failed: ${reason}`,
+      metadata: {
+        pluginId: PLUGIN_ID,
+        jobId: job.id,
+        destinationId: job.destinationId,
+      },
+    });
+    return failed;
+  };
+
+  const destination = findDestinationById(effective.settings, job.destinationId);
+  if (!destination) {
+    return await fail(`Configured Telegram destination "${job.destinationId}" no longer exists.`);
+  }
+  if (!destination.enabled) {
+    return await fail(`Configured Telegram destination "${destination.label}" is disabled.`);
+  }
+  if (!job.approvalId) {
+    return await fail("Telegram publication job is missing an approved publish_content approval.");
+  }
+  const approval = await ctx.approvals.get(job.approvalId);
+  if (
+    !approval
+    || approval.companyId !== job.companyId
+    || approval.status !== "approved"
+    || approval.type !== "publish_content"
+    || trimToNull(approval.payload.channel)?.toLowerCase() !== "telegram"
+  ) {
+    return await fail("Telegram publication job requires an approved publish_content approval.");
+  }
+  const issue = await ctx.issues.get(job.issueId, job.companyId);
+  if (!issue) {
+    return await fail("Linked issue for Telegram publication job was not found.");
+  }
+  const documents = await loadTelegramPublicationDocuments(ctx, issue.id, issue.companyId);
+  if (!documents.text) {
+    return await fail("Telegram publication job could not find telegram-final-copy or telegram-draft content.");
+  }
+
+  const sending = await upsertPublicationJob(ctx, {
+    ...job,
+    status: "sending",
+    failureReason: null,
+    lastAttemptAt: now,
+    attemptCount: job.attemptCount + 1,
+    updatedAt: now,
+  });
+
+  try {
+    const publication = await publishTelegramMessage(ctx, job.companyId, {
+      issueId: issue.id,
+      issueIdentifier: issue.identifier,
+      issueTitle: issue.title,
+      approvalId: approval.id,
+      destinationId: destination.id,
+      destinationLabel: destination.label,
+      text: documents.text,
+    });
+    await upsertTelegramPublishedWorkProduct(ctx, issue, publication, documents);
+    const published = await upsertPublicationJob(ctx, {
+      ...sending,
+      status: "published",
+      failureReason: null,
+      publishedMessageId: publication.messageId,
+      publishedUrl: publication.url,
+      updatedAt: new Date().toISOString(),
+    });
+    await ctx.activity.log({
+      companyId: job.companyId,
+      entityType: "issue",
+      entityId: job.issueId,
+      message: `Scheduled Telegram publication delivered to ${publication.destinationLabel}`,
+      metadata: {
+        pluginId: PLUGIN_ID,
+        jobId: job.id,
+        approvalId: approval.id,
+        destinationId: destination.id,
+        publicationExternalId: publication.externalId,
+        url: publication.url,
+      },
+    });
+    await ctx.metrics.write("telegram.publish_job.dispatched", 1, {
+      companyId: job.companyId,
+      destinationId: destination.id,
+      status: "published",
+    });
+    return published;
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    const failed = await upsertPublicationJob(ctx, {
+      ...sending,
+      status: "failed",
+      failureReason: reason,
+      updatedAt: new Date().toISOString(),
+    });
+    await ctx.metrics.write("telegram.publish_job.dispatched", 1, {
+      companyId: job.companyId,
+      destinationId: destination.id,
+      status: "failed",
+    });
+    return failed;
+  }
+}
+
+async function dispatchPublicationJobsForCompany(
+  ctx: PluginContext,
+  effective: EffectiveCompanySettings,
+): Promise<void> {
+  const token = await resolveBotTokenForSettings(ctx, effective.settings);
+  const nowIso = new Date().toISOString();
+  const dueJobs = (await listPublicationJobs(ctx, effective.companyId))
+    .filter((job) => isQueuedPublicationStatus(job.status) && job.publishAt <= nowIso)
+    .sort((left, right) => left.publishAt.localeCompare(right.publishAt));
+  for (const job of dueJobs) {
+    await dispatchPublicationJob(ctx, effective, token, job);
+  }
+  await noteBotHealth(ctx, effective.companyId, {
+    lastPublishDispatchAt: new Date().toISOString(),
+  });
+}
+
+async function listRecentSourceMessages(
+  ctx: PluginContext,
+  companyId: string,
+  limit = 25,
+): Promise<TelegramSourceMessageRecord[]> {
+  const entities = await ctx.entities.list({
+    entityType: ENTITY_TYPES.sourceMessage,
+    scopeKind: "company",
+    scopeId: companyId,
+    limit: 500,
+    offset: 0,
+  });
+  return entities
+    .map((entity) => entity.data as TelegramSourceMessageRecord)
+    .filter((entry) => entry.companyId === companyId)
+    .sort((left, right) => (right.messageDate ?? right.linkedAt).localeCompare(left.messageDate ?? left.linkedAt))
+    .slice(0, limit);
+}
+
+async function getSourceMessageRecord(
+  ctx: PluginContext,
+  companyId: string,
+  sourceId: string,
+  chatId: string,
+  messageId: number,
+): Promise<TelegramSourceMessageRecord | null> {
+  const entities = await ctx.entities.list({
+    entityType: ENTITY_TYPES.sourceMessage,
+    scopeKind: "company",
+    scopeId: companyId,
+    externalId: `${sourceId}:${chatId}:${messageId}`,
+    limit: 1,
+    offset: 0,
+  });
+  return entities[0]?.data as TelegramSourceMessageRecord ?? null;
+}
+
+async function upsertSourceMessageRecord(
+  ctx: PluginContext,
+  record: TelegramSourceMessageRecord,
+): Promise<TelegramSourceMessageRecord> {
+  await ctx.entities.upsert({
+    entityType: ENTITY_TYPES.sourceMessage,
+    scopeKind: "company",
+    scopeId: record.companyId,
+    externalId: `${record.sourceId}:${record.chatId}:${record.messageId}`,
+    title: `Telegram source ${record.chatId}:${record.messageId}`,
+    status: record.issueId ? "materialized" : "received",
+    data: record,
+  });
+  return record;
 }
 
 async function listRecentPublications(
@@ -696,6 +1139,211 @@ async function getAgentLabel(ctx: PluginContext, issue: Issue): Promise<string |
   if (!issue.assigneeAgentId) return null;
   const agent = await ctx.agents.get(issue.assigneeAgentId, issue.companyId);
   return agent?.name ?? issue.assigneeAgentId;
+}
+
+function extractTelegramMessageText(message: TelegramMessage): string {
+  return trimToNull(message.text) ?? trimToNull(message.caption) ?? "";
+}
+
+function shouldIngestSourceMessage(source: TelegramIngestionSource, message: TelegramMessage): boolean {
+  const chatId = String(message.chat.id);
+  if (chatId === source.chatId) {
+    return source.mode === "channel_posts" || source.mode === "both";
+  }
+  if (source.discussionChatId && chatId === source.discussionChatId) {
+    return source.mode === "discussion_replies" || source.mode === "both";
+  }
+  return false;
+}
+
+async function ensureRoutineForSource(
+  ctx: PluginContext,
+  companyId: string,
+  source: TelegramIngestionSource,
+): Promise<string> {
+  const configuredRoutineId = trimToNull(source.routineId);
+  if (configuredRoutineId) {
+    const existing = await ctx.routines.get(configuredRoutineId, companyId);
+    if (existing) return configuredRoutineId;
+  }
+  const runtimeRoutineId = await getRuntimeSourceRoutineId(ctx, companyId, source.id);
+  if (runtimeRoutineId) {
+    const existing = await ctx.routines.get(runtimeRoutineId, companyId);
+    if (existing) return runtimeRoutineId;
+  }
+  if (!source.projectId || !source.assigneeAgentId) {
+    throw new Error(`Telegram source "${source.label}" is missing project or assignee for routine creation.`);
+  }
+  const created = await ctx.routines.create(companyId, {
+    projectId: source.projectId,
+    assigneeAgentId: source.assigneeAgentId,
+    title: source.label ? `Telegram ingest: ${source.label}` : "Telegram ingest",
+    description: `Auto-created Telegram ingestion routine for source ${source.chatId}.`,
+    priority: "medium",
+    status: "active",
+    concurrencyPolicy: "coalesce_if_active",
+    catchUpPolicy: "skip_missed",
+  });
+  await setRuntimeSourceRoutineId(ctx, companyId, source.id, created.id);
+  return created.id;
+}
+
+async function seedTelegramEditorialDocuments(
+  ctx: PluginContext,
+  issueId: string,
+  companyId: string,
+  message: TelegramMessage,
+  source: TelegramIngestionSource,
+): Promise<void> {
+  const sourceText = extractTelegramMessageText(message);
+  const messageDate = message.date ? new Date(message.date * 1000).toISOString() : null;
+  const sourceBody = [
+    `# Telegram Source`,
+    ``,
+    `- Source: ${source.label}`,
+    `- Chat ID: ${source.chatId}`,
+    source.publicHandle ? `- Handle: @${source.publicHandle}` : null,
+    `- Message ID: ${message.message_id}`,
+    messageDate ? `- Message date: ${messageDate}` : null,
+    ``,
+    sourceText || "_No text content captured._",
+  ].filter((value): value is string => Boolean(value)).join("\n");
+
+  const notesBody = [
+    `# Telegram Notes`,
+    ``,
+    `- Source label: ${source.label}`,
+    `- Ingested at: ${new Date().toISOString()}`,
+    `- Mode: ${source.mode}`,
+    ``,
+    `## Raw excerpt`,
+    sourceText ? excerpt(sourceText, 500) : "_No text captured._",
+  ].join("\n");
+
+  const draftBody = sourceText ? excerpt(sourceText, 3000) : "";
+
+  await ctx.issues.documents.upsert({
+    issueId,
+    companyId,
+    key: "telegram-source",
+    title: "Telegram Source",
+    format: "markdown",
+    body: sourceBody,
+    changeSummary: "Captured Telegram source message",
+  });
+  await ctx.issues.documents.upsert({
+    issueId,
+    companyId,
+    key: "telegram-notes",
+    title: "Telegram Notes",
+    format: "markdown",
+    body: notesBody,
+    changeSummary: "Updated Telegram notes",
+  });
+  await ctx.issues.documents.upsert({
+    issueId,
+    companyId,
+    key: "telegram-draft",
+    title: "Telegram Draft",
+    format: "markdown",
+    body: draftBody,
+    changeSummary: "Prepared Telegram draft scaffold",
+  });
+  await ctx.issues.documents.upsert({
+    issueId,
+    companyId,
+    key: "telegram-final-copy",
+    title: "Telegram Final Copy",
+    format: "markdown",
+    body: draftBody,
+    changeSummary: "Prepared Telegram final copy scaffold",
+  });
+  await ctx.issues.documents.upsert({
+    issueId,
+    companyId,
+    key: "telegram-publish-checklist",
+    title: "Telegram Publish Checklist",
+    format: "markdown",
+    body: [
+      `# Telegram Publish Checklist`,
+      ``,
+      `- [ ] Source attribution captured`,
+      `- [ ] Claims checked`,
+      `- [ ] Rewrite completed`,
+      `- [ ] Final copy approved`,
+      `- [ ] Destination confirmed`,
+    ].join("\n"),
+    changeSummary: "Created Telegram publish checklist",
+  });
+}
+
+async function ingestConfiguredSourceUpdate(
+  ctx: PluginContext,
+  effective: EffectiveCompanySettings,
+  message: TelegramMessage,
+): Promise<boolean> {
+  const sources = getConfiguredSources(effective.settings).filter((source) => source.enabled);
+  const source = sources.find((entry) => shouldIngestSourceMessage(entry, message)) ?? null;
+  if (!source) return false;
+
+  const companyId = effective.companyId;
+  const chatId = String(message.chat.id);
+  const existing = await getSourceMessageRecord(ctx, companyId, source.id, chatId, message.message_id);
+  if (existing?.issueId) {
+    return true;
+  }
+
+  const routineId = await ensureRoutineForSource(ctx, companyId, source);
+  const payload = {
+    channel: "telegram",
+    sourceId: source.id,
+    sourceLabel: source.label,
+    sourceChatId: source.chatId,
+    sourcePublicHandle: source.publicHandle || null,
+    discussionChatId: source.discussionChatId || null,
+    issueTemplateKey: source.issueTemplateKey || null,
+    messageId: message.message_id,
+    messageDate: message.date ? new Date(message.date * 1000).toISOString() : null,
+    chatType: message.chat.type,
+    chatTitle: message.chat.title ?? null,
+    text: extractTelegramMessageText(message),
+  } satisfies Record<string, unknown>;
+  const run = await ctx.routines.run(routineId, companyId, {
+    source: "api",
+    payload,
+    idempotencyKey: `telegram:${chatId}:${message.message_id}`,
+  });
+  const issueId = run.linkedIssueId ?? null;
+  if (issueId) {
+    const issue = await ctx.issues.get(issueId, companyId);
+    const sourceText = extractTelegramMessageText(message);
+    if (issue && sourceText) {
+      const nextTitle = `${source.label}: ${excerpt(sourceText, 120)}`;
+      await ctx.issues.update(issue.id, {
+        title: nextTitle,
+        description: issue.description ?? sourceText,
+      }, companyId);
+    }
+    await seedTelegramEditorialDocuments(ctx, issueId, companyId, message, source);
+  }
+  await upsertSourceMessageRecord(ctx, {
+    companyId,
+    sourceId: source.id,
+    chatId,
+    messageId: message.message_id,
+    routineRunId: run.id,
+    issueId,
+    messageDate: message.date ? new Date(message.date * 1000).toISOString() : null,
+    discussionChatId: source.discussionChatId || null,
+    excerpt: extractTelegramMessageText(message) ? excerpt(extractTelegramMessageText(message), 300) : null,
+    hash: null,
+    direction: "inbound",
+    linkedAt: new Date().toISOString(),
+  });
+  await noteBotHealth(ctx, companyId, {
+    lastIngestionAt: new Date().toISOString(),
+  });
+  return true;
 }
 
 async function renderIssueMessage(
@@ -1071,16 +1719,20 @@ async function buildInboxSummary(
   text: string;
   keyboard: { inline_keyboard: Array<Array<{ text: string; callback_data: string }>> };
 }> {
-  const [blockedIssues, reviewIssues, boardApprovals, myApprovals, joinRequests, budgetIncidents] = await Promise.all([
+  const [blockedIssues, reviewIssues, boardApprovals, myApprovals, joinRequests, budgetIncidents, publicationJobs, sourceMessages] = await Promise.all([
     ctx.issues.list({ companyId, status: "blocked", limit: 200, offset: 0 }),
     ctx.issues.list({ companyId, status: "in_review", limit: 200, offset: 0 }),
     listApprovalsForKind(ctx, companyId, "board", linkedChat),
     listApprovalsForKind(ctx, companyId, "mine", linkedChat),
     listJoinRequestsForCompany(ctx, companyId),
     listBudgetIncidentsForCompany(ctx, companyId),
+    listPublicationJobs(ctx, companyId, { limit: 100 }),
+    listRecentSourceMessages(ctx, companyId, 25),
   ]);
   const myPendingApprovalCount = myApprovals.filter((approval) => approval.status === "pending").length;
   const myRevisionApprovalCount = myApprovals.filter((approval) => approval.status === "revision_requested").length;
+  const scheduledPublishCount = publicationJobs.filter((job) => isQueuedPublicationStatus(job.status)).length;
+  const failedPublishCount = publicationJobs.filter((job) => job.status === "failed").length;
   const lines = [
     "Paperclip inbox",
     `Blocked tasks: ${blockedIssues.length}`,
@@ -1090,6 +1742,9 @@ async function buildInboxSummary(
     `My revisions: ${myRevisionApprovalCount}`,
     `Pending join requests: ${joinRequests.length}`,
     `Open budget incidents: ${budgetIncidents.length}`,
+    `Scheduled Telegram publishes: ${scheduledPublishCount}`,
+    `Failed Telegram publishes: ${failedPublishCount}`,
+    `Recent ingested stories: ${sourceMessages.length}`,
   ];
   return {
     text: lines.join("\n"),
@@ -1113,6 +1768,48 @@ async function buildInboxSummary(
       ],
     },
   };
+}
+
+async function renderChannelsSummary(
+  ctx: PluginContext,
+  companyId: string,
+): Promise<string> {
+  const effective = await getEffectiveCompanySettings(ctx, companyId);
+  const destinations = getConfiguredDestinations(effective.settings);
+  const sources = getConfiguredSources(effective.settings);
+  const lines = [
+    "Telegram channels",
+    `Destinations: ${destinations.length}`,
+    ...destinations.slice(0, 8).map((destination) =>
+      `- ${destination.label} (${destination.enabled ? "enabled" : "disabled"}) -> ${destination.chatId || destination.publicHandle || "unset"}`,
+    ),
+    `Sources: ${sources.length}`,
+    ...sources.slice(0, 8).map((source) =>
+      `- ${source.label} (${source.mode}, ${source.enabled ? "enabled" : "disabled"}) -> ${source.chatId}`,
+    ),
+  ];
+  return lines.join("\n");
+}
+
+async function renderPublicationQueueSummary(
+  ctx: PluginContext,
+  companyId: string,
+): Promise<string> {
+  const jobs = await listPublicationJobs(ctx, companyId, { limit: 50 });
+  const queued = jobs.filter((job) => isQueuedPublicationStatus(job.status));
+  const failed = jobs.filter((job) => job.status === "failed");
+  const lines = [
+    "Telegram publication queue",
+    `Queued: ${queued.length}`,
+    `Failed: ${failed.length}`,
+    ...queued.slice(0, 8).map((job) =>
+      `- ${job.issueId} -> ${job.destinationId} at ${formatTimestamp(job.publishAt)} (${job.status})`,
+    ),
+  ];
+  if (queued.length === 0) {
+    lines.push("No scheduled Telegram publications right now.");
+  }
+  return lines.join("\n");
 }
 
 function joinListKeyboard(
@@ -1658,7 +2355,7 @@ async function handleStartCommand(
     });
     await sendTelegramMessage(ctx, token, {
       chatId,
-      text: "Telegram chat linked to your Paperclip company. Try /inbox, /tasks, /blocked, /mine, /approvals, /myapprovals, /joins, /budgets, /task PAP-123, or /new.",
+      text: "Telegram chat linked to your Paperclip company. Try /inbox, /tasks, /blocked, /mine, /approvals, /myapprovals, /joins, /budgets, /channels, /queue, /task PAP-123, or /new.",
     });
     return;
   }
@@ -1832,6 +2529,8 @@ async function handleTaskCommand(
         "/myapprovals - approvals you requested",
         "/joins - pending join requests",
         "/budgets - open budget incidents",
+        "/channels - configured Telegram destinations and sources",
+        "/queue - scheduled Telegram publishes",
         "/task PAP-123 - open one task",
         "/new - create a new backlog task",
       ].join("\n"),
@@ -1882,6 +2581,22 @@ async function handleTaskCommand(
       companyId: linkedChat.companyId,
       linkedChat,
       page: 0,
+    });
+    return;
+  }
+
+  if (command === "/channels") {
+    await sendTelegramMessage(ctx, token, {
+      chatId: linkedChat.chatId,
+      text: await renderChannelsSummary(ctx, linkedChat.companyId),
+    });
+    return;
+  }
+
+  if (command === "/queue") {
+    await sendTelegramMessage(ctx, token, {
+      chatId: linkedChat.chatId,
+      text: await renderPublicationQueueSummary(ctx, linkedChat.companyId),
     });
     return;
   }
@@ -2436,7 +3151,7 @@ async function handlePrivateMessage(
     chatId,
     text: [
       "Paperclip Telegram bot is ready.",
-      "Use /inbox, /tasks, /blocked, /mine, /approvals, /myapprovals, /joins, /budgets, /task PAP-123, or /new.",
+      "Use /inbox, /tasks, /blocked, /mine, /approvals, /myapprovals, /joins, /budgets, /channels, /queue, /task PAP-123, or /new.",
       effective.settings.taskBot.enabled
         ? "Replies to task and approval cards become comments in Paperclip."
         : "Task bot is configured in read-only mode right now.",
@@ -2451,6 +3166,14 @@ async function handleUpdate(
   update: TelegramUpdate,
   companyRows: PluginCompanySettingsRecord[],
 ): Promise<void> {
+  const inboundSourceMessage = update.channel_post ?? update.edited_channel_post
+    ?? (update.message && update.message.chat.type !== "private" ? update.message : undefined)
+    ?? (update.edited_message && update.edited_message.chat.type !== "private" ? update.edited_message : undefined);
+  if (inboundSourceMessage) {
+    const consumed = await ingestConfiguredSourceUpdate(ctx, effective, inboundSourceMessage);
+    if (consumed) return;
+  }
+
   const message = update.message ?? update.edited_message;
   const callbackQuery = update.callback_query;
 
@@ -2787,7 +3510,7 @@ async function syncTelegramForCompany(
     const token = await resolveBotTokenForSettings(ctx, effective.settings);
     const updates = await telegramRequest<TelegramUpdate[]>(ctx, token, "getUpdates", {
       offset: previousHealth.lastUpdateId != null ? previousHealth.lastUpdateId + 1 : undefined,
-      allowed_updates: ["message", "callback_query"],
+      allowed_updates: ["message", "edited_message", "callback_query", "channel_post", "edited_channel_post"],
       timeout: 0,
     });
 
@@ -2829,7 +3552,7 @@ async function syncTelegramForCompany(
 
 async function buildOverview(ctx: PluginContext, companyId: string): Promise<TelegramOverview> {
   const effective = await getEffectiveCompanySettings(ctx, companyId);
-  const [lastValidation, lastPublication, recentPublications, linkedChats, botHealth, issues, approvals, joinRequests, budgetOverview] = await Promise.all([
+  const [lastValidation, lastPublication, recentPublications, linkedChats, rawBotHealth, issues, approvals, joinRequests, budgetOverview, scheduledPublications, recentIngestedStories] = await Promise.all([
     getCompanyState<Record<string, unknown>>(ctx, companyId, STATE_KEYS.lastValidation),
     getCompanyState<TelegramPublication>(ctx, companyId, STATE_KEYS.lastPublication),
     listRecentPublications(ctx, companyId),
@@ -2839,6 +3562,8 @@ async function buildOverview(ctx: PluginContext, companyId: string): Promise<Tel
     ctx.approvals.list(companyId),
     ctx.joinRequests.list(companyId, { status: "pending_approval" }),
     ctx.budgets.overview(companyId),
+    listPublicationJobs(ctx, companyId, { limit: 50 }),
+    listRecentSourceMessages(ctx, companyId, 25),
   ]);
   const activeLinkedChats = getActiveLinkedChats(linkedChats);
   const actionableApprovalCount = approvals.filter((approval) => ACTIONABLE_APPROVAL_STATUSES.has(approval.status)).length;
@@ -2848,28 +3573,50 @@ async function buildOverview(ctx: PluginContext, companyId: string): Promise<Tel
   );
   const myPendingApprovalCount = myRequests.filter((approval) => approval.status === "pending").length;
   const myRevisionApprovalCount = myRequests.filter((approval) => approval.status === "revision_requested").length;
+  const destinations = getConfiguredDestinations(effective.settings);
+  const sources = getConfiguredSources(effective.settings);
+  const scheduledPublishCount = scheduledPublications.filter((job) => isQueuedPublicationStatus(job.status)).length;
+  const failedPublishCount = scheduledPublications.filter((job) => job.status === "failed").length;
+  const ingestedStoryCount = recentIngestedStories.length;
+  const defaultDestination = getDefaultDestination(effective.settings);
+  const botHealth = rawBotHealth
+    ? {
+      ...rawBotHealth,
+      scheduledPublishCount,
+      failedPublishCount,
+      ingestedStoryCount,
+      lastIngestionAt: rawBotHealth.lastIngestionAt ?? recentIngestedStories[0]?.linkedAt ?? null,
+    }
+    : null;
 
   const configured = Boolean(
     trimToNull(effective.settings.publishing.botTokenSecretRef)
-    && trimToNull(effective.settings.publishing.defaultChatId),
+    && (
+      trimToNull(effective.settings.publishing.defaultChatId)
+      || defaultDestination
+    ),
   );
 
   return {
     configured,
     config: {
-      defaultChatId: trimToNull(effective.settings.publishing.defaultChatId),
-      defaultPublicHandle: sanitizePublicHandle(effective.settings.publishing.defaultPublicHandle),
-      defaultParseMode: trimToNull(effective.settings.publishing.defaultParseMode),
-      defaultDisableLinkPreview: effective.settings.publishing.defaultDisableLinkPreview === true,
-      defaultDisableNotification: effective.settings.publishing.defaultDisableNotification === true,
+      defaultChatId: trimToNull(defaultDestination?.chatId) ?? trimToNull(effective.settings.publishing.defaultChatId),
+      defaultPublicHandle: sanitizePublicHandle(defaultDestination?.publicHandle) ?? sanitizePublicHandle(effective.settings.publishing.defaultPublicHandle),
+      defaultParseMode: trimToNull(defaultDestination?.parseMode) ?? trimToNull(effective.settings.publishing.defaultParseMode),
+      defaultDisableLinkPreview: defaultDestination?.disableLinkPreview ?? effective.settings.publishing.defaultDisableLinkPreview === true,
+      defaultDisableNotification: defaultDestination?.disableNotification ?? effective.settings.publishing.defaultDisableNotification === true,
     },
     companySettings: effective.settings,
     legacyConfigDetected: effective.legacyConfigDetected,
+    destinations,
+    sources,
     linkedChats,
     botHealth,
     lastValidation: lastValidation as TelegramOverview["lastValidation"],
     lastPublication,
     recentPublications,
+    scheduledPublications,
+    recentIngestedStories,
     blockedTaskCount: issues.filter((issue) => issue.status === "blocked").length,
     openTaskCount: issues.filter((issue) => OPEN_ISSUE_STATUSES.has(issue.status)).length,
     reviewTaskCount,
@@ -2879,6 +3626,9 @@ async function buildOverview(ctx: PluginContext, companyId: string): Promise<Tel
     myRevisionApprovalCount,
     pendingJoinRequestCount: joinRequests.length,
     openBudgetIncidentCount: budgetOverview.activeIncidents.filter((incident) => incident.status === "open").length,
+    scheduledPublishCount,
+    failedPublishCount,
+    ingestedStoryCount,
   };
 }
 
@@ -2901,19 +3651,33 @@ async function publishTelegramMessage(
 
   const effective = await getEffectiveCompanySettings(ctx, companyId);
   const token = await resolveBotTokenForSettings(ctx, effective.settings);
+  const requestedDestinationId = trimToNull(params.destinationId);
+  const explicitDestination = requestedDestinationId
+    ? findDestinationById(effective.settings, requestedDestinationId)
+    : null;
+  if (requestedDestinationId && !explicitDestination) {
+    throw new Error(`Configured Telegram destination "${requestedDestinationId}" no longer exists.`);
+  }
+  if (explicitDestination && !explicitDestination.enabled) {
+    throw new Error(`Configured Telegram destination "${explicitDestination.label}" is disabled.`);
+  }
+  const destination = explicitDestination ?? resolveDestinationForParams(effective.settings, params);
   const publishing = effective.settings.publishing;
-  const chatId = trimToNull(params.chatId) ?? trimToNull(publishing.defaultChatId);
+  const chatId = trimToNull(params.chatId) ?? trimToNull(destination?.chatId) ?? trimToNull(publishing.defaultChatId);
   if (!chatId) {
     throw new Error("Target chat_id is required");
   }
-  const parseMode = trimToNull(params.parseMode) ?? trimToNull(publishing.defaultParseMode);
+  const parseMode = trimToNull(params.parseMode)
+    ?? trimToNull(destination?.parseMode)
+    ?? trimToNull(publishing.defaultParseMode);
   const disableNotification = typeof params.disableNotification === "boolean"
     ? params.disableNotification
-    : publishing.defaultDisableNotification === true;
+    : destination?.disableNotification === true || publishing.defaultDisableNotification === true;
   const disableLinkPreview = typeof params.disableLinkPreview === "boolean"
     ? params.disableLinkPreview
-    : publishing.defaultDisableLinkPreview === true;
+    : destination?.disableLinkPreview === true || publishing.defaultDisableLinkPreview === true;
   const publicHandle = sanitizePublicHandle(trimToNull(params.publicHandle))
+    ?? sanitizePublicHandle(destination?.publicHandle)
     ?? sanitizePublicHandle(publishing.defaultPublicHandle)
     ?? sanitizePublicHandle(chatId);
 
@@ -2927,6 +3691,7 @@ async function publishTelegramMessage(
 
   const sentAt = new Date((message.date ?? Math.floor(Date.now() / 1000)) * 1000).toISOString();
   const destinationLabel = trimToNull(params.destinationLabel)
+    ?? trimToNull(destination?.label)
     ?? (publicHandle ? `@${publicHandle}` : null)
     ?? trimToNull(message.chat.title)
     ?? chatId;
@@ -2951,6 +3716,7 @@ async function publishTelegramMessage(
     parseMode,
     sentAt,
     summary: excerpt(text),
+    destinationId: destination?.id ?? trimToNull(params.destinationId),
   };
 
   await ctx.entities.upsert({
@@ -2995,17 +3761,26 @@ const plugin: PaperclipPlugin = definePlugin({
           configured: false,
           companySettings: { ...DEFAULT_COMPANY_SETTINGS },
           legacyConfigDetected: false,
+          destinations: [],
+          sources: [],
           linkedChats: [],
-        botHealth: null,
-        recentPublications: [],
-        blockedTaskCount: 0,
-        openTaskCount: 0,
-        reviewTaskCount: 0,
-        approvalsInboxEnabled: false,
-        actionableApprovalCount: 0,
-        myPendingApprovalCount: 0,
-        myRevisionApprovalCount: 0,
-      } satisfies Partial<TelegramOverview>;
+          botHealth: null,
+          recentPublications: [],
+          scheduledPublications: [],
+          recentIngestedStories: [],
+          blockedTaskCount: 0,
+          openTaskCount: 0,
+          reviewTaskCount: 0,
+          approvalsInboxEnabled: false,
+          actionableApprovalCount: 0,
+          myPendingApprovalCount: 0,
+          myRevisionApprovalCount: 0,
+          pendingJoinRequestCount: 0,
+          openBudgetIncidentCount: 0,
+          scheduledPublishCount: 0,
+          failedPublishCount: 0,
+          ingestedStoryCount: 0,
+        } satisfies Partial<TelegramOverview>;
       }
       return await buildOverview(ctx, companyId);
     });
@@ -3015,6 +3790,13 @@ const plugin: PaperclipPlugin = definePlugin({
       const issueId = trimToNull(params.issueId) ?? "";
       if (!companyId || !issueId) return [];
       return await listIssuePublications(ctx, companyId, issueId);
+    });
+
+    ctx.data.register(DATA_KEYS.issuePublicationJobs, async (params) => {
+      const companyId = trimToNull(params.companyId) ?? "";
+      const issueId = trimToNull(params.issueId) ?? "";
+      if (!companyId || !issueId) return [];
+      return await listPublicationJobs(ctx, companyId, { issueId, limit: 50 });
     });
 
     ctx.actions.register(ACTION_KEYS.testConnection, async (params) => {
@@ -3029,7 +3811,8 @@ const plugin: PaperclipPlugin = definePlugin({
         can_join_groups?: boolean;
         can_read_all_group_messages?: boolean;
       }>(ctx, token, "getMe");
-      const defaultChatId = trimToNull(effective.settings.publishing.defaultChatId);
+      const defaultChatId = trimToNull(getDefaultDestination(effective.settings)?.chatId)
+        ?? trimToNull(effective.settings.publishing.defaultChatId);
       const defaultChat = defaultChatId
         ? await telegramRequest<TelegramChat>(ctx, token, "getChat", { chat_id: defaultChatId })
         : null;
@@ -3066,6 +3849,85 @@ const plugin: PaperclipPlugin = definePlugin({
       const companyId = trimToNull(params.companyId) ?? "";
       if (!companyId) throw new Error("companyId is required");
       return await publishTelegramMessage(ctx, companyId, params);
+    });
+
+    ctx.actions.register(ACTION_KEYS.scheduleMessage, async (params) => {
+      const companyId = trimToNull(params.companyId) ?? "";
+      const issueId = trimToNull(params.issueId) ?? "";
+      if (!companyId || !issueId) throw new Error("companyId and issueId are required");
+      const issue = await ctx.issues.get(issueId, companyId);
+      if (!issue) throw new Error("Issue not found");
+      const approvalId = trimToNull(params.approvalId);
+      if (!approvalId) throw new Error("An approved Telegram publish approval is required before scheduling.");
+      const approval = await ctx.approvals.get(approvalId);
+      if (
+        !approval
+        || approval.companyId !== companyId
+        || approval.status !== "approved"
+        || approval.type !== "publish_content"
+        || trimToNull(approval.payload.channel)?.toLowerCase() !== "telegram"
+      ) {
+        throw new Error("An approved Telegram publish_content approval is required before scheduling.");
+      }
+      const effective = await getEffectiveCompanySettings(ctx, companyId);
+      const destinationId = trimToNull(params.destinationId) ?? getDefaultDestination(effective.settings)?.id ?? null;
+      const destination = destinationId ? findDestinationById(effective.settings, destinationId) : null;
+      if (!destination) {
+        throw new Error("Choose a configured Telegram destination before scheduling.");
+      }
+      if (!destination.enabled) {
+        throw new Error(`Configured Telegram destination "${destination.label}" is disabled.`);
+      }
+      const now = new Date().toISOString();
+      return await upsertPublicationJob(ctx, {
+        id: trimToNull(params.jobId) ?? undefined,
+        companyId,
+        issueId,
+        approvalId: approval.id,
+        destinationId: destination.id,
+        publishAt: normalizePublishAt(params.publishAt),
+        status: "scheduled",
+        attemptCount: 0,
+        lastAttemptAt: null,
+        failureReason: null,
+        publishedMessageId: null,
+        publishedUrl: null,
+        createdByUserId: trimToNull(params.createdByUserId),
+        createdByAgentId: trimToNull(params.createdByAgentId),
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+
+    ctx.actions.register(ACTION_KEYS.cancelPublicationJob, async (params) => {
+      const companyId = trimToNull(params.companyId) ?? "";
+      const jobId = trimToNull(params.jobId) ?? "";
+      if (!companyId || !jobId) throw new Error("companyId and jobId are required");
+      const existing = await getPublicationJobById(ctx, companyId, jobId);
+      if (!existing) throw new Error("Telegram publication job not found");
+      return await upsertPublicationJob(ctx, {
+        ...existing,
+        status: "cancelled",
+        updatedAt: new Date().toISOString(),
+      });
+    });
+
+    ctx.actions.register(ACTION_KEYS.reschedulePublicationJob, async (params) => {
+      const companyId = trimToNull(params.companyId) ?? "";
+      const jobId = trimToNull(params.jobId) ?? "";
+      if (!companyId || !jobId) throw new Error("companyId and jobId are required");
+      const existing = await getPublicationJobById(ctx, companyId, jobId);
+      if (!existing) throw new Error("Telegram publication job not found");
+      if (existing.status === "published") {
+        throw new Error("Published Telegram jobs cannot be rescheduled.");
+      }
+      return await upsertPublicationJob(ctx, {
+        ...existing,
+        publishAt: normalizePublishAt(params.publishAt ?? existing.publishAt),
+        status: "scheduled",
+        failureReason: null,
+        updatedAt: new Date().toISOString(),
+      });
     });
 
     ctx.actions.register(ACTION_KEYS.generateLinkCode, async (params) => {
@@ -3115,10 +3977,20 @@ const plugin: PaperclipPlugin = definePlugin({
       const rows = await ctx.companySettings.list({ enabledOnly: true });
       const companiesToSync = rows.filter((row) => {
         const settings = sanitizeTelegramCompanySettings(row.settingsJson);
-        return settings.taskBot.enabled && settings.taskBot.pollingEnabled;
+        const hasEnabledSources = getConfiguredSources(settings).some((source) => source.enabled);
+        return settings.taskBot.pollingEnabled && (settings.taskBot.enabled || hasEnabledSources);
       });
       for (const row of companiesToSync) {
         await syncTelegramForCompany(ctx, row, rows);
+      }
+    });
+
+    ctx.jobs.register(JOB_KEYS.dispatchTelegramPublications, async (_job: PluginJobContext) => {
+      const rows = await ctx.companySettings.list({ enabledOnly: true });
+      for (const row of rows) {
+        const effective = await getEffectiveCompanySettings(ctx, row.companyId);
+        if (!trimToNull(effective.settings.publishing.botTokenSecretRef)) continue;
+        await dispatchPublicationJobsForCompany(ctx, effective);
       }
     });
   },

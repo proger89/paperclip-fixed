@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/context/ToastContext";
 import { cn } from "@/lib/utils";
+import { getPluginCompanyPagePath, getPluginPageLinkLabel } from "@/lib/plugin-pages";
 
 function firstNonEmptyLine(value: string | null | undefined): string | null {
   if (!value) return null;
@@ -235,6 +236,10 @@ export function PluginManager() {
           <ul className="divide-y rounded-md border bg-card">
             {examples.map((example) => {
               const installedPlugin = installedByPackageName.get(example.packageName);
+              const installedPluginPagePath = getPluginCompanyPagePath(
+                installedPlugin ?? null,
+                selectedCompany?.issuePrefix ?? null,
+              );
               const installPending =
                 installMutation.isPending &&
                 installMutation.variables?.isLocalPath &&
@@ -269,6 +274,13 @@ export function PluginManager() {
                     <div className="flex items-center gap-2 shrink-0">
                       {installedPlugin ? (
                         <>
+                          {installedPlugin.status === "ready" && installedPluginPagePath ? (
+                            <Button variant="outline" size="sm" asChild>
+                              <Link to={installedPluginPagePath}>
+                                {getPluginPageLinkLabel(installedPlugin)}
+                              </Link>
+                            </Button>
+                          ) : null}
                           {installedPlugin.status !== "ready" && (
                             <Button
                               variant="outline"
@@ -425,12 +437,21 @@ export function PluginManager() {
                           <Trash className="h-4 w-4" />
                         </Button>
                       </div>
-                      <Button variant="outline" size="sm" className="mt-2 h-8" asChild>
-                        <Link to={`/instance/settings/plugins/${plugin.id}`}>
-                          <Settings className="h-4 w-4" />
-                          Configure
-                        </Link>
-                      </Button>
+                      <div className="mt-2 flex flex-wrap justify-end gap-2">
+                        {plugin.status === "ready" && getPluginCompanyPagePath(plugin, selectedCompany?.issuePrefix ?? null) ? (
+                          <Button variant="outline" size="sm" className="h-8" asChild>
+                            <Link to={getPluginCompanyPagePath(plugin, selectedCompany?.issuePrefix ?? null)!}>
+                              {getPluginPageLinkLabel(plugin)}
+                            </Link>
+                          </Button>
+                        ) : null}
+                        <Button variant="outline" size="sm" className="h-8" asChild>
+                          <Link to={`/instance/settings/plugins/${plugin.id}`}>
+                            <Settings className="h-4 w-4" />
+                            Configure
+                          </Link>
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>

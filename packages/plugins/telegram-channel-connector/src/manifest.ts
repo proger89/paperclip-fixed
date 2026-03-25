@@ -20,11 +20,15 @@ const manifest: PaperclipPluginManifestV1 = {
   capabilities: [
     "companies.read",
     "projects.read",
+    "routines.read",
+    "routines.write",
     "issues.read",
     "issues.create",
     "issues.update",
     "issue.comments.read",
     "issue.comments.create",
+    "issue.documents.read",
+    "issue.documents.write",
     "approvals.read",
     "approval.comments.read",
     "approval.comments.create",
@@ -56,9 +60,15 @@ const manifest: PaperclipPluginManifestV1 = {
       description: "Poll Telegram getUpdates and reconcile Paperclip task notifications.",
       schedule: "* * * * *",
     },
+    {
+      jobKey: JOB_KEYS.dispatchTelegramPublications,
+      displayName: "Dispatch Telegram publications",
+      description: "Publish due Telegram publication jobs from the governed queue.",
+      schedule: "* * * * *",
+    },
   ],
   entrypoints: {
-    worker: "./dist/worker.js",
+    worker: "./dist/src/worker.js",
     ui: "./dist/ui",
   },
   instanceConfigSchema: {

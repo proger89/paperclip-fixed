@@ -8,8 +8,8 @@
     ".": "./src/index.ts"
   },
   "paperclipPlugin": {
-    "manifest": "./dist/manifest.js",
-    "worker": "./dist/worker.js",
+    "manifest": "./dist/src/manifest.js",
+    "worker": "./dist/src/worker.js",
     "ui": "./dist/ui/"
   },
   "scripts": {

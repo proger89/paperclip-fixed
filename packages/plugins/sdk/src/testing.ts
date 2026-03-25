@@ -7,6 +7,9 @@ import type {
   Project,
   Issue,
   IssueComment,
+  IssueDocument,
+  IssueDocumentSummary,
+  IssueWorkProduct,
   Approval,
   ApprovalComment,
   JoinRequest,
@@ -15,6 +18,11 @@ import type {
   Agent,
   Goal,
   ActivityEvent,
+  Routine,
+  RoutineDetail,
+  RoutineRun,
+  RoutineRunSummary,
+  RoutineTrigger,
 } from "@paperclipai/shared";
 import type {
   EventFilter,
@@ -57,6 +65,8 @@ export interface TestHarness {
     projects?: Project[];
     issues?: Issue[];
     issueComments?: IssueComment[];
+    issueDocuments?: IssueDocument[];
+    issueWorkProducts?: IssueWorkProduct[];
     approvals?: Approval[];
     approvalComments?: ApprovalComment[];
     joinRequests?: JoinRequest[];
@@ -65,6 +75,9 @@ export interface TestHarness {
     goals?: Goal[];
     activityEvents?: ActivityEvent[];
     companySettings?: PluginCompanySettingsRecord[];
+    routines?: Routine[];
+    routineRuns?: RoutineRunSummary[];
+    routineDetails?: RoutineDetail[];
   }): void;
   setConfig(config: Record<string, unknown>): void;
   /** Dispatch a host or plugin event to registered handlers. */
@@ -157,6 +170,8 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
   const projects = new Map<string, Project>();
   const issues = new Map<string, Issue>();
   const issueComments = new Map<string, IssueComment[]>();
+  const issueDocuments = new Map<string, IssueDocument[]>();
+  const issueWorkProducts = new Map<string, IssueWorkProduct[]>();
   const approvals = new Map<string, Approval>();
   const approvalComments = new Map<string, ApprovalComment[]>();
   const joinRequests = new Map<string, JoinRequest>();
@@ -165,6 +180,9 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
   const goals = new Map<string, Goal>();
   const projectWorkspaces = new Map<string, PluginWorkspace[]>();
   const companySettings = new Map<string, PluginCompanySettingsRecord>();
+  const routines = new Map<string, Routine>();
+  const routineRuns = new Map<string, RoutineRunSummary[]>();
+  const routineDetails = new Map<string, RoutineDetail>();
 
   const sessions = new Map<string, AgentSession>();
   const sessionEventCallbacks = new Map<string, (event: AgentSessionEvent) => void>();
@@ -371,6 +389,146 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
         return workspaces.find((workspace) => workspace.isPrimary) ?? null;
       },
     },
+    routines: {
+      async list(input) {
+        requireCapability(manifest, capabilitySet, "routines.read");
+        const companyId = requireCompanyId(input.companyId);
+        let out = [...routines.values()].filter((routine) => routine.companyId === companyId);
+        if (input.offset) out = out.slice(input.offset);
+        if (input.limit) out = out.slice(0, input.limit);
+        return out as any;
+      },
+      async get(routineId, companyId) {
+        requireCapability(manifest, capabilitySet, "routines.read");
+        const detail = routineDetails.get(routineId);
+        if (detail?.companyId === companyId) return detail;
+        const routine = routines.get(routineId);
+        if (!routine || routine.companyId !== companyId) return null;
+        return {
+          ...routine,
+          project: null,
+          assignee: null,
+          parentIssue: null,
+          triggers: [],
+          recentRuns: routineRuns.get(routineId) ?? [],
+          activeIssue: null,
+        } as RoutineDetail;
+      },
+      async create(companyId, data) {
+        requireCapability(manifest, capabilitySet, "routines.write");
+        const now = new Date();
+        const routine: Routine = {
+          id: randomUUID(),
+          companyId,
+          projectId: data.projectId,
+          goalId: data.goalId ?? null,
+          parentIssueId: data.parentIssueId ?? null,
+          title: data.title,
+          description: data.description ?? null,
+          assigneeAgentId: data.assigneeAgentId,
+          priority: data.priority ?? "medium",
+          status: data.status ?? "active",
+          concurrencyPolicy: data.concurrencyPolicy ?? "coalesce_if_active",
+          catchUpPolicy: data.catchUpPolicy ?? "skip_missed",
+          createdByAgentId: null,
+          createdByUserId: null,
+          updatedByAgentId: null,
+          updatedByUserId: null,
+          lastTriggeredAt: null,
+          lastEnqueuedAt: null,
+          createdAt: now,
+          updatedAt: now,
+        };
+        routines.set(routine.id, routine);
+        return routine;
+      },
+      async update(routineId, companyId, patch) {
+        requireCapability(manifest, capabilitySet, "routines.write");
+        const existing = routines.get(routineId);
+        if (!existing || existing.companyId !== companyId) return null;
+        const updated: Routine = {
+          ...existing,
+          ...patch,
+          goalId: patch.goalId === undefined ? existing.goalId : patch.goalId ?? null,
+          parentIssueId: patch.parentIssueId === undefined ? existing.parentIssueId : patch.parentIssueId ?? null,
+          description: patch.description === undefined ? existing.description : patch.description ?? null,
+          updatedAt: new Date(),
+        };
+        routines.set(routineId, updated);
+        return updated;
+      },
+      async listRuns(routineId, companyId, limit) {
+        requireCapability(manifest, capabilitySet, "routines.read");
+        const existing = routines.get(routineId);
+        if (!existing || existing.companyId !== companyId) return [];
+        const rows = [...(routineRuns.get(routineId) ?? [])];
+        return typeof limit === "number" ? rows.slice(0, limit) : rows;
+      },
+      async createTrigger(routineId, companyId, data) {
+        requireCapability(manifest, capabilitySet, "routines.write");
+        const existing = routines.get(routineId);
+        if (!existing || existing.companyId !== companyId) throw new Error("Routine not found");
+        const trigger: RoutineTrigger = {
+          id: randomUUID(),
+          companyId,
+          routineId,
+          kind: data.kind,
+          label: data.label ?? null,
+          enabled: data.enabled ?? true,
+          cronExpression: data.kind === "schedule" ? data.cronExpression : null,
+          timezone: data.kind === "schedule" ? data.timezone ?? "UTC" : null,
+          nextRunAt: null,
+          lastFiredAt: null,
+          publicId: null,
+          secretId: null,
+          signingMode: data.kind === "webhook" ? data.signingMode ?? "bearer" : null,
+          replayWindowSec: data.kind === "webhook" ? data.replayWindowSec ?? 300 : null,
+          lastRotatedAt: null,
+          lastResult: null,
+          createdByAgentId: null,
+          createdByUserId: null,
+          updatedByAgentId: null,
+          updatedByUserId: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        const detail = routineDetails.get(routineId);
+        if (detail) {
+          routineDetails.set(routineId, { ...detail, triggers: [...detail.triggers, trigger] });
+        }
+        return { trigger, secretMaterial: null };
+      },
+      async run(routineId, companyId, data) {
+        requireCapability(manifest, capabilitySet, "routines.write");
+        const existing = routines.get(routineId);
+        if (!existing || existing.companyId !== companyId) throw new Error("Routine not found");
+        const now = new Date();
+        const run: RoutineRun = {
+          id: randomUUID(),
+          companyId,
+          routineId,
+          triggerId: data?.triggerId ?? null,
+          source: data?.source ?? "api",
+          status: "issue_created",
+          triggeredAt: now,
+          idempotencyKey: data?.idempotencyKey ?? null,
+          triggerPayload: data?.payload ?? null,
+          linkedIssueId: null,
+          coalescedIntoRunId: null,
+          failureReason: null,
+          completedAt: null,
+          createdAt: now,
+          updatedAt: now,
+        };
+        const summary: RoutineRunSummary = {
+          ...run,
+          linkedIssue: null,
+          trigger: null,
+        };
+        routineRuns.set(routineId, [summary, ...(routineRuns.get(routineId) ?? [])]);
+        return run;
+      },
+    },
     companies: {
       async list(input) {
         requireCapability(manifest, capabilitySet, "companies.read");
@@ -508,12 +666,17 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
         async list(issueId, companyId) {
           requireCapability(manifest, capabilitySet, "issue.documents.read");
           if (!isInCompany(issues.get(issueId), companyId)) return [];
-          return [];
+          return (issueDocuments.get(issueId) ?? []).map((document) => ({
+            id: document.id,
+            key: document.key,
+            title: document.title,
+            latestRevisionNumber: document.latestRevisionNumber,
+          })) as IssueDocumentSummary[];
         },
-        async get(issueId, _key, companyId) {
+        async get(issueId, key, companyId) {
           requireCapability(manifest, capabilitySet, "issue.documents.read");
           if (!isInCompany(issues.get(issueId), companyId)) return null;
-          return null;
+          return (issueDocuments.get(issueId) ?? []).find((document) => document.key === key) ?? null;
         },
         async upsert(input) {
           requireCapability(manifest, capabilitySet, "issue.documents.write");
@@ -521,14 +684,127 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
           if (!isInCompany(parentIssue, input.companyId)) {
             throw new Error(`Issue not found: ${input.issueId}`);
           }
-          throw new Error("documents.upsert is not implemented in test context");
+          const current = issueDocuments.get(input.issueId) ?? [];
+          const existing = current.find((document) => document.key === input.key) ?? null;
+          const next: IssueDocument = existing
+            ? {
+              ...existing,
+              title: input.title ?? existing.title,
+              format: "markdown",
+              body: input.body,
+              latestRevisionNumber: existing.latestRevisionNumber + 1,
+              updatedAt: new Date(),
+            }
+            : {
+              id: randomUUID(),
+              issueId: input.issueId,
+              companyId: input.companyId,
+              key: input.key,
+              latestRevisionId: null,
+              title: input.title ?? null,
+              format: "markdown",
+              body: input.body,
+              latestRevisionNumber: 1,
+              createdByAgentId: null,
+              createdByUserId: null,
+              updatedByAgentId: null,
+              updatedByUserId: null,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            };
+          issueDocuments.set(
+            input.issueId,
+            [...current.filter((document) => document.key !== input.key), next],
+          );
+          return next;
         },
-        async delete(issueId, _key, companyId) {
+        async delete(issueId, key, companyId) {
           requireCapability(manifest, capabilitySet, "issue.documents.write");
           const parentIssue = issues.get(issueId);
           if (!isInCompany(parentIssue, companyId)) {
             throw new Error(`Issue not found: ${issueId}`);
           }
+          issueDocuments.set(
+            issueId,
+            (issueDocuments.get(issueId) ?? []).filter((document) => document.key !== key),
+          );
+        },
+      },
+      workProducts: {
+        async list(issueId, companyId) {
+          requireCapability(manifest, capabilitySet, "issues.read");
+          if (!isInCompany(issues.get(issueId), companyId)) return [];
+          return issueWorkProducts.get(issueId) ?? [];
+        },
+        async create(input) {
+          requireCapability(manifest, capabilitySet, "issues.update");
+          const parentIssue = issues.get(input.issueId);
+          if (!isInCompany(parentIssue, input.companyId)) {
+            throw new Error(`Issue not found: ${input.issueId}`);
+          }
+          const current = issueWorkProducts.get(input.issueId) ?? [];
+          const now = new Date();
+          const next: IssueWorkProduct = {
+            id: randomUUID(),
+            companyId: input.companyId,
+            issueId: input.issueId,
+            projectId: input.projectId ?? null,
+            executionWorkspaceId: input.executionWorkspaceId ?? null,
+            runtimeServiceId: input.runtimeServiceId ?? null,
+            type: input.type,
+            provider: input.provider,
+            externalId: input.externalId ?? null,
+            title: input.title,
+            url: input.url ?? null,
+            status: input.status,
+            reviewState: input.reviewState,
+            isPrimary: input.isPrimary ?? false,
+            healthStatus: input.healthStatus ?? "unknown",
+            summary: input.summary ?? null,
+            metadata: input.metadata ?? null,
+            createdByRunId: input.createdByRunId ?? null,
+            createdAt: now,
+            updatedAt: now,
+          };
+          const normalized = next.isPrimary
+            ? current.map((product) => product.type === next.type ? { ...product, isPrimary: false } : product)
+            : current;
+          issueWorkProducts.set(input.issueId, [next, ...normalized]);
+          return next;
+        },
+        async update(workProductId, companyId, patch) {
+          requireCapability(manifest, capabilitySet, "issues.update");
+          for (const [issueId, current] of issueWorkProducts.entries()) {
+            const existing = current.find((product) => product.id === workProductId);
+            if (!existing) continue;
+            if (existing.companyId !== companyId) return null;
+            const updated: IssueWorkProduct = {
+              ...existing,
+              ...patch,
+              projectId: patch.projectId === undefined ? existing.projectId : patch.projectId ?? null,
+              executionWorkspaceId: patch.executionWorkspaceId === undefined ? existing.executionWorkspaceId : patch.executionWorkspaceId ?? null,
+              runtimeServiceId: patch.runtimeServiceId === undefined ? existing.runtimeServiceId : patch.runtimeServiceId ?? null,
+              externalId: patch.externalId === undefined ? existing.externalId : patch.externalId ?? null,
+              url: patch.url === undefined ? existing.url : patch.url ?? null,
+              summary: patch.summary === undefined ? existing.summary : patch.summary ?? null,
+              metadata: patch.metadata === undefined ? existing.metadata : patch.metadata ?? null,
+              createdByRunId: patch.createdByRunId === undefined ? existing.createdByRunId : patch.createdByRunId ?? null,
+              updatedAt: new Date(),
+            };
+            const normalized = updated.isPrimary
+              ? current.map((product) => (
+                product.type === updated.type && product.id !== updated.id
+                  ? { ...product, isPrimary: false }
+                  : product
+              ))
+              : current;
+            issueWorkProducts.set(
+              issueId,
+              normalized.map((product) => product.id === workProductId ? updated : product),
+            );
+            return updated;
+          }
+          return null;
         },
       },
     },
@@ -945,6 +1221,16 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
         list.push(row);
         issueComments.set(row.issueId, list);
       }
+      for (const row of input.issueDocuments ?? []) {
+        const list = issueDocuments.get(row.issueId) ?? [];
+        list.push(row);
+        issueDocuments.set(row.issueId, list);
+      }
+      for (const row of input.issueWorkProducts ?? []) {
+        const list = issueWorkProducts.get(row.issueId) ?? [];
+        list.push(row);
+        issueWorkProducts.set(row.issueId, list);
+      }
       for (const row of input.approvals ?? []) approvals.set(row.id, row);
       for (const row of input.approvalComments ?? []) {
         const list = approvalComments.get(row.approvalId) ?? [];
@@ -957,6 +1243,13 @@ export function createTestHarness(options: TestHarnessOptions): TestHarness {
       for (const row of input.goals ?? []) goals.set(row.id, row);
       for (const row of input.activityEvents ?? []) activityEvents.push(row);
       for (const row of input.companySettings ?? []) companySettings.set(row.companyId, row);
+      for (const row of input.routines ?? []) routines.set(row.id, row);
+      for (const row of input.routineRuns ?? []) {
+        const list = routineRuns.get(row.routineId) ?? [];
+        list.push(row);
+        routineRuns.set(row.routineId, list);
+      }
+      for (const row of input.routineDetails ?? []) routineDetails.set(row.id, row);
     },
     setConfig(config) {
       currentConfig = { ...config };

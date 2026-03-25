@@ -469,6 +469,7 @@ export const PLUGIN_CAPABILITIES = [
   "companies.read",
   "projects.read",
   "project.workspaces.read",
+  "routines.read",
   "issues.read",
   "issue.comments.read",
   "issue.documents.read",
@@ -483,6 +484,7 @@ export const PLUGIN_CAPABILITIES = [
   "activity.read",
   "costs.read",
   // Data Write
+  "routines.write",
   "issues.create",
   "issues.update",
   "issue.comments.create",

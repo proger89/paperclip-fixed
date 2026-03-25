@@ -578,6 +578,40 @@ export function startWorkerRpcHost(options: WorkerRpcHostOptions): WorkerRpcHost
         },
       },
 
+      routines: {
+        async list(input) {
+          return callHost("routines.list", {
+            companyId: input.companyId,
+            limit: input.limit,
+            offset: input.offset,
+          });
+        },
+
+        async get(routineId: string, companyId: string) {
+          return callHost("routines.get", { routineId, companyId });
+        },
+
+        async create(companyId: string, data) {
+          return callHost("routines.create", { companyId, data });
+        },
+
+        async update(routineId: string, companyId: string, patch) {
+          return callHost("routines.update", { routineId, companyId, patch });
+        },
+
+        async listRuns(routineId: string, companyId: string, limit?: number) {
+          return callHost("routines.listRuns", { routineId, companyId, limit });
+        },
+
+        async createTrigger(routineId: string, companyId: string, data) {
+          return callHost("routines.createTrigger", { routineId, companyId, data });
+        },
+
+        async run(routineId: string, companyId: string, data) {
+          return callHost("routines.run", { routineId, companyId, data });
+        },
+      },
+
       companies: {
         async list(input) {
           return callHost("companies.list", {
@@ -665,6 +699,44 @@ export function startWorkerRpcHost(options: WorkerRpcHostOptions): WorkerRpcHost
 
           async delete(issueId: string, key: string, companyId: string) {
             return callHost("issues.documents.delete", { issueId, key, companyId });
+          },
+        },
+
+        workProducts: {
+          async list(issueId: string, companyId: string) {
+            return callHost("issues.workProducts.list", { issueId, companyId });
+          },
+
+          async create(input) {
+            return callHost("issues.workProducts.create", {
+              issueId: input.issueId,
+              companyId: input.companyId,
+              data: {
+                type: input.type,
+                provider: input.provider,
+                title: input.title,
+                status: input.status,
+                reviewState: input.reviewState,
+                isPrimary: input.isPrimary,
+                healthStatus: input.healthStatus,
+                url: input.url,
+                externalId: input.externalId,
+                summary: input.summary,
+                metadata: input.metadata,
+                projectId: input.projectId,
+                executionWorkspaceId: input.executionWorkspaceId,
+                runtimeServiceId: input.runtimeServiceId,
+                createdByRunId: input.createdByRunId,
+              },
+            });
+          },
+
+          async update(workProductId: string, companyId: string, patch) {
+            return callHost("issues.workProducts.update", {
+              workProductId,
+              companyId,
+              patch,
+            });
           },
         },
       },

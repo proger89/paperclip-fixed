@@ -137,4 +137,27 @@ describe("role bundle connector suggestions", () => {
 
     expect(items).toEqual([]);
   });
+
+  it("deduplicates the same connector across multiple bundles", () => {
+    const items = getRoleBundleConnectorSuggestions({
+      roleBundles: [
+        makeBundle(),
+        makeBundle({
+          key: "general_specialist",
+          label: "General Specialist",
+          agentRole: "general",
+          title: "General Specialist",
+        }),
+      ],
+      installedPlugins: [],
+      approvals: [],
+      includeInstalled: true,
+    });
+
+    expect(items).toHaveLength(1);
+    expect(items[0]?.bundles).toEqual([
+      expect.objectContaining({ key: "pm", label: "PM" }),
+      expect.objectContaining({ key: "general_specialist", label: "General Specialist" }),
+    ]);
+  });
 });

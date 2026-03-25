@@ -48,6 +48,19 @@ export function approvalService(db: Db, options: ApprovalServiceOptions = {}) {
     return null;
   }
 
+  function isAlreadyInstalledPluginError(error: unknown) {
+    if (typeof error !== "object" || error === null) return false;
+    const maybeStatus =
+      "status" in error && typeof (error as { status?: unknown }).status === "number"
+        ? (error as { status: number }).status
+        : null;
+    const maybeMessage =
+      "message" in error && typeof (error as { message?: unknown }).message === "string"
+        ? (error as { message: string }).message
+        : "";
+    return maybeStatus === 409 || maybeMessage.toLowerCase().includes("already installed");
+  }
+
   async function getExistingApproval(id: string) {
     const existing = await db
       .select()
@@ -124,6 +137,45 @@ export function approvalService(db: Db, options: ApprovalServiceOptions = {}) {
         .then((rows) => rows[0]),
 
     approve: async (id: string, decidedByUserId: string, decisionNote?: string | null) => {
+      const existing = await getExistingApproval(id);
+      if (existing.type === "install_connector_plugin") {
+        if (!canResolveStatuses.has(existing.status)) {
+          if (existing.status === "approved") {
+            return { approval: existing, applied: false };
+          }
+          throw unprocessable("Only pending or revision requested approvals can be approved");
+        }
+
+        if (!options.installConnectorPlugin) {
+          throw new Error("Connector plugin installation is not enabled");
+        }
+
+        const payload = existing.payload as Record<string, unknown>;
+        try {
+          await options.installConnectorPlugin({
+            packageName: firstNonEmptyString(
+              payload.packageName,
+              payload.pluginPackageName,
+              payload.pluginPackage,
+              payload.localPath,
+              payload.source,
+            ) ?? "",
+            version: firstNonEmptyString(payload.version) ?? undefined,
+            isLocalPath:
+              payload.isLocalPath === true
+              || typeof payload.localPath === "string",
+            source:
+              payload.isLocalPath === true || typeof payload.localPath === "string"
+                ? "local_path"
+                : "npm",
+          });
+        } catch (error) {
+          if (!isAlreadyInstalledPluginError(error)) {
+            throw error;
+          }
+        }
+      }
+
       const { approval: updated, applied } = await resolveApproval(
         id,
         "approved",
@@ -260,31 +312,6 @@ export function approvalService(db: Db, options: ApprovalServiceOptions = {}) {
         } else if (source) {
           await companySkills.importFromSource(updated.companyId, source);
         }
-      }
-
-      if (applied && updated.type === "install_connector_plugin") {
-        if (!options.installConnectorPlugin) {
-          throw new Error("Connector plugin installation is not enabled");
-        }
-
-        const payload = updated.payload as Record<string, unknown>;
-        await options.installConnectorPlugin({
-          packageName: firstNonEmptyString(
-            payload.packageName,
-            payload.pluginPackageName,
-            payload.pluginPackage,
-            payload.localPath,
-            payload.source,
-          ) ?? "",
-          version: firstNonEmptyString(payload.version) ?? undefined,
-          isLocalPath:
-            payload.isLocalPath === true
-            || typeof payload.localPath === "string",
-          source:
-            payload.isLocalPath === true || typeof payload.localPath === "string"
-              ? "local_path"
-              : "npm",
-        });
       }
 
       return { approval: updated, applied };

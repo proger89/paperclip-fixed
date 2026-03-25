@@ -37,7 +37,7 @@ function getRecentIssues(issues: Issue[]): Issue[] {
 }
 
 export function Dashboard() {
-  const { selectedCompanyId, companies } = useCompany();
+  const { selectedCompanyId, selectedCompany, companies } = useCompany();
   const { openOnboarding } = useDialog();
   const { setBreadcrumbs } = useBreadcrumbs();
   const [animatedActivityIds, setAnimatedActivityIds] = useState<Set<string>>(new Set());
@@ -341,6 +341,7 @@ export function Dashboard() {
               description="Curated connector installs recommended by current role bundles. These do not block hires, but they reduce capability gaps before specialist work lands."
               emptyMessage="No connector suggestions right now."
               limit={6}
+              companyPrefix={selectedCompany?.issuePrefix ?? null}
             />
           ) : null}
 
