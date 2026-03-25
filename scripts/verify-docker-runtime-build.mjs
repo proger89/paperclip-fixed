@@ -24,10 +24,12 @@ const [
   agentAuthJwt,
   heartbeatService,
   ceoAgentsMarkdown,
+  telegramPluginPackageJson,
 ] = await Promise.all([
   read("server/dist/agent-auth-jwt.js"),
   read("server/dist/services/heartbeat.js"),
   read("server/dist/onboarding-assets/ceo/AGENTS.md"),
+  read("packages/plugins/telegram-channel-connector/package.json"),
 ]);
 
 assertIncludes(
@@ -70,5 +72,22 @@ assertExcludes(
   "$AGENT_HOME/TOOLS.md",
   "server/dist/onboarding-assets/ceo/AGENTS.md still references $AGENT_HOME/TOOLS.md",
 );
+
+const telegramPluginPackage = JSON.parse(telegramPluginPackageJson);
+const telegramManifestPath = path.join(
+  repoRoot,
+  "packages/plugins/telegram-channel-connector",
+  telegramPluginPackage.paperclipPlugin.manifest,
+);
+const telegramWorkerPath = path.join(
+  repoRoot,
+  "packages/plugins/telegram-channel-connector",
+  telegramPluginPackage.paperclipPlugin.worker,
+);
+
+await Promise.all([
+  fs.access(telegramManifestPath),
+  fs.access(telegramWorkerPath),
+]);
 
 console.log("Docker runtime build verification passed.");

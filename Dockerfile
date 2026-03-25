@@ -15,6 +15,11 @@ COPY packages/db/package.json packages/db/
 COPY packages/adapter-utils/package.json packages/adapter-utils/
 COPY packages/plugins/sdk/package.json packages/plugins/sdk/
 COPY packages/plugins/create-paperclip-plugin/package.json packages/plugins/create-paperclip-plugin/
+COPY packages/plugins/telegram-channel-connector/package.json packages/plugins/telegram-channel-connector/
+COPY packages/plugins/examples/plugin-hello-world-example/package.json packages/plugins/examples/plugin-hello-world-example/
+COPY packages/plugins/examples/plugin-file-browser-example/package.json packages/plugins/examples/plugin-file-browser-example/
+COPY packages/plugins/examples/plugin-kitchen-sink-example/package.json packages/plugins/examples/plugin-kitchen-sink-example/
+COPY packages/plugins/examples/plugin-authoring-smoke-example/package.json packages/plugins/examples/plugin-authoring-smoke-example/
 COPY packages/adapters/claude-local/package.json packages/adapters/claude-local/
 COPY packages/adapters/codex-local/package.json packages/adapters/codex-local/
 COPY packages/adapters/cursor-local/package.json packages/adapters/cursor-local/
@@ -33,6 +38,11 @@ RUN node scripts/clean-build-artifacts.mjs
 RUN pnpm --filter @paperclipai/server clean
 RUN pnpm --filter @paperclipai/ui build
 RUN pnpm --filter @paperclipai/plugin-sdk build
+RUN pnpm --filter @paperclipai/plugin-hello-world-example build
+RUN pnpm --filter @paperclipai/plugin-file-browser-example build
+RUN pnpm --filter @paperclipai/plugin-kitchen-sink-example build
+RUN pnpm --filter @paperclipai/plugin-authoring-smoke-example build
+RUN pnpm --filter @paperclipai/plugin-telegram-channel-connector build
 RUN pnpm --filter @paperclipai/server build
 RUN node scripts/verify-docker-runtime-build.mjs
 RUN test -f server/dist/index.js || (echo "ERROR: server build output missing" && exit 1)
