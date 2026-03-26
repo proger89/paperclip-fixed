@@ -13,6 +13,7 @@ import {
   Package2,
   TriangleAlert,
 } from "lucide-react";
+import { useI18n } from "@/context/I18nContext";
 import { timeAgo } from "../lib/timeAgo";
 import { cn } from "../lib/utils";
 
@@ -70,9 +71,10 @@ function isOpenableUrl(value: string | null | undefined) {
 }
 
 function WorkProductBadge({ label, tone }: { label: string; tone?: string }) {
+  const { translateText } = useI18n();
   return (
     <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium", tone)}>
-      {label}
+      {translateText(label)}
     </span>
   );
 }
@@ -90,6 +92,7 @@ export function WorkProductCard({
   showProjectName?: boolean;
   actions?: ReactNode;
 }) {
+  const { translateText } = useI18n();
   const Icon = TYPE_ICONS[product.type] ?? Package2;
   const openable = isOpenableUrl(product.url);
 
@@ -109,9 +112,7 @@ export function WorkProductCard({
             <div className="min-w-0">
               <div className="truncate text-sm font-medium">{product.title}</div>
               <div className="text-xs text-muted-foreground">
-                {TYPE_LABELS[product.type] ?? prettyLabel(product.type)}
-                {" · "}
-                updated {timeAgo(product.updatedAt)}
+                {translateText(TYPE_LABELS[product.type] ?? prettyLabel(product.type))} {"·"} {translateText("last updated")} {timeAgo(product.updatedAt)}
               </div>
             </div>
           </div>
@@ -126,7 +127,7 @@ export function WorkProductCard({
             />
             {product.reviewState !== "none" ? (
               <WorkProductBadge
-                label={`Review: ${prettyLabel(product.reviewState)}`}
+                label={`${translateText("Review:")} ${translateText(prettyLabel(product.reviewState))}`}
                 tone={badgeTone(product.reviewState)}
               />
             ) : null}
@@ -171,7 +172,7 @@ export function WorkProductCard({
             rel="noreferrer"
             className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border/70 px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:text-foreground"
           >
-            Open
+            {translateText("Open")}
             <ExternalLink className="h-3.5 w-3.5" />
           </a>
         ) : null}
@@ -193,6 +194,7 @@ export function WorkProductReviewSummary({
   pendingCount: number;
   missingReviewerCount?: number;
 }) {
+  const { translateText } = useI18n();
   if (pendingCount <= 0 && missingReviewerCount <= 0) return null;
   return (
     <div className="rounded-xl border border-amber-500/25 bg-amber-500/8 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
@@ -201,12 +203,12 @@ export function WorkProductReviewSummary({
         <div className="space-y-1">
           {pendingCount > 0 ? (
             <div>
-              <span className="font-medium">{pendingCount}</span> issues are waiting for review.
+              <span className="font-medium">{pendingCount}</span> {translateText("issues are waiting for review.")}
             </div>
           ) : null}
           {missingReviewerCount > 0 ? (
             <div>
-              <span className="font-medium">{missingReviewerCount}</span> review-gated issues still have no reviewer.
+              <span className="font-medium">{missingReviewerCount}</span> {translateText("review-gated issues still have no reviewer.")}
             </div>
           ) : null}
         </div>
@@ -224,18 +226,19 @@ export function WorkProductStatusSummary({
   readyForReview: number;
   failed: number;
 }) {
+  const { translateText } = useI18n();
   return (
     <div className="grid gap-3 sm:grid-cols-3">
       <div className="rounded-xl border border-border/70 bg-card px-4 py-3">
-        <div className="text-xs uppercase tracking-wide text-muted-foreground">Active previews</div>
+        <div className="text-xs uppercase tracking-wide text-muted-foreground">{translateText("Active previews")}</div>
         <div className="mt-1 text-2xl font-semibold">{activePreviews}</div>
       </div>
       <div className="rounded-xl border border-border/70 bg-card px-4 py-3">
-        <div className="text-xs uppercase tracking-wide text-muted-foreground">Ready for review</div>
+        <div className="text-xs uppercase tracking-wide text-muted-foreground">{translateText("Ready for review")}</div>
         <div className="mt-1 text-2xl font-semibold">{readyForReview}</div>
       </div>
       <div className="rounded-xl border border-border/70 bg-card px-4 py-3">
-        <div className="text-xs uppercase tracking-wide text-muted-foreground">Failed outputs</div>
+        <div className="text-xs uppercase tracking-wide text-muted-foreground">{translateText("Failed outputs")}</div>
         <div className="mt-1 flex items-center gap-2 text-2xl font-semibold">
           {failed}
           {failed > 0 ? <TriangleAlert className="h-5 w-5 text-red-500" /> : <BadgeCheck className="h-5 w-5 text-emerald-500" />}

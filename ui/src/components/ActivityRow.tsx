@@ -1,4 +1,5 @@
 import { Link } from "@/lib/router";
+import { useI18n } from "@/context/I18nContext";
 import { Identity } from "./Identity";
 import { timeAgo } from "../lib/timeAgo";
 import { cn } from "../lib/utils";
@@ -49,23 +50,27 @@ function humanizeValue(value: unknown): string {
   return value.replace(/_/g, " ");
 }
 
-function formatVerb(action: string, details?: Record<string, unknown> | null): string {
+function formatVerb(
+  action: string,
+  details: Record<string, unknown> | null | undefined,
+  translateText: (value: string) => string,
+): string {
   if (action === "issue.updated" && details) {
     const previous = (details._previous ?? {}) as Record<string, unknown>;
     if (details.status !== undefined) {
       const from = previous.status;
       return from
-        ? `changed status from ${humanizeValue(from)} to ${humanizeValue(details.status)} on`
-        : `changed status to ${humanizeValue(details.status)} on`;
+        ? `${translateText("changed status from")} ${translateText(humanizeValue(from))} ${translateText("to")} ${translateText(humanizeValue(details.status))} ${translateText("on")}`
+        : `${translateText("changed status to")} ${translateText(humanizeValue(details.status))} ${translateText("on")}`;
     }
     if (details.priority !== undefined) {
       const from = previous.priority;
       return from
-        ? `changed priority from ${humanizeValue(from)} to ${humanizeValue(details.priority)} on`
-        : `changed priority to ${humanizeValue(details.priority)} on`;
+        ? `${translateText("changed priority from")} ${translateText(humanizeValue(from))} ${translateText("to")} ${translateText(humanizeValue(details.priority))} ${translateText("on")}`
+        : `${translateText("changed priority to")} ${translateText(humanizeValue(details.priority))} ${translateText("on")}`;
     }
   }
-  return ACTION_VERBS[action] ?? action.replace(/[._]/g, " ");
+  return translateText(ACTION_VERBS[action] ?? action.replace(/[._]/g, " "));
 }
 
 function entityLink(entityType: string, entityId: string, name?: string | null): string | null {
@@ -88,7 +93,8 @@ interface ActivityRowProps {
 }
 
 export function ActivityRow({ event, agentMap, entityNameMap, entityTitleMap, className }: ActivityRowProps) {
-  const verb = formatVerb(event.action, event.details);
+  const { translateText } = useI18n();
+  const verb = formatVerb(event.action, event.details, translateText);
 
   const isHeartbeatEvent = event.entityType === "heartbeat_run";
   const heartbeatAgentId = isHeartbeatEvent
@@ -106,7 +112,13 @@ export function ActivityRow({ event, agentMap, entityNameMap, entityTitleMap, cl
     : entityLink(event.entityType, event.entityId, name);
 
   const actor = event.actorType === "agent" ? agentMap.get(event.actorId) : null;
-  const actorName = actor?.name ?? (event.actorType === "system" ? "System" : event.actorType === "user" ? "Board" : event.actorId || "Unknown");
+  const actorName = actor?.name ?? (
+    event.actorType === "system"
+      ? translateText("System")
+      : event.actorType === "user"
+        ? translateText("Board")
+        : event.actorId || translateText("Unknown")
+  );
 
   const inner = (
     <div className="flex gap-3">
@@ -118,7 +130,7 @@ export function ActivityRow({ event, agentMap, entityNameMap, entityTitleMap, cl
         />
         <span className="text-muted-foreground ml-1">{verb} </span>
         {name && <span className="font-medium">{name}</span>}
-        {entityTitle && <span className="text-muted-foreground ml-1">— {entityTitle}</span>}
+        {entityTitle && <span className="text-muted-foreground ml-1">- {entityTitle}</span>}
       </p>
       <span className="text-xs text-muted-foreground shrink-0 pt-0.5">{timeAgo(event.createdAt)}</span>
     </div>

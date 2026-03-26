@@ -95,6 +95,8 @@ type IssueDetailResponse = {
   workProducts?: IssueWorkProduct[];
 };
 
+type TelegramLocale = PluginSettingsPageProps["context"]["locale"];
+
 const layoutStack: CSSProperties = {
   display: "grid",
   gap: "14px",
@@ -160,6 +162,271 @@ const mutedTextStyle: CSSProperties = {
   lineHeight: 1.45,
 };
 
+const TELEGRAM_LOCALE_TAG: Record<TelegramLocale, string> = {
+  en: "en-US",
+  ru: "ru-RU",
+};
+
+const TELEGRAM_TEXT: Record<TelegramLocale, Record<string, string>> = {
+  en: {},
+  ru: {
+    "never": "никогда",
+    "connector": "коннектор",
+    "configured": "настроен",
+    "needs setup": "требует настройки",
+    "Ready": "Готов",
+    "Needs setup": "Требует настройки",
+    "Open settings": "Открыть настройки",
+    "Open approval": "Открыть согласование",
+    "Open latest pending approval": "Открыть последнее ожидающее согласование",
+    "No pending Telegram publish approvals.": "Нет ожидающих согласований на публикацию в Telegram.",
+    "No Telegram publications recorded yet.": "Публикации Telegram пока не зафиксированы.",
+    "Open Telegram post": "Открыть пост в Telegram",
+    "No public post URL available. Set a public handle to surface clickable links.": "Публичный URL поста пока недоступен. Укажите public handle, чтобы появились кликабельные ссылки.",
+    "No scheduled Telegram publications queued.": "Запланированных публикаций Telegram в очереди пока нет.",
+    "approved": "согласовано",
+    "approval missing": "нет согласования",
+    "No Telegram source stories ingested yet.": "Истории из Telegram пока не были загружены.",
+    "No excerpt captured.": "Отрывок не сохранён.",
+    "Approved": "Согласовано",
+    "Publication history for this issue": "История публикаций по этой задаче",
+    "Scheduled queue for this issue": "Очередь публикации по этой задаче",
+    "Existing Telegram outputs": "Существующие Telegram-результаты",
+    "Open Telegram link": "Открыть ссылку Telegram",
+    "Active queue item": "Активный элемент очереди",
+    "State": "Состояние",
+    "Issue": "Задача",
+    "unknown": "неизвестно",
+    "Telegram work products": "Telegram-артефакты",
+    "Linked Telegram approvals": "Связанные Telegram-согласования",
+    "Recent issue publishes": "Недавние публикации по задаче",
+    "Queued publish jobs": "Заданий публикации в очереди",
+    "Latest approved publish": "Последняя согласованная публикация",
+    "No approved Telegram publish approval is linked to this issue yet.": "С этой задачей пока не связано ни одно согласованное разрешение на публикацию Telegram.",
+    "Telegram publish handoff": "Передача публикации Telegram",
+    "Keep the draft, approval, and final Telegram post attached to this issue instead of hiding the distribution workflow in comments.": "Храните черновик, согласование и итоговый пост Telegram прямо в задаче, а не прячьте процесс публикации в комментариях.",
+    "Approved to publish": "Согласовано к публикации",
+    "Approval pending": "Ожидает согласования",
+    "Composer": "Редактор",
+    "Load issue document": "Загрузить документ задачи",
+    "Use an existing issue document as the starting point, then adjust the final Telegram copy here.": "Используйте существующий документ задачи как основу, затем отредактируйте здесь финальный текст для Telegram.",
+    "Select document...": "Выберите документ...",
+    "Loading...": "Загрузка...",
+    "Load": "Загрузить",
+    "Telegram draft": "Черновик Telegram",
+    "This is the exact text that will be saved for review and later sent to Telegram.": "Именно этот текст будет сохранён на согласование и позже отправлен в Telegram.",
+    "Write the final Telegram post here...": "Напишите финальный пост для Telegram здесь...",
+    "Configured destination": "Настроенное направление",
+    "Use default destination": "Использовать направление по умолчанию",
+    "(disabled)": "(отключено)",
+    "Destination label": "Название направления",
+    "Chat id / username": "Chat id / username",
+    "Public handle": "Публичный handle",
+    "Parse mode": "Режим парсинга",
+    "Plain text": "Обычный текст",
+    "Publish at": "Опубликовать в",
+    "Disable link preview": "Отключить предпросмотр ссылок",
+    "Send silently": "Отправить без уведомления",
+    "Saving...": "Сохранение...",
+    "Save draft output": "Сохранить черновой результат",
+    "Open pending approval": "Открыть ожидающее согласование",
+    "Requesting...": "Запрос...",
+    "Request publish approval": "Запросить согласование публикации",
+    "Scheduling...": "Планирование...",
+    "Rescheduling...": "Перепланирование...",
+    "Reschedule publish": "Перепланировать публикацию",
+    "Schedule publish": "Запланировать публикацию",
+    "Cancelling...": "Отмена...",
+    "Cancel scheduled publish": "Отменить запланированную публикацию",
+    "Publishing...": "Публикация...",
+    "Publish approved message": "Опубликовать согласованное сообщение",
+    "Telegram": "Telegram",
+    "Open Telegram dashboard": "Открыть дашборд Telegram",
+    "Default channel": "Канал по умолчанию",
+    "not configured": "не настроено",
+    "Destinations": "Направления",
+    "Sources": "Источники",
+    "Linked chats": "Связанные чаты",
+    "Blocked tasks": "Заблокированные задачи",
+    "Board approvals": "Board-согласования",
+    "Pending joins": "Ожидающие join-запросы",
+    "Open budget incidents": "Открытые бюджетные инциденты",
+    "Recent publishes": "Недавние публикации",
+    "Scheduled queue": "Запланированная очередь",
+    "Ingested stories": "Загруженные истории",
+    "Last publish": "Последняя публикация",
+    "Telegram Operations": "Операции Telegram",
+    "Company-level view of Telegram capability readiness, pending publish approvals, and recent outbound posts.": "Вид на уровне компании: готовность Telegram, ожидающие согласования публикаций и недавние исходящие посты.",
+    "Connection": "Подключение",
+    "not set": "не задано",
+    "Last validation": "Последняя проверка",
+    "Bot": "Бот",
+    "Task Bot": "Task Bot",
+    "Enabled": "Включено",
+    "yes": "да",
+    "no": "нет",
+    "Approvals inbox enabled": "Инбокс согласований включён",
+    "Open tasks": "Открытые задачи",
+    "Tasks in review": "Задачи на ревью",
+    "Last poll": "Последний polling",
+    "Last ingestion": "Последняя загрузка",
+    "Approvals Inbox": "Инбокс согласований",
+    "Board queue": "Очередь board",
+    "My pending approvals": "Мои ожидающие согласования",
+    "My revision requests": "Мои запросы на доработку",
+    "Last approval notification": "Последнее уведомление о согласовании",
+    "Last control-plane notification": "Последнее уведомление control plane",
+    "Total Telegram publish approvals": "Всего согласований публикаций Telegram",
+    "Recent publishing": "Недавние публикации",
+    "Recent posts tracked": "Недавних постов отслеживается",
+    "Scheduled publishes": "Запланированные публикации",
+    "Failed publishes": "Неудачные публикации",
+    "Last publish dispatch": "Последняя отправка публикации",
+    "Last post": "Последний пост",
+    "Open latest Telegram post": "Открыть последний пост Telegram",
+    "No public Telegram post URL recorded yet.": "Публичный URL поста Telegram пока не зафиксирован.",
+    "Recent publications": "Недавние публикации",
+    "Recent ingested stories": "Недавно загруженные истории",
+    "for": "для",
+    "at": "в",
+    "Item": "Элемент",
+    "Telegram settings saved": "Настройки Telegram сохранены",
+    "Bot token secret created": "Секрет bot token создан",
+    "Failed to create secret": "Не удалось создать секрет",
+    "Legacy Telegram config imported": "Наследуемая конфигурация Telegram импортирована",
+    "Company-scoped Telegram settings now mirror the previous global connector config.": "Настройки Telegram на уровне компании теперь повторяют прежнюю глобальную конфигурацию коннектора.",
+    "Failed to import legacy config": "Не удалось импортировать наследуемую конфигурацию",
+    "configured chat": "настроенный чат",
+    "Telegram connection OK": "Подключение Telegram успешно",
+    "Telegram connection failed": "Подключение Telegram не удалось",
+    "Telegram link code created": "Код привязки Telegram создан",
+    "Failed to generate link code": "Не удалось создать код привязки",
+    "Telegram chat revoked": "Чат Telegram отвязан",
+    "Failed to revoke Telegram chat": "Не удалось отвязать чат Telegram",
+    "Loading Telegram settings...": "Загрузка настроек Telegram...",
+    "Telegram Connector": "Коннектор Telegram",
+    "Configure company-scoped Telegram publishing and the Paperclip task bot. Publishing stays governed through approvals; task bot access is linked chat by chat with one-time codes.": "Настройте публикацию Telegram на уровне компании и task bot Paperclip. Публикации остаются под управлением согласований, а доступ task bot привязывается к чатам одноразовыми кодами.",
+    "No company selected": "Компания не выбрана",
+    "enabled": "включено",
+    "disabled": "отключено",
+    "bot healthy": "бот в порядке",
+    "Publishing": "Публикация",
+    "Enable this Telegram connector for the selected company": "Включить этот коннектор Telegram для выбранной компании",
+    "Bot token secret": "Секрет bot token",
+    "Stored as a Paperclip company secret. The worker resolves it at publish time.": "Хранится как секрет компании Paperclip. Worker получает его во время публикации.",
+    "Select a secret...": "Выберите секрет...",
+    "Default chat / channel": "Чат / канал по умолчанию",
+    "Use @channel_username for public channels or the numeric Telegram chat id.": "Используйте @channel_username для публичных каналов или числовой chat id Telegram.",
+    "Optional. Used to build clickable t.me links for published posts.": "Необязательно. Используется для создания кликабельных ссылок t.me для опубликованных постов.",
+    "Default parse mode": "Режим парсинга по умолчанию",
+    "Leave empty to send raw text. Use HTML or MarkdownV2 only when your draft already matches Telegram formatting rules.": "Оставьте пустым, чтобы отправлять обычный текст. Используйте HTML или MarkdownV2, только если черновик уже соответствует правилам форматирования Telegram.",
+    "Disable link preview by default": "Отключать предпросмотр ссылок по умолчанию",
+    "Send posts silently by default": "Отправлять посты без уведомления по умолчанию",
+    "Manage multiple Telegram publishing targets. The selected default destination also drives the legacy default fields above for backward compatibility.": "Управляйте несколькими направлениями публикации Telegram. Выбранное направление по умолчанию также синхронизирует устаревшие поля по умолчанию выше для обратной совместимости.",
+    "Add destination": "Добавить направление",
+    "Configured": "Настроено",
+    "Destination": "Направление",
+    "Label": "Название",
+    "Default destination": "Направление по умолчанию",
+    "Remove": "Удалить",
+    "No multi-channel destinations configured yet. The connector will fall back to the default fields above.": "Многоканальные направления пока не настроены. Коннектор будет использовать поля по умолчанию выше.",
+    "Enable Paperclip task bot over Telegram getUpdates polling": "Включить task bot Paperclip через polling Telegram getUpdates",
+    "Allow minute polling for inbound Telegram commands and replies": "Разрешить минутный polling для входящих команд и ответов Telegram",
+    "Notification mode": "Режим уведомлений",
+    "Fallback to all linked chats": "Фолбэк на все связанные чаты",
+    "Linked watchers only": "Только связанные наблюдатели",
+    "Link code TTL (minutes)": "TTL кода привязки (минуты)",
+    "Sources create editorial issues through routines when Telegram sends channel posts or discussion replies to this bot.": "Источники создают редакционные задачи через routines, когда Telegram отправляет этому боту посты канала или ответы из обсуждений.",
+    "Add source": "Добавить источник",
+    "Source": "Источник",
+    "Channel / chat id": "Channel / chat id",
+    "Discussion chat id": "Discussion chat id",
+    "Mode": "Режим",
+    "Channel posts": "Посты канала",
+    "Discussion replies": "Ответы в обсуждениях",
+    "Both": "Оба режима",
+    "Project id": "Project id",
+    "Assignee agent id": "Assignee agent id",
+    "Routine id": "Routine id",
+    "Issue template key": "Ключ шаблона задачи",
+    "No Telegram ingestion sources configured yet.": "Источники загрузки Telegram пока не настроены.",
+    "Save settings": "Сохранить настройки",
+    "Test connection": "Проверить подключение",
+    "Importing...": "Импорт...",
+    "Import legacy config": "Импортировать наследуемую конфигурацию",
+    "Secret bootstrap": "Быстрое создание секрета",
+    "There is no dedicated secrets page yet. Create the Telegram bot token secret here and the connector will immediately start using it.": "Отдельной страницы секретов пока нет. Создайте здесь секрет с токеном бота Telegram, и коннектор сразу начнет его использовать.",
+    "Secret name": "Имя секрета",
+    "Bot token": "Токен бота",
+    "Creating...": "Создание...",
+    "Create bot token secret": "Создать секрет bot token",
+    "Loading company secrets...": "Загрузка секретов компании...",
+    "Available secrets": "Доступные секреты",
+    "Task Bot Linking": "Привязка Task Bot",
+    "Generate one-time link codes for private Telegram chats. Linked users can browse tasks, create new ones, and reply directly from Telegram.": "Создавайте одноразовые коды привязки для приватных чатов Telegram. Связанные пользователи смогут просматривать задачи, создавать новые и отвечать прямо из Telegram.",
+    "Generate link code": "Сгенерировать код привязки",
+    "min": "мин",
+    "Latest link code": "Последний код привязки",
+    "Expires": "Истекает",
+    "revoked": "отозвано",
+    "linked": "привязано",
+    "chatId": "chatId",
+    "board user": "пользователь board",
+    "telegram user": "пользователь Telegram",
+    "unscoped": "без привязки",
+    "Revoke": "Отвязать",
+    "No Telegram chats linked yet.": "Чаты Telegram пока не привязаны.",
+    "Bot Health": "Состояние бота",
+    "Last update offset": "Последний offset обновлений",
+    "none": "нет",
+    "Last activity cursor": "Последний cursor активности",
+    "Last notification": "Последнее уведомление",
+    "Open approvals": "Открытые согласования",
+    "Revision approvals": "Согласования на доработку",
+    "Telegram bot health looks stable.": "Состояние Telegram-бота выглядит стабильным.",
+    "Legacy global Telegram config was detected. Import it once to move this company fully onto scoped settings.": "Обнаружена наследуемая глобальная конфигурация Telegram. Импортируйте её один раз, чтобы полностью перевести компанию на scoped settings.",
+    "Draft loaded": "Черновик загружен",
+    "Failed to load document": "Не удалось загрузить документ",
+    "Telegram Draft": "Черновик Telegram",
+    "Updated from Telegram issue tab": "Обновлено из Telegram issue tab",
+    "Telegram Final Copy": "Финальный текст Telegram",
+    "Synced final copy from Telegram issue tab": "Финальный текст синхронизирован из Telegram issue tab",
+    "Draft is empty": "Черновик пуст",
+    "Load a document or write the Telegram post before saving the draft output.": "Загрузите документ или напишите пост для Telegram перед сохранением чернового результата.",
+    "Telegram draft saved": "Черновик Telegram сохранён",
+    "Draft document and work product are now attached to the issue.": "Черновой документ и work product теперь прикреплены к задаче.",
+    "Failed to save Telegram draft": "Не удалось сохранить черновик Telegram",
+    "Save or compose the Telegram draft before requesting approval.": "Сохраните или подготовьте черновик Telegram перед запросом согласования.",
+    "Publish approval requested": "Запрошено согласование публикации",
+    "Failed to request publish approval": "Не удалось запросить согласование публикации",
+    "Publish approval required": "Требуется согласование публикации",
+    "Approve the Telegram publish request before sending the message.": "Согласуйте запрос на публикацию Telegram перед отправкой сообщения.",
+    "Write the Telegram post before publishing it.": "Напишите пост для Telegram перед публикацией.",
+    "Telegram post published": "Пост Telegram опубликован",
+    "The issue now has a visible Telegram work product with a clickable post URL.": "У задачи теперь есть видимый Telegram work product с кликабельным URL поста.",
+    "The issue now has a Telegram work product. Set a public handle to expose clickable post URLs.": "У задачи теперь есть Telegram work product. Укажите public handle, чтобы появились кликабельные URL поста.",
+    "Failed to publish Telegram post": "Не удалось опубликовать пост Telegram",
+    "Approve the Telegram publish request before scheduling the delivery queue.": "Согласуйте запрос на публикацию Telegram перед постановкой в очередь доставки.",
+    "Telegram publish rescheduled": "Публикация Telegram перепланирована",
+    "Telegram publish scheduled": "Публикация Telegram запланирована",
+    "Failed to reschedule Telegram publish": "Не удалось перепланировать публикацию Telegram",
+    "Failed to schedule Telegram publish": "Не удалось запланировать публикацию Telegram",
+    "Telegram publish cancelled": "Публикация Telegram отменена",
+    "The scheduled queue item was cancelled.": "Запланированный элемент очереди был отменён.",
+    "Failed to cancel Telegram publish": "Не удалось отменить публикацию Telegram",
+    "Issue context is required.": "Требуется контекст задачи.",
+    "Loading Telegram issue workflow...": "Загрузка Telegram workflow для задачи...",
+  },
+};
+
+function translateTelegramText(locale: TelegramLocale, value: string): string {
+  return TELEGRAM_TEXT[locale][value] ?? value;
+}
+
+function translateTelegramTemplate(locale: TelegramLocale, en: string, ru: string): string {
+  return locale === "ru" ? ru : en;
+}
+
 function hostPath(companyPrefix: string | null | undefined, suffix: string): string {
   return companyPrefix ? `/${companyPrefix}${suffix}` : suffix;
 }
@@ -168,11 +435,11 @@ function pluginPagePath(companyPrefix: string | null | undefined): string {
   return hostPath(companyPrefix, `/${PAGE_ROUTE}`);
 }
 
-function formatTimestamp(value: string | null | undefined): string {
-  if (!value) return "never";
+function formatTimestamp(value: string | null | undefined, locale: TelegramLocale): string {
+  if (!value) return translateTelegramText(locale, "never");
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  return date.toLocaleString(TELEGRAM_LOCALE_TAG[locale]);
 }
 
 function toDateTimeLocalValue(value: string | null | undefined): string {
@@ -480,7 +747,7 @@ function sortApprovalsNewestFirst(approvals: Approval[]): Approval[] {
   return [...approvals].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
 
-function Pill({ label, tone = "neutral" }: { label: string; tone?: "neutral" | "success" | "warn" }) {
+function Pill({ label, tone = "neutral", locale = "en" }: { label: string; tone?: "neutral" | "success" | "warn"; locale?: TelegramLocale }) {
   const borderColor = tone === "success"
     ? "color-mix(in srgb, #16a34a 55%, var(--border))"
     : tone === "warn"
@@ -502,14 +769,14 @@ function Pill({ label, tone = "neutral" }: { label: string; tone?: "neutral" | "
       fontSize: "11px",
       color,
     }}>
-      {label}
+      {translateTelegramText(locale, label)}
     </span>
   );
 }
 
-function PublicationList({ publications }: { publications: TelegramPublication[] }) {
+function PublicationList({ publications, locale }: { publications: TelegramPublication[]; locale: TelegramLocale }) {
   if (publications.length === 0) {
-    return <div style={mutedTextStyle}>No Telegram publications recorded yet.</div>;
+    return <div style={mutedTextStyle}>{translateTelegramText(locale, "No Telegram publications recorded yet.")}</div>;
   }
 
   return (
@@ -518,21 +785,21 @@ function PublicationList({ publications }: { publications: TelegramPublication[]
         <div key={publication.externalId} style={{ ...cardStyle, padding: "12px" }}>
           <div style={{ ...rowStyle, justifyContent: "space-between" }}>
             <strong>{publication.destinationLabel}</strong>
-            <span style={mutedTextStyle}>{formatTimestamp(publication.sentAt)}</span>
+            <span style={mutedTextStyle}>{formatTimestamp(publication.sentAt, locale)}</span>
           </div>
           <div style={{ fontSize: "12px", lineHeight: 1.45 }}>{publication.summary}</div>
           <div style={rowStyle}>
-            {publication.issueIdentifier ? <Pill label={publication.issueIdentifier} /> : null}
-            {publication.publicHandle ? <Pill label={`@${publication.publicHandle}`} /> : null}
-            {publication.approvalId ? <Pill label="Approved" tone="success" /> : null}
-            {publication.parseMode ? <Pill label={publication.parseMode} /> : null}
+            {publication.issueIdentifier ? <Pill label={publication.issueIdentifier} locale={locale} /> : null}
+            {publication.publicHandle ? <Pill label={`@${publication.publicHandle}`} locale={locale} /> : null}
+            {publication.approvalId ? <Pill label="Approved" tone="success" locale={locale} /> : null}
+            {publication.parseMode ? <Pill label={publication.parseMode} locale={locale} /> : null}
           </div>
           {publication.url ? (
             <a href={publication.url} target="_blank" rel="noreferrer" style={{ fontSize: "12px" }}>
-              Open Telegram post
+              {translateTelegramText(locale, "Open Telegram post")}
             </a>
           ) : (
-            <div style={mutedTextStyle}>No public post URL available. Set a public handle to surface clickable links.</div>
+            <div style={mutedTextStyle}>{translateTelegramText(locale, "No public post URL available. Set a public handle to surface clickable links.")}</div>
           )}
         </div>
       ))}
@@ -540,9 +807,9 @@ function PublicationList({ publications }: { publications: TelegramPublication[]
   );
 }
 
-function PublicationJobList({ jobs }: { jobs: TelegramPublicationJob[] }) {
+function PublicationJobList({ jobs, locale }: { jobs: TelegramPublicationJob[]; locale: TelegramLocale }) {
   if (jobs.length === 0) {
-    return <div style={mutedTextStyle}>No scheduled Telegram publications queued.</div>;
+    return <div style={mutedTextStyle}>{translateTelegramText(locale, "No scheduled Telegram publications queued.")}</div>;
   }
 
   return (
@@ -551,17 +818,17 @@ function PublicationJobList({ jobs }: { jobs: TelegramPublicationJob[] }) {
         <div key={job.id ?? `${job.issueId}:${job.destinationId}:${job.publishAt}`} style={{ ...cardStyle, padding: "12px" }}>
           <div style={{ ...rowStyle, justifyContent: "space-between" }}>
             <strong>{job.destinationId}</strong>
-            <span style={mutedTextStyle}>{formatTimestamp(job.publishAt)}</span>
+            <span style={mutedTextStyle}>{formatTimestamp(job.publishAt, locale)}</span>
           </div>
           <div style={rowStyle}>
-            <Pill label={job.status} tone={job.status === "failed" ? "warn" : job.status === "published" ? "success" : "neutral"} />
-            <Pill label={job.issueId} />
-            {job.approvalId ? <Pill label="approved" tone="success" /> : <Pill label="approval missing" tone="warn" />}
+            <Pill label={job.status} tone={job.status === "failed" ? "warn" : job.status === "published" ? "success" : "neutral"} locale={locale} />
+            <Pill label={job.issueId} locale={locale} />
+            {job.approvalId ? <Pill label="approved" tone="success" locale={locale} /> : <Pill label="approval missing" tone="warn" locale={locale} />}
           </div>
           {job.failureReason ? <div style={mutedTextStyle}>{job.failureReason}</div> : null}
           {job.publishedUrl ? (
             <a href={job.publishedUrl} target="_blank" rel="noreferrer" style={{ fontSize: "12px" }}>
-              Open Telegram post
+              {translateTelegramText(locale, "Open Telegram post")}
             </a>
           ) : null}
         </div>
@@ -570,9 +837,9 @@ function PublicationJobList({ jobs }: { jobs: TelegramPublicationJob[] }) {
   );
 }
 
-function SourceMessageList({ stories }: { stories: TelegramSourceMessageRecord[] }) {
+function SourceMessageList({ stories, locale }: { stories: TelegramSourceMessageRecord[]; locale: TelegramLocale }) {
   if (stories.length === 0) {
-    return <div style={mutedTextStyle}>No Telegram source stories ingested yet.</div>;
+    return <div style={mutedTextStyle}>{translateTelegramText(locale, "No Telegram source stories ingested yet.")}</div>;
   }
 
   return (
@@ -581,13 +848,13 @@ function SourceMessageList({ stories }: { stories: TelegramSourceMessageRecord[]
         <div key={`${story.sourceId}:${story.chatId}:${story.messageId}`} style={{ ...cardStyle, padding: "12px" }}>
           <div style={{ ...rowStyle, justifyContent: "space-between" }}>
             <strong>{story.sourceId}</strong>
-            <span style={mutedTextStyle}>{formatTimestamp(story.messageDate ?? story.linkedAt)}</span>
+            <span style={mutedTextStyle}>{formatTimestamp(story.messageDate ?? story.linkedAt, locale)}</span>
           </div>
-          <div style={mutedTextStyle}>{story.excerpt ?? "No excerpt captured."}</div>
+          <div style={mutedTextStyle}>{story.excerpt ?? translateTelegramText(locale, "No excerpt captured.")}</div>
           <div style={rowStyle}>
-            <Pill label={`chat ${story.chatId}`} />
-            <Pill label={`message ${story.messageId}`} />
-            {story.issueId ? <Pill label={story.issueId} tone="success" /> : null}
+            <Pill label={`chat ${story.chatId}`} locale={locale} />
+            <Pill label={`message ${story.messageId}`} locale={locale} />
+            {story.issueId ? <Pill label={story.issueId} tone="success" locale={locale} /> : null}
           </div>
         </div>
       ))}
@@ -599,21 +866,25 @@ function SettingsField({
   label,
   hint,
   children,
+  locale = "en",
 }: {
   label: string;
   hint?: string;
   children: ReactNode;
+  locale?: TelegramLocale;
 }) {
   return (
     <label style={{ display: "grid", gap: "6px" }}>
-      <span style={{ fontSize: "12px", fontWeight: 600 }}>{label}</span>
+      <span style={{ fontSize: "12px", fontWeight: 600 }}>{translateTelegramText(locale, label)}</span>
       {children}
-      {hint ? <span style={mutedTextStyle}>{hint}</span> : null}
+      {hint ? <span style={mutedTextStyle}>{translateTelegramText(locale, hint)}</span> : null}
     </label>
   );
 }
 
 export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
+  const locale = context.locale;
+  const t = (value: string) => translateTelegramText(locale, value);
   const {
     settingsJson,
     setSettingsJson,
@@ -813,7 +1084,7 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
     event.preventDefault();
     await save(settingsJson, enabled);
     pushToast({
-      title: "Telegram settings saved",
+      title: t("Telegram settings saved"),
       tone: "success",
     });
     overview.refresh();
@@ -831,13 +1102,13 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
       setPublishingField("botTokenSecretRef", created.id);
       setSecretValue("");
       pushToast({
-        title: "Bot token secret created",
-        body: `Stored as ${created.name}.`,
+        title: t("Bot token secret created"),
+        body: translateTelegramTemplate(locale, `Stored as ${created.name}.`, `Сохранено как ${created.name}.`),
         tone: "success",
       });
     } catch (nextError) {
       pushToast({
-        title: "Failed to create secret",
+        title: t("Failed to create secret"),
         body: nextError instanceof Error ? nextError.message : String(nextError),
         tone: "error",
       });
@@ -853,14 +1124,14 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
       const nextSettings = companySettingsFromLegacyConfig(legacyConfig.configJson);
       await save(nextSettings, enabled);
       pushToast({
-        title: "Legacy Telegram config imported",
-        body: "Company-scoped Telegram settings now mirror the previous global connector config.",
+        title: t("Legacy Telegram config imported"),
+        body: t("Company-scoped Telegram settings now mirror the previous global connector config."),
         tone: "success",
       });
       overview.refresh();
     } catch (nextError) {
       pushToast({
-        title: "Failed to import legacy config",
+        title: t("Failed to import legacy config"),
         body: nextError instanceof Error ? nextError.message : String(nextError),
         tone: "error",
       });
@@ -879,11 +1150,15 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
       const botName = result.bot?.username ? `@${result.bot.username}` : (result.bot?.firstName ?? "bot");
       const chatLabel = result.defaultChat?.username
         ? `@${result.defaultChat.username}`
-        : (result.defaultChat?.title ?? result.defaultChat?.id ?? "configured chat");
-      const message = `Connected as ${botName}${result.defaultChat ? ` to ${chatLabel}` : ""}.`;
+        : (result.defaultChat?.title ?? result.defaultChat?.id ?? t("configured chat"));
+      const message = translateTelegramTemplate(
+        locale,
+        `Connected as ${botName}${result.defaultChat ? ` to ${chatLabel}` : ""}.`,
+        `Подключено как ${botName}${result.defaultChat ? ` к ${chatLabel}` : ""}.`,
+      );
       setTestResult(message);
       pushToast({
-        title: "Telegram connection OK",
+        title: t("Telegram connection OK"),
         body: message,
         tone: "success",
       });
@@ -891,7 +1166,7 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
       const message = nextError instanceof Error ? nextError.message : String(nextError);
       setTestResult(message);
       pushToast({
-        title: "Telegram connection failed",
+        title: t("Telegram connection failed"),
         body: message,
         tone: "error",
       });
@@ -908,13 +1183,17 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
       }) as { code: string; expiresAt: string; startCommand: string };
       setLinkCode(result);
       pushToast({
-        title: "Telegram link code created",
-        body: `Use ${result.startCommand} in a private chat with the bot.`,
+        title: t("Telegram link code created"),
+        body: translateTelegramTemplate(
+          locale,
+          `Use ${result.startCommand} in a private chat with the bot.`,
+          `Используйте ${result.startCommand} в приватном чате с ботом.`,
+        ),
         tone: "success",
       });
     } catch (nextError) {
       pushToast({
-        title: "Failed to generate link code",
+        title: t("Failed to generate link code"),
         body: nextError instanceof Error ? nextError.message : String(nextError),
         tone: "error",
       });
@@ -926,14 +1205,18 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
     try {
       await revokeLinkedChat({ companyId: context.companyId, chatId });
       pushToast({
-        title: "Telegram chat revoked",
-        body: `Chat ${chatId} will stop receiving task updates.`,
+        title: t("Telegram chat revoked"),
+        body: translateTelegramTemplate(
+          locale,
+          `Chat ${chatId} will stop receiving task updates.`,
+          `Чат ${chatId} перестанет получать обновления по задачам.`,
+        ),
         tone: "success",
       });
       overview.refresh();
     } catch (nextError) {
       pushToast({
-        title: "Failed to revoke Telegram chat",
+        title: t("Failed to revoke Telegram chat"),
         body: nextError instanceof Error ? nextError.message : String(nextError),
         tone: "error",
       });
@@ -941,47 +1224,48 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
   }
 
   if (loading) {
-    return <div style={mutedTextStyle}>Loading Telegram settings...</div>;
+    return <div style={mutedTextStyle}>{t("Loading Telegram settings...")}</div>;
   }
 
   return (
     <form onSubmit={onSubmit} style={layoutStack}>
       <div style={cardStyle}>
         <div style={{ ...layoutStack, gap: "10px" }}>
-          <div style={sectionTitleStyle}>Telegram Connector</div>
+          <div style={sectionTitleStyle}>{t("Telegram Connector")}</div>
           <div style={mutedTextStyle}>
-            Configure company-scoped Telegram publishing and the Paperclip task bot. Publishing stays governed through approvals; task bot access is linked chat by chat with one-time codes.
+            {t("Configure company-scoped Telegram publishing and the Paperclip task bot. Publishing stays governed through approvals; task bot access is linked chat by chat with one-time codes.")}
           </div>
           <div style={rowStyle}>
-            <a href={pluginPagePath(context.companyPrefix)} style={{ fontSize: "12px" }}>Open Telegram dashboard</a>
-            {context.companyId ? <Pill label={context.companyId} /> : <Pill label="No company selected" tone="warn" />}
-            {enabled ? <Pill label="enabled" tone="success" /> : <Pill label="disabled" tone="warn" />}
-            {overview.data?.botHealth?.ok ? <Pill label="bot healthy" tone="success" /> : null}
+            <a href={pluginPagePath(context.companyPrefix)} style={{ fontSize: "12px" }}>{t("Open Telegram dashboard")}</a>
+            {context.companyId ? <Pill label={context.companyId} locale={locale} /> : <Pill label="No company selected" tone="warn" locale={locale} />}
+            {enabled ? <Pill label="enabled" tone="success" locale={locale} /> : <Pill label="disabled" tone="warn" locale={locale} />}
+            {overview.data?.botHealth?.ok ? <Pill label="bot healthy" tone="success" locale={locale} /> : null}
           </div>
         </div>
       </div>
 
       <div style={{ display: "grid", gap: "16px", gridTemplateColumns: "minmax(0, 1.2fr) minmax(280px, 0.8fr)" }}>
         <div style={{ ...cardStyle, ...layoutStack }}>
-          <div style={sectionTitleStyle}>Publishing</div>
+          <div style={sectionTitleStyle}>{t("Publishing")}</div>
           <label style={rowStyle}>
             <input
               type="checkbox"
               checked={enabled}
               onChange={(event) => setEnabled(event.target.checked)}
             />
-            <span style={{ fontSize: "12px" }}>Enable this Telegram connector for the selected company</span>
+            <span style={{ fontSize: "12px" }}>{t("Enable this Telegram connector for the selected company")}</span>
           </label>
           <SettingsField
             label="Bot token secret"
             hint="Stored as a Paperclip company secret. The worker resolves it at publish time."
+            locale={locale}
           >
             <select
               style={inputStyle}
               value={settingsJson.publishing.botTokenSecretRef}
               onChange={(event) => setPublishingField("botTokenSecretRef", event.target.value)}
             >
-              <option value="">Select a secret...</option>
+              <option value="">{t("Select a secret...")}</option>
               {secrets.map((secret) => (
                 <option key={secret.id} value={secret.id}>
                   {secret.name} ({secret.id.slice(0, 8)}...)
@@ -993,6 +1277,7 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
           <SettingsField
             label="Default chat / channel"
             hint="Use @channel_username for public channels or the numeric Telegram chat id."
+            locale={locale}
           >
             <input
               style={inputStyle}
@@ -1005,6 +1290,7 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
           <SettingsField
             label="Public handle"
             hint="Optional. Used to build clickable t.me links for published posts."
+            locale={locale}
           >
             <input
               style={inputStyle}
@@ -1017,13 +1303,14 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
           <SettingsField
             label="Default parse mode"
             hint="Leave empty to send raw text. Use HTML or MarkdownV2 only when your draft already matches Telegram formatting rules."
+            locale={locale}
           >
             <select
               style={inputStyle}
               value={settingsJson.publishing.defaultParseMode}
               onChange={(event) => setPublishingField("defaultParseMode", event.target.value as TelegramCompanySettings["publishing"]["defaultParseMode"])}
             >
-              <option value="">Plain text</option>
+              <option value="">{t("Plain text")}</option>
               <option value="HTML">HTML</option>
               <option value="MarkdownV2">MarkdownV2</option>
             </select>
@@ -1035,7 +1322,7 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
               checked={settingsJson.publishing.defaultDisableLinkPreview === true}
               onChange={(event) => setPublishingField("defaultDisableLinkPreview", event.target.checked)}
             />
-            <span style={{ fontSize: "12px" }}>Disable link preview by default</span>
+            <span style={{ fontSize: "12px" }}>{t("Disable link preview by default")}</span>
           </label>
           <label style={rowStyle}>
             <input
@@ -1043,39 +1330,39 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
               checked={settingsJson.publishing.defaultDisableNotification === true}
               onChange={(event) => setPublishingField("defaultDisableNotification", event.target.checked)}
             />
-            <span style={{ fontSize: "12px" }}>Send posts silently by default</span>
+            <span style={{ fontSize: "12px" }}>{t("Send posts silently by default")}</span>
           </label>
 
-          <div style={{ ...sectionTitleStyle, marginTop: "6px" }}>Destinations</div>
+          <div style={{ ...sectionTitleStyle, marginTop: "6px" }}>{t("Destinations")}</div>
           <div style={mutedTextStyle}>
-            Manage multiple Telegram publishing targets. The selected default destination also drives the legacy default fields above for backward compatibility.
+            {t("Manage multiple Telegram publishing targets. The selected default destination also drives the legacy default fields above for backward compatibility.")}
           </div>
           <div style={rowStyle}>
             <button type="button" style={buttonStyle} onClick={addDestination}>
-              Add destination
+              {t("Add destination")}
             </button>
-            <span style={mutedTextStyle}>Configured: {settingsJson.publishing.destinations.length}</span>
+            <span style={mutedTextStyle}>{t("Configured")}: {settingsJson.publishing.destinations.length}</span>
           </div>
           {settingsJson.publishing.destinations.length > 0 ? (
             <div style={{ display: "grid", gap: "10px" }}>
               {settingsJson.publishing.destinations.map((destination, index) => (
                 <div key={destination.id} style={{ border: "1px solid var(--border)", borderRadius: "12px", padding: "12px", display: "grid", gap: "10px" }}>
                   <div style={{ ...rowStyle, justifyContent: "space-between" }}>
-                    <strong style={{ fontSize: "12px" }}>{destination.label || `Destination ${index + 1}`}</strong>
+                    <strong style={{ fontSize: "12px" }}>{destination.label || `${t("Destination")} ${index + 1}`}</strong>
                     <div style={rowStyle}>
-                      {destination.enabled ? <Pill label="enabled" tone="success" /> : <Pill label="disabled" tone="warn" />}
-                      {settingsJson.publishing.defaultDestinationId === destination.id ? <Pill label="default" /> : null}
+                      {destination.enabled ? <Pill label="enabled" tone="success" locale={locale} /> : <Pill label="disabled" tone="warn" locale={locale} />}
+                      {settingsJson.publishing.defaultDestinationId === destination.id ? <Pill label="default" locale={locale} /> : null}
                     </div>
                   </div>
                   <div style={{ display: "grid", gap: "10px", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>
-                    <SettingsField label="Label">
+                    <SettingsField label="Label" locale={locale}>
                       <input
                         style={inputStyle}
                         value={destination.label}
                         onChange={(event) => updateDestination(destination.id, { label: event.target.value })}
                       />
                     </SettingsField>
-                    <SettingsField label="Chat id / username">
+                    <SettingsField label="Chat id / username" locale={locale}>
                       <input
                         style={inputStyle}
                         value={destination.chatId}
@@ -1083,7 +1370,7 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
                         placeholder="@my_channel"
                       />
                     </SettingsField>
-                    <SettingsField label="Public handle">
+                    <SettingsField label="Public handle" locale={locale}>
                       <input
                         style={inputStyle}
                         value={destination.publicHandle}
@@ -1091,13 +1378,13 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
                         placeholder="@my_channel"
                       />
                     </SettingsField>
-                    <SettingsField label="Parse mode">
+                    <SettingsField label="Parse mode" locale={locale}>
                       <select
                         style={inputStyle}
                         value={destination.parseMode}
                         onChange={(event) => updateDestination(destination.id, { parseMode: event.target.value as TelegramDestination["parseMode"] })}
                       >
-                        <option value="">Plain text</option>
+                        <option value="">{t("Plain text")}</option>
                         <option value="HTML">HTML</option>
                         <option value="MarkdownV2">MarkdownV2</option>
                       </select>
@@ -1110,7 +1397,7 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
                         checked={destination.enabled}
                         onChange={(event) => updateDestination(destination.id, { enabled: event.target.checked })}
                       />
-                      <span style={{ fontSize: "12px" }}>Enabled</span>
+                      <span style={{ fontSize: "12px" }}>{t("Enabled")}</span>
                     </label>
                     <label style={rowStyle}>
                       <input
@@ -1120,7 +1407,7 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
                           if (event.target.checked) updateDestination(destination.id, { isDefault: true });
                         }}
                       />
-                      <span style={{ fontSize: "12px" }}>Default destination</span>
+                      <span style={{ fontSize: "12px" }}>{t("Default destination")}</span>
                     </label>
                     <label style={rowStyle}>
                       <input
@@ -1128,7 +1415,7 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
                         checked={destination.disableLinkPreview}
                         onChange={(event) => updateDestination(destination.id, { disableLinkPreview: event.target.checked })}
                       />
-                      <span style={{ fontSize: "12px" }}>Disable link preview</span>
+                      <span style={{ fontSize: "12px" }}>{t("Disable link preview")}</span>
                     </label>
                     <label style={rowStyle}>
                       <input
@@ -1136,27 +1423,27 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
                         checked={destination.disableNotification}
                         onChange={(event) => updateDestination(destination.id, { disableNotification: event.target.checked })}
                       />
-                      <span style={{ fontSize: "12px" }}>Send silently</span>
+                      <span style={{ fontSize: "12px" }}>{t("Send silently")}</span>
                     </label>
                     <button type="button" style={buttonStyle} onClick={() => removeDestination(destination.id)}>
-                      Remove
+                      {t("Remove")}
                     </button>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div style={mutedTextStyle}>No multi-channel destinations configured yet. The connector will fall back to the default fields above.</div>
+            <div style={mutedTextStyle}>{t("No multi-channel destinations configured yet. The connector will fall back to the default fields above.")}</div>
           )}
 
-          <div style={{ ...sectionTitleStyle, marginTop: "6px" }}>Task Bot</div>
+          <div style={{ ...sectionTitleStyle, marginTop: "6px" }}>{t("Task Bot")}</div>
           <label style={rowStyle}>
             <input
               type="checkbox"
               checked={settingsJson.taskBot.enabled === true}
               onChange={(event) => setTaskBotField("enabled", event.target.checked)}
             />
-            <span style={{ fontSize: "12px" }}>Enable Paperclip task bot over Telegram getUpdates polling</span>
+            <span style={{ fontSize: "12px" }}>{t("Enable Paperclip task bot over Telegram getUpdates polling")}</span>
           </label>
           <label style={rowStyle}>
             <input
@@ -1164,19 +1451,19 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
               checked={settingsJson.taskBot.pollingEnabled !== false}
               onChange={(event) => setTaskBotField("pollingEnabled", event.target.checked)}
             />
-            <span style={{ fontSize: "12px" }}>Allow minute polling for inbound Telegram commands and replies</span>
+            <span style={{ fontSize: "12px" }}>{t("Allow minute polling for inbound Telegram commands and replies")}</span>
           </label>
-          <SettingsField label="Notification mode">
+          <SettingsField label="Notification mode" locale={locale}>
             <select
               style={inputStyle}
               value={settingsJson.taskBot.notificationMode}
               onChange={(event) => setTaskBotField("notificationMode", event.target.value as TelegramCompanySettings["taskBot"]["notificationMode"])}
             >
-              <option value="fallback_all_linked">Fallback to all linked chats</option>
-              <option value="linked_only">Linked watchers only</option>
+              <option value="fallback_all_linked">{t("Fallback to all linked chats")}</option>
+              <option value="linked_only">{t("Linked watchers only")}</option>
             </select>
           </SettingsField>
-          <SettingsField label="Link code TTL (minutes)">
+          <SettingsField label="Link code TTL (minutes)" locale={locale}>
             <input
               style={inputStyle}
               type="number"
@@ -1187,71 +1474,71 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
             />
           </SettingsField>
 
-          <div style={{ ...sectionTitleStyle, marginTop: "6px" }}>Ingestion Sources</div>
+          <div style={{ ...sectionTitleStyle, marginTop: "6px" }}>{t("Ingestion Sources")}</div>
           <div style={mutedTextStyle}>
-            Sources create editorial issues through routines when Telegram sends channel posts or discussion replies to this bot.
+            {t("Sources create editorial issues through routines when Telegram sends channel posts or discussion replies to this bot.")}
           </div>
           <div style={rowStyle}>
             <button type="button" style={buttonStyle} onClick={addSource}>
-              Add source
+              {t("Add source")}
             </button>
-            <span style={mutedTextStyle}>Configured: {settingsJson.ingestion.sources.length}</span>
+            <span style={mutedTextStyle}>{t("Configured")}: {settingsJson.ingestion.sources.length}</span>
           </div>
           {settingsJson.ingestion.sources.length > 0 ? (
             <div style={{ display: "grid", gap: "10px" }}>
               {settingsJson.ingestion.sources.map((source, index) => (
                 <div key={source.id} style={{ border: "1px solid var(--border)", borderRadius: "12px", padding: "12px", display: "grid", gap: "10px" }}>
                   <div style={{ ...rowStyle, justifyContent: "space-between" }}>
-                    <strong style={{ fontSize: "12px" }}>{source.label || `Source ${index + 1}`}</strong>
-                    {source.enabled ? <Pill label="enabled" tone="success" /> : <Pill label="disabled" tone="warn" />}
+                    <strong style={{ fontSize: "12px" }}>{source.label || `${t("Source")} ${index + 1}`}</strong>
+                    {source.enabled ? <Pill label="enabled" tone="success" locale={locale} /> : <Pill label="disabled" tone="warn" locale={locale} />}
                   </div>
                   <div style={{ display: "grid", gap: "10px", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}>
-                    <SettingsField label="Label">
+                    <SettingsField label="Label" locale={locale}>
                       <input style={inputStyle} value={source.label} onChange={(event) => updateSource(source.id, { label: event.target.value })} />
                     </SettingsField>
-                    <SettingsField label="Channel / chat id">
+                    <SettingsField label="Channel / chat id" locale={locale}>
                       <input style={inputStyle} value={source.chatId} onChange={(event) => updateSource(source.id, { chatId: event.target.value })} placeholder="-100123..." />
                     </SettingsField>
-                    <SettingsField label="Public handle">
+                    <SettingsField label="Public handle" locale={locale}>
                       <input style={inputStyle} value={source.publicHandle} onChange={(event) => updateSource(source.id, { publicHandle: event.target.value })} placeholder="@my_channel" />
                     </SettingsField>
-                    <SettingsField label="Discussion chat id">
+                    <SettingsField label="Discussion chat id" locale={locale}>
                       <input style={inputStyle} value={source.discussionChatId} onChange={(event) => updateSource(source.id, { discussionChatId: event.target.value })} placeholder="-100discussion..." />
                     </SettingsField>
-                    <SettingsField label="Mode">
+                    <SettingsField label="Mode" locale={locale}>
                       <select style={inputStyle} value={source.mode} onChange={(event) => updateSource(source.id, { mode: event.target.value as TelegramIngestionSource["mode"] })}>
-                        <option value="channel_posts">Channel posts</option>
-                        <option value="discussion_replies">Discussion replies</option>
-                        <option value="both">Both</option>
+                        <option value="channel_posts">{t("Channel posts")}</option>
+                        <option value="discussion_replies">{t("Discussion replies")}</option>
+                        <option value="both">{t("Both")}</option>
                       </select>
                     </SettingsField>
-                    <SettingsField label="Project id">
+                    <SettingsField label="Project id" locale={locale}>
                       <input style={inputStyle} value={source.projectId} onChange={(event) => updateSource(source.id, { projectId: event.target.value })} />
                     </SettingsField>
-                    <SettingsField label="Assignee agent id">
+                    <SettingsField label="Assignee agent id" locale={locale}>
                       <input style={inputStyle} value={source.assigneeAgentId} onChange={(event) => updateSource(source.id, { assigneeAgentId: event.target.value })} />
                     </SettingsField>
-                    <SettingsField label="Routine id">
+                    <SettingsField label="Routine id" locale={locale}>
                       <input style={inputStyle} value={source.routineId} onChange={(event) => updateSource(source.id, { routineId: event.target.value })} placeholder="Optional existing routine" />
                     </SettingsField>
-                    <SettingsField label="Issue template key">
+                    <SettingsField label="Issue template key" locale={locale}>
                       <input style={inputStyle} value={source.issueTemplateKey} onChange={(event) => updateSource(source.id, { issueTemplateKey: event.target.value })} placeholder="Optional template key" />
                     </SettingsField>
                   </div>
                   <div style={rowStyle}>
                     <label style={rowStyle}>
                       <input type="checkbox" checked={source.enabled} onChange={(event) => updateSource(source.id, { enabled: event.target.checked })} />
-                      <span style={{ fontSize: "12px" }}>Enabled</span>
+                      <span style={{ fontSize: "12px" }}>{t("Enabled")}</span>
                     </label>
                     <button type="button" style={buttonStyle} onClick={() => removeSource(source.id)}>
-                      Remove
+                      {t("Remove")}
                     </button>
                   </div>
                 </div>
               ))}
             </div>
           ) : (
-            <div style={mutedTextStyle}>No Telegram ingestion sources configured yet.</div>
+            <div style={mutedTextStyle}>{t("No Telegram ingestion sources configured yet.")}</div>
           )}
 
           {error ? <div style={{ color: "var(--destructive, #c00)", fontSize: "12px" }}>{error}</div> : null}
@@ -1260,7 +1547,7 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
 
           <div style={rowStyle}>
             <button type="submit" style={primaryButtonStyle} disabled={saving}>
-              {saving ? "Saving..." : "Save settings"}
+              {saving ? t("Saving...") : t("Save settings")}
             </button>
             <button
               type="button"
@@ -1268,7 +1555,7 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
               disabled={!context.companyId}
               onClick={() => void onTestConnection()}
             >
-              Test connection
+              {t("Test connection")}
             </button>
             {legacyDetected ? (
               <button
@@ -1277,21 +1564,21 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
                 disabled={importingLegacy || legacyConfig.loading}
                 onClick={() => void onImportLegacy()}
               >
-                {importingLegacy ? "Importing..." : "Import legacy config"}
+                {importingLegacy ? t("Importing...") : t("Import legacy config")}
               </button>
             ) : null}
           </div>
         </div>
 
         <div style={{ ...cardStyle, ...layoutStack }}>
-          <div style={sectionTitleStyle}>Secret bootstrap</div>
+          <div style={sectionTitleStyle}>{t("Secret bootstrap")}</div>
           <div style={mutedTextStyle}>
-            There is no dedicated secrets page yet. Create the Telegram bot token secret here and the connector will immediately start using it.
+            {t("There is no dedicated secrets page yet. Create the Telegram bot token secret here and the connector will immediately start using it.")}
           </div>
-          <SettingsField label="Secret name">
+          <SettingsField label="Secret name" locale={locale}>
             <input style={inputStyle} value={secretName} onChange={(event) => setSecretName(event.target.value)} />
           </SettingsField>
-          <SettingsField label="Bot token">
+          <SettingsField label="Bot token" locale={locale}>
             <input
               style={inputStyle}
               type="password"
@@ -1300,7 +1587,7 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
               placeholder="123456:ABCDEF..."
             />
           </SettingsField>
-          <SettingsField label="Description">
+          <SettingsField label="Description" locale={locale}>
             <input style={inputStyle} value={secretDescription} onChange={(event) => setSecretDescription(event.target.value)} />
           </SettingsField>
           <div style={rowStyle}>
@@ -1310,14 +1597,14 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
               disabled={!context.companyId || creatingSecret || secretValue.trim().length === 0 || secretName.trim().length === 0}
               onClick={() => void onCreateSecret()}
             >
-              {creatingSecret ? "Creating..." : "Create bot token secret"}
+              {creatingSecret ? t("Creating...") : t("Create bot token secret")}
             </button>
           </div>
-          {secretsLoading ? <div style={mutedTextStyle}>Loading company secrets...</div> : null}
+          {secretsLoading ? <div style={mutedTextStyle}>{t("Loading company secrets...")}</div> : null}
           {secretsError ? <div style={{ color: "var(--destructive, #c00)", fontSize: "12px" }}>{secretsError}</div> : null}
           {secrets.length > 0 ? (
             <div style={{ display: "grid", gap: "8px" }}>
-              <div style={{ fontSize: "12px", fontWeight: 600 }}>Available secrets</div>
+              <div style={{ fontSize: "12px", fontWeight: 600 }}>{t("Available secrets")}</div>
               {secrets.slice(0, 6).map((secret) => (
                 <div key={secret.id} style={{ border: "1px solid var(--border)", borderRadius: "10px", padding: "10px" }}>
                   <div style={{ fontSize: "12px", fontWeight: 600 }}>{secret.name}</div>
@@ -1331,9 +1618,9 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
 
       <div style={{ display: "grid", gap: "16px", gridTemplateColumns: "minmax(0, 1fr) minmax(280px, 0.9fr)" }}>
         <div style={{ ...cardStyle, ...layoutStack }}>
-          <div style={sectionTitleStyle}>Task Bot Linking</div>
+          <div style={sectionTitleStyle}>{t("Task Bot Linking")}</div>
           <div style={mutedTextStyle}>
-            Generate one-time link codes for private Telegram chats. Linked users can browse tasks, create new ones, and reply directly from Telegram.
+            {t("Generate one-time link codes for private Telegram chats. Linked users can browse tasks, create new ones, and reply directly from Telegram.")}
           </div>
           <div style={rowStyle}>
             <button
@@ -1342,36 +1629,36 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
               disabled={!context.companyId || settingsJson.taskBot.enabled !== true}
               onClick={() => void onGenerateLinkCode()}
             >
-              Generate link code
+              {t("Generate link code")}
             </button>
-            <span style={mutedTextStyle}>TTL: {settingsJson.taskBot.claimCodeTtlMinutes} min</span>
+            <span style={mutedTextStyle}>TTL: {settingsJson.taskBot.claimCodeTtlMinutes} {t("min")}</span>
           </div>
           {linkCode ? (
             <div style={{ border: "1px solid var(--border)", borderRadius: "12px", padding: "12px", display: "grid", gap: "6px" }}>
-              <div style={{ fontSize: "12px", fontWeight: 600 }}>Latest link code</div>
+              <div style={{ fontSize: "12px", fontWeight: 600 }}>{t("Latest link code")}</div>
               <div style={{ fontFamily: "monospace", fontSize: "13px" }}>{linkCode.startCommand}</div>
-              <div style={mutedTextStyle}>Expires {formatTimestamp(linkCode.expiresAt)}</div>
+              <div style={mutedTextStyle}>{t("Expires")} {formatTimestamp(linkCode.expiresAt, locale)}</div>
             </div>
           ) : null}
           {overview.data?.linkedChats?.length ? (
             <div style={{ display: "grid", gap: "8px" }}>
-              <div style={{ fontSize: "12px", fontWeight: 600 }}>Linked chats</div>
+              <div style={{ fontSize: "12px", fontWeight: 600 }}>{t("Linked chats")}</div>
               {overview.data.linkedChats.map((chat) => (
                 <div key={`${chat.companyId}:${chat.chatId}`} style={{ border: "1px solid var(--border)", borderRadius: "10px", padding: "10px", display: "grid", gap: "8px" }}>
                   <div style={{ ...rowStyle, justifyContent: "space-between" }}>
                     <strong style={{ fontSize: "12px" }}>{chat.username ? `@${chat.username}` : chat.displayName}</strong>
-                    {chat.revokedAt ? <Pill label="revoked" tone="warn" /> : <Pill label="linked" tone="success" />}
+                    {chat.revokedAt ? <Pill label="revoked" tone="warn" locale={locale} /> : <Pill label="linked" tone="success" locale={locale} />}
                   </div>
                   <div style={mutedTextStyle}>
-                    chatId: {chat.chatId} | linked {formatTimestamp(chat.linkedAt)}
+                    {t("chatId")}: {chat.chatId} | {t("linked")} {formatTimestamp(chat.linkedAt, locale)}
                   </div>
                   <div style={mutedTextStyle}>
-                    board user: {chat.boardUserId ?? "unscoped"} | telegram user: {chat.telegramUserId}
+                    {t("board user")}: {chat.boardUserId ?? t("unscoped")} | {t("telegram user")}: {chat.telegramUserId}
                   </div>
                   {!chat.revokedAt ? (
                     <div style={rowStyle}>
                       <button type="button" style={buttonStyle} onClick={() => void onRevokeLinkedChat(chat.chatId)}>
-                        Revoke
+                        {t("Revoke")}
                       </button>
                     </div>
                   ) : null}
@@ -1379,41 +1666,41 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
               ))}
             </div>
           ) : (
-            <div style={mutedTextStyle}>No Telegram chats linked yet.</div>
+            <div style={mutedTextStyle}>{t("No Telegram chats linked yet.")}</div>
           )}
         </div>
 
         <div style={{ ...cardStyle, ...layoutStack }}>
-          <div style={sectionTitleStyle}>Bot Health</div>
+          <div style={sectionTitleStyle}>{t("Bot Health")}</div>
           <div style={{ display: "grid", gap: "6px", fontSize: "12px" }}>
-            <div>Last poll: {formatTimestamp(overview.data?.botHealth?.checkedAt)}</div>
-            <div>Last update offset: {overview.data?.botHealth?.lastUpdateId ?? "none"}</div>
-            <div>Last activity cursor: {overview.data?.botHealth?.lastActivityCursor ?? "none"}</div>
-            <div>Last notification: {formatTimestamp(overview.data?.botHealth?.lastNotificationAt)}</div>
-            <div>Last approval notification: {formatTimestamp(overview.data?.botHealth?.lastApprovalNotificationAt)}</div>
-            <div>Last control-plane notification: {formatTimestamp(overview.data?.botHealth?.lastControlPlaneNotificationAt)}</div>
-            <div>Last ingestion: {formatTimestamp(overview.data?.botHealth?.lastIngestionAt)}</div>
-            <div>Last publish dispatch: {formatTimestamp(overview.data?.botHealth?.lastPublishDispatchAt)}</div>
-            <div>Blocked tasks: {overview.data?.blockedTaskCount ?? 0}</div>
-            <div>Open tasks: {overview.data?.openTaskCount ?? 0}</div>
-            <div>Open approvals: {overview.data?.botHealth?.openApprovalCount ?? 0}</div>
-            <div>Revision approvals: {overview.data?.botHealth?.revisionApprovalCount ?? 0}</div>
-            <div>Pending join requests: {overview.data?.botHealth?.openJoinRequestCount ?? 0}</div>
-            <div>Open budget incidents: {overview.data?.botHealth?.openBudgetIncidentCount ?? 0}</div>
-            <div>Scheduled publishes: {overview.data?.scheduledPublishCount ?? 0}</div>
-            <div>Failed publishes: {overview.data?.failedPublishCount ?? 0}</div>
-            <div>Ingested stories: {overview.data?.ingestedStoryCount ?? 0}</div>
+            <div>{t("Last poll")}: {formatTimestamp(overview.data?.botHealth?.checkedAt, locale)}</div>
+            <div>{t("Last update offset")}: {overview.data?.botHealth?.lastUpdateId ?? t("none")}</div>
+            <div>{t("Last activity cursor")}: {overview.data?.botHealth?.lastActivityCursor ?? t("none")}</div>
+            <div>{t("Last notification")}: {formatTimestamp(overview.data?.botHealth?.lastNotificationAt, locale)}</div>
+            <div>{t("Last approval notification")}: {formatTimestamp(overview.data?.botHealth?.lastApprovalNotificationAt, locale)}</div>
+            <div>{t("Last control-plane notification")}: {formatTimestamp(overview.data?.botHealth?.lastControlPlaneNotificationAt, locale)}</div>
+            <div>{t("Last ingestion")}: {formatTimestamp(overview.data?.botHealth?.lastIngestionAt, locale)}</div>
+            <div>{t("Last publish dispatch")}: {formatTimestamp(overview.data?.botHealth?.lastPublishDispatchAt, locale)}</div>
+            <div>{t("Blocked tasks")}: {overview.data?.blockedTaskCount ?? 0}</div>
+            <div>{t("Open tasks")}: {overview.data?.openTaskCount ?? 0}</div>
+            <div>{t("Open approvals")}: {overview.data?.botHealth?.openApprovalCount ?? 0}</div>
+            <div>{t("Revision approvals")}: {overview.data?.botHealth?.revisionApprovalCount ?? 0}</div>
+            <div>{t("Pending join requests")}: {overview.data?.botHealth?.openJoinRequestCount ?? 0}</div>
+            <div>{t("Open budget incidents")}: {overview.data?.botHealth?.openBudgetIncidentCount ?? 0}</div>
+            <div>{t("Scheduled publishes")}: {overview.data?.scheduledPublishCount ?? 0}</div>
+            <div>{t("Failed publishes")}: {overview.data?.failedPublishCount ?? 0}</div>
+            <div>{t("Ingested stories")}: {overview.data?.ingestedStoryCount ?? 0}</div>
           </div>
           {overview.data?.botHealth?.error ? (
             <div style={{ color: "var(--destructive, #c00)", fontSize: "12px" }}>
               {overview.data.botHealth.error}
             </div>
           ) : (
-            <div style={mutedTextStyle}>Telegram bot health looks stable.</div>
+            <div style={mutedTextStyle}>{t("Telegram bot health looks stable.")}</div>
           )}
           {legacyDetected ? (
             <div style={mutedTextStyle}>
-              Legacy global Telegram config was detected. Import it once to move this company fully onto scoped settings.
+              {t("Legacy global Telegram config was detected. Import it once to move this company fully onto scoped settings.")}
             </div>
           ) : null}
         </div>
@@ -1423,40 +1710,44 @@ export function TelegramSettingsPage({ context }: PluginSettingsPageProps) {
 }
 
 export function TelegramDashboardWidget({ context }: PluginWidgetProps) {
+  const locale = context.locale;
+  const t = (value: string) => translateTelegramText(locale, value);
   const overview = usePluginData<TelegramOverview>(DATA_KEYS.overview, context.companyId ? { companyId: context.companyId } : {});
 
   return (
     <div style={layoutStack}>
       <div style={rowStyle}>
-        <strong>Telegram</strong>
-        <Pill label="connector" />
-        {overview.data?.configured ? <Pill label="configured" tone="success" /> : <Pill label="needs setup" tone="warn" />}
+        <strong>{t("Telegram")}</strong>
+        <Pill label="connector" locale={locale} />
+        {overview.data?.configured ? <Pill label="configured" tone="success" locale={locale} /> : <Pill label="needs setup" tone="warn" locale={locale} />}
       </div>
       <div style={mutedTextStyle}>
-        Governed Telegram publishing plus Telegram operator coverage for tasks, approvals, joins, and budgets.
+        {t("Governed Telegram publishing plus Telegram operator coverage for tasks, approvals, joins, and budgets.")}
       </div>
       <div style={{ display: "grid", gap: "4px", fontSize: "12px" }}>
-        <div>Default channel: {overview.data?.config?.defaultChatId ?? "not configured"}</div>
-        <div>Destinations: {overview.data?.destinations.length ?? 0}</div>
-        <div>Sources: {overview.data?.sources.length ?? 0}</div>
-        <div>Linked chats: {overview.data?.linkedChats.filter((chat) => !chat.revokedAt).length ?? 0}</div>
-        <div>Blocked tasks: {overview.data?.blockedTaskCount ?? 0}</div>
-        <div>Board approvals: {overview.data?.actionableApprovalCount ?? 0}</div>
-        <div>Pending joins: {overview.data?.pendingJoinRequestCount ?? 0}</div>
-        <div>Open budget incidents: {overview.data?.openBudgetIncidentCount ?? 0}</div>
-        <div>Recent publishes: {overview.data?.recentPublications.length ?? 0}</div>
-        <div>Scheduled queue: {overview.data?.scheduledPublishCount ?? 0}</div>
-        <div>Ingested stories: {overview.data?.ingestedStoryCount ?? 0}</div>
-        <div>Last publish: {formatTimestamp(overview.data?.lastPublication?.sentAt)}</div>
+        <div>{t("Default channel")}: {overview.data?.config?.defaultChatId ?? t("not configured")}</div>
+        <div>{t("Destinations")}: {overview.data?.destinations.length ?? 0}</div>
+        <div>{t("Sources")}: {overview.data?.sources.length ?? 0}</div>
+        <div>{t("Linked chats")}: {overview.data?.linkedChats.filter((chat) => !chat.revokedAt).length ?? 0}</div>
+        <div>{t("Blocked tasks")}: {overview.data?.blockedTaskCount ?? 0}</div>
+        <div>{t("Board approvals")}: {overview.data?.actionableApprovalCount ?? 0}</div>
+        <div>{t("Pending joins")}: {overview.data?.pendingJoinRequestCount ?? 0}</div>
+        <div>{t("Open budget incidents")}: {overview.data?.openBudgetIncidentCount ?? 0}</div>
+        <div>{t("Recent publishes")}: {overview.data?.recentPublications.length ?? 0}</div>
+        <div>{t("Scheduled queue")}: {overview.data?.scheduledPublishCount ?? 0}</div>
+        <div>{t("Ingested stories")}: {overview.data?.ingestedStoryCount ?? 0}</div>
+        <div>{t("Last publish")}: {formatTimestamp(overview.data?.lastPublication?.sentAt, locale)}</div>
       </div>
       <div style={rowStyle}>
-        <a href={pluginPagePath(context.companyPrefix)} style={{ fontSize: "12px" }}>Open Telegram dashboard</a>
+        <a href={pluginPagePath(context.companyPrefix)} style={{ fontSize: "12px" }}>{t("Open Telegram dashboard")}</a>
       </div>
     </div>
   );
 }
 
 export function TelegramSidebarLink({ context }: PluginSidebarProps) {
+  const locale = context.locale;
+  const t = (value: string) => translateTelegramText(locale, value);
   const href = pluginPagePath(context.companyPrefix);
   const isActive = typeof window !== "undefined" && window.location.pathname === href;
 
@@ -1476,12 +1767,14 @@ export function TelegramSidebarLink({ context }: PluginSidebarProps) {
           <path d="M21 4L3 11l7 2 2 7 9-16Z" />
         </svg>
       </span>
-      <span className="flex-1 truncate">Telegram</span>
+      <span className="flex-1 truncate">{t("Telegram")}</span>
     </a>
   );
 }
 
 export function TelegramPage({ context }: PluginPageProps) {
+  const locale = context.locale;
+  const t = (value: string) => translateTelegramText(locale, value);
   const overview = usePluginData<TelegramOverview>(DATA_KEYS.overview, context.companyId ? { companyId: context.companyId } : {});
   const companyApprovals = useCompanyTelegramApprovals(context.companyId);
 
@@ -1496,101 +1789,101 @@ export function TelegramPage({ context }: PluginPageProps) {
       <div style={cardStyle}>
         <div style={{ ...rowStyle, justifyContent: "space-between" }}>
           <div style={{ display: "grid", gap: "8px" }}>
-            <div style={sectionTitleStyle}>Telegram Operations</div>
+            <div style={sectionTitleStyle}>{t("Telegram Operations")}</div>
             <div style={mutedTextStyle}>
-              Company-level view of Telegram capability readiness, pending publish approvals, and recent outbound posts.
+              {t("Company-level view of Telegram capability readiness, pending publish approvals, and recent outbound posts.")}
             </div>
           </div>
           <div style={rowStyle}>
-            {overview.data?.configured ? <Pill label="Ready" tone="success" /> : <Pill label="Needs setup" tone="warn" />}
-            <a href={`/instance/settings/plugins/${PLUGIN_ID}`} style={{ fontSize: "12px" }}>Open settings</a>
+            {overview.data?.configured ? <Pill label="Ready" tone="success" locale={locale} /> : <Pill label="Needs setup" tone="warn" locale={locale} />}
+            <a href={`/instance/settings/plugins/${PLUGIN_ID}`} style={{ fontSize: "12px" }}>{t("Open settings")}</a>
           </div>
         </div>
       </div>
 
       <div style={{ display: "grid", gap: "14px", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
         <div style={cardStyle}>
-          <div style={sectionTitleStyle}>Connection</div>
+          <div style={sectionTitleStyle}>{t("Connection")}</div>
           <div style={{ ...layoutStack, gap: "8px", marginTop: "10px" }}>
-            <div style={{ fontSize: "12px" }}>Default channel: {overview.data?.config?.defaultChatId ?? "not configured"}</div>
-            <div style={{ fontSize: "12px" }}>Public handle: {overview.data?.config?.defaultPublicHandle ? `@${overview.data.config.defaultPublicHandle}` : "not set"}</div>
-            <div style={{ fontSize: "12px" }}>Destinations: {overview.data?.destinations.length ?? 0}</div>
-            <div style={{ fontSize: "12px" }}>Sources: {overview.data?.sources.length ?? 0}</div>
-            <div style={{ fontSize: "12px" }}>Last validation: {formatTimestamp(overview.data?.lastValidation?.checkedAt)}</div>
-            <div style={{ fontSize: "12px" }}>Bot: {overview.data?.lastValidation?.bot?.username ? `@${overview.data.lastValidation.bot.username}` : (overview.data?.lastValidation?.bot?.firstName ?? "unknown")}</div>
+            <div style={{ fontSize: "12px" }}>{t("Default channel")}: {overview.data?.config?.defaultChatId ?? t("not configured")}</div>
+            <div style={{ fontSize: "12px" }}>{t("Public handle")}: {overview.data?.config?.defaultPublicHandle ? `@${overview.data.config.defaultPublicHandle}` : t("not set")}</div>
+            <div style={{ fontSize: "12px" }}>{t("Destinations")}: {overview.data?.destinations.length ?? 0}</div>
+            <div style={{ fontSize: "12px" }}>{t("Sources")}: {overview.data?.sources.length ?? 0}</div>
+            <div style={{ fontSize: "12px" }}>{t("Last validation")}: {formatTimestamp(overview.data?.lastValidation?.checkedAt, locale)}</div>
+            <div style={{ fontSize: "12px" }}>{t("Bot")}: {overview.data?.lastValidation?.bot?.username ? `@${overview.data.lastValidation.bot.username}` : (overview.data?.lastValidation?.bot?.firstName ?? t("unknown"))}</div>
           </div>
         </div>
         <div style={cardStyle}>
-          <div style={sectionTitleStyle}>Task Bot</div>
+          <div style={sectionTitleStyle}>{t("Task Bot")}</div>
           <div style={{ ...layoutStack, gap: "8px", marginTop: "10px" }}>
-            <div style={{ fontSize: "12px" }}>Enabled: {overview.data?.companySettings.taskBot.enabled ? "yes" : "no"}</div>
-            <div style={{ fontSize: "12px" }}>Approvals inbox enabled: {overview.data?.approvalsInboxEnabled ? "yes" : "no"}</div>
-            <div style={{ fontSize: "12px" }}>Linked chats: {overview.data?.linkedChats.filter((chat) => !chat.revokedAt).length ?? 0}</div>
-            <div style={{ fontSize: "12px" }}>Blocked tasks: {overview.data?.blockedTaskCount ?? 0}</div>
-            <div style={{ fontSize: "12px" }}>Open tasks: {overview.data?.openTaskCount ?? 0}</div>
-            <div style={{ fontSize: "12px" }}>Tasks in review: {overview.data?.reviewTaskCount ?? 0}</div>
-            <div style={{ fontSize: "12px" }}>Last poll: {formatTimestamp(overview.data?.botHealth?.checkedAt)}</div>
-            <div style={{ fontSize: "12px" }}>Last ingestion: {formatTimestamp(overview.data?.botHealth?.lastIngestionAt)}</div>
+            <div style={{ fontSize: "12px" }}>{t("Enabled")}: {overview.data?.companySettings.taskBot.enabled ? t("yes") : t("no")}</div>
+            <div style={{ fontSize: "12px" }}>{t("Approvals inbox enabled")}: {overview.data?.approvalsInboxEnabled ? t("yes") : t("no")}</div>
+            <div style={{ fontSize: "12px" }}>{t("Linked chats")}: {overview.data?.linkedChats.filter((chat) => !chat.revokedAt).length ?? 0}</div>
+            <div style={{ fontSize: "12px" }}>{t("Blocked tasks")}: {overview.data?.blockedTaskCount ?? 0}</div>
+            <div style={{ fontSize: "12px" }}>{t("Open tasks")}: {overview.data?.openTaskCount ?? 0}</div>
+            <div style={{ fontSize: "12px" }}>{t("Tasks in review")}: {overview.data?.reviewTaskCount ?? 0}</div>
+            <div style={{ fontSize: "12px" }}>{t("Last poll")}: {formatTimestamp(overview.data?.botHealth?.checkedAt, locale)}</div>
+            <div style={{ fontSize: "12px" }}>{t("Last ingestion")}: {formatTimestamp(overview.data?.botHealth?.lastIngestionAt, locale)}</div>
           </div>
         </div>
         <div style={cardStyle}>
-          <div style={sectionTitleStyle}>Approvals Inbox</div>
+          <div style={sectionTitleStyle}>{t("Approvals Inbox")}</div>
           <div style={{ ...layoutStack, gap: "8px", marginTop: "10px" }}>
-            <div style={{ fontSize: "12px" }}>Board queue: {overview.data?.actionableApprovalCount ?? 0}</div>
-            <div style={{ fontSize: "12px" }}>My pending approvals: {overview.data?.myPendingApprovalCount ?? 0}</div>
-            <div style={{ fontSize: "12px" }}>My revision requests: {overview.data?.myRevisionApprovalCount ?? 0}</div>
-            <div style={{ fontSize: "12px" }}>Last approval notification: {formatTimestamp(overview.data?.botHealth?.lastApprovalNotificationAt)}</div>
-            <div style={{ fontSize: "12px" }}>Pending join requests: {overview.data?.pendingJoinRequestCount ?? 0}</div>
-            <div style={{ fontSize: "12px" }}>Open budget incidents: {overview.data?.openBudgetIncidentCount ?? 0}</div>
-            <div style={{ fontSize: "12px" }}>Last control-plane notification: {formatTimestamp(overview.data?.botHealth?.lastControlPlaneNotificationAt)}</div>
-            <div style={{ fontSize: "12px" }}>Total Telegram publish approvals: {telegramApprovals.length}</div>
+            <div style={{ fontSize: "12px" }}>{t("Board queue")}: {overview.data?.actionableApprovalCount ?? 0}</div>
+            <div style={{ fontSize: "12px" }}>{t("My pending approvals")}: {overview.data?.myPendingApprovalCount ?? 0}</div>
+            <div style={{ fontSize: "12px" }}>{t("My revision requests")}: {overview.data?.myRevisionApprovalCount ?? 0}</div>
+            <div style={{ fontSize: "12px" }}>{t("Last approval notification")}: {formatTimestamp(overview.data?.botHealth?.lastApprovalNotificationAt, locale)}</div>
+            <div style={{ fontSize: "12px" }}>{t("Pending join requests")}: {overview.data?.pendingJoinRequestCount ?? 0}</div>
+            <div style={{ fontSize: "12px" }}>{t("Open budget incidents")}: {overview.data?.openBudgetIncidentCount ?? 0}</div>
+            <div style={{ fontSize: "12px" }}>{t("Last control-plane notification")}: {formatTimestamp(overview.data?.botHealth?.lastControlPlaneNotificationAt, locale)}</div>
+            <div style={{ fontSize: "12px" }}>{t("Total Telegram publish approvals")}: {telegramApprovals.length}</div>
             {pendingApprovals[0] ? (
               <a href={`/approvals/${pendingApprovals[0].id}`} style={{ fontSize: "12px" }}>
-                Open latest pending approval
+                {t("Open latest pending approval")}
               </a>
             ) : (
-              <div style={mutedTextStyle}>No pending Telegram publish approvals.</div>
+              <div style={mutedTextStyle}>{t("No pending Telegram publish approvals.")}</div>
             )}
           </div>
         </div>
         <div style={cardStyle}>
-          <div style={sectionTitleStyle}>Recent publishing</div>
+          <div style={sectionTitleStyle}>{t("Recent publishing")}</div>
           <div style={{ ...layoutStack, gap: "8px", marginTop: "10px" }}>
-            <div style={{ fontSize: "12px" }}>Recent posts tracked: {overview.data?.recentPublications.length ?? 0}</div>
-            <div style={{ fontSize: "12px" }}>Scheduled publishes: {overview.data?.scheduledPublishCount ?? 0}</div>
-            <div style={{ fontSize: "12px" }}>Failed publishes: {overview.data?.failedPublishCount ?? 0}</div>
-            <div style={{ fontSize: "12px" }}>Ingested stories: {overview.data?.ingestedStoryCount ?? 0}</div>
-            <div style={{ fontSize: "12px" }}>Last publish dispatch: {formatTimestamp(overview.data?.botHealth?.lastPublishDispatchAt)}</div>
-            <div style={{ fontSize: "12px" }}>Last post: {formatTimestamp(overview.data?.lastPublication?.sentAt)}</div>
+            <div style={{ fontSize: "12px" }}>{t("Recent posts tracked")}: {overview.data?.recentPublications.length ?? 0}</div>
+            <div style={{ fontSize: "12px" }}>{t("Scheduled publishes")}: {overview.data?.scheduledPublishCount ?? 0}</div>
+            <div style={{ fontSize: "12px" }}>{t("Failed publishes")}: {overview.data?.failedPublishCount ?? 0}</div>
+            <div style={{ fontSize: "12px" }}>{t("Ingested stories")}: {overview.data?.ingestedStoryCount ?? 0}</div>
+            <div style={{ fontSize: "12px" }}>{t("Last publish dispatch")}: {formatTimestamp(overview.data?.botHealth?.lastPublishDispatchAt, locale)}</div>
+            <div style={{ fontSize: "12px" }}>{t("Last post")}: {formatTimestamp(overview.data?.lastPublication?.sentAt, locale)}</div>
             {overview.data?.lastPublication?.url ? (
               <a href={overview.data.lastPublication.url} target="_blank" rel="noreferrer" style={{ fontSize: "12px" }}>
-                Open latest Telegram post
+                {t("Open latest Telegram post")}
               </a>
             ) : (
-              <div style={mutedTextStyle}>No public Telegram post URL recorded yet.</div>
+              <div style={mutedTextStyle}>{t("No public Telegram post URL recorded yet.")}</div>
             )}
           </div>
         </div>
       </div>
 
       <div style={cardStyle}>
-        <div style={sectionTitleStyle}>Recent publications</div>
+        <div style={sectionTitleStyle}>{t("Recent publications")}</div>
         <div style={{ marginTop: "12px" }}>
-          <PublicationList publications={overview.data?.recentPublications ?? []} />
+          <PublicationList publications={overview.data?.recentPublications ?? []} locale={locale} />
         </div>
       </div>
 
       <div style={cardStyle}>
-        <div style={sectionTitleStyle}>Scheduled queue</div>
+        <div style={sectionTitleStyle}>{t("Scheduled queue")}</div>
         <div style={{ marginTop: "12px" }}>
-          <PublicationJobList jobs={overview.data?.scheduledPublications ?? []} />
+          <PublicationJobList jobs={overview.data?.scheduledPublications ?? []} locale={locale} />
         </div>
       </div>
 
       <div style={cardStyle}>
-        <div style={sectionTitleStyle}>Recent ingested stories</div>
+        <div style={sectionTitleStyle}>{t("Recent ingested stories")}</div>
         <div style={{ marginTop: "12px" }}>
-          <SourceMessageList stories={overview.data?.recentIngestedStories ?? []} />
+          <SourceMessageList stories={overview.data?.recentIngestedStories ?? []} locale={locale} />
         </div>
       </div>
     </div>
@@ -1598,6 +1891,8 @@ export function TelegramPage({ context }: PluginPageProps) {
 }
 
 export function TelegramIssueTab({ context }: PluginDetailTabProps) {
+  const locale = context.locale;
+  const t = (value: string) => translateTelegramText(locale, value);
   const companyId = context.companyId;
   const issueId = context.entityId;
   const pushToast = usePluginToast();
@@ -1721,13 +2016,13 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
       if (!document) throw new Error("Document not found");
       setComposerText(document.body);
       pushToast({
-        title: "Draft loaded",
-        body: `Loaded ${document.key} into the Telegram composer.`,
+        title: t("Draft loaded"),
+        body: translateTelegramTemplate(locale, `Loaded ${document.key} into the Telegram composer.`, `Документ ${document.key} загружен в редактор Telegram.`),
         tone: "success",
       });
     } catch (nextError) {
       pushToast({
-        title: "Failed to load document",
+        title: t("Failed to load document"),
         body: nextError instanceof Error ? nextError.message : String(nextError),
         tone: "error",
       });
@@ -1746,19 +2041,19 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
       hostFetchJson<IssueDocument>(`/api/issues/${issueId}/documents/telegram-draft`, {
         method: "PUT",
         body: JSON.stringify({
-          title: "Telegram Draft",
+          title: t("Telegram Draft"),
           format: "markdown",
           body: composerText,
-          changeSummary: "Updated from Telegram issue tab",
+          changeSummary: t("Updated from Telegram issue tab"),
         }),
       }),
       hostFetchJson<IssueDocument>(`/api/issues/${issueId}/documents/telegram-final-copy`, {
         method: "PUT",
         body: JSON.stringify({
-          title: "Telegram Final Copy",
+          title: t("Telegram Final Copy"),
           format: "markdown",
           body: composerText,
-          changeSummary: "Synced final copy from Telegram issue tab",
+          changeSummary: t("Synced final copy from Telegram issue tab"),
         }),
       }),
     ]);
@@ -1769,8 +2064,8 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
     if (!issueId) return;
     if (!composerText.trim()) {
       pushToast({
-        title: "Draft is empty",
-        body: "Load a document or write the Telegram post before saving the draft output.",
+        title: t("Draft is empty"),
+        body: t("Load a document or write the Telegram post before saving the draft output."),
         tone: "error",
       });
       return;
@@ -1783,8 +2078,8 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
         type: "artifact",
         provider: "telegram",
         title: issue?.identifier
-          ? `Telegram draft for ${issue.identifier}`
-          : `Telegram draft for ${issue?.title ?? "issue"}`,
+          ? translateTelegramTemplate(locale, `Telegram draft for ${issue.identifier}`, `Черновик Telegram для ${issue.identifier}`)
+          : translateTelegramTemplate(locale, `Telegram draft for ${issue?.title ?? "issue"}`, `Черновик Telegram для ${issue?.title ?? "задачи"}`),
         status: "draft",
         reviewState: "needs_board_review",
         isPrimary: true,
@@ -1819,13 +2114,13 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
 
       await refresh();
       pushToast({
-        title: "Telegram draft saved",
-        body: "Draft document and work product are now attached to the issue.",
+        title: t("Telegram draft saved"),
+        body: t("Draft document and work product are now attached to the issue."),
         tone: "success",
       });
     } catch (nextError) {
       pushToast({
-        title: "Failed to save Telegram draft",
+        title: t("Failed to save Telegram draft"),
         body: nextError instanceof Error ? nextError.message : String(nextError),
         tone: "error",
       });
@@ -1838,8 +2133,8 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
     if (!companyId || !issueId) return;
     if (!composerText.trim()) {
       pushToast({
-        title: "Draft is empty",
-        body: "Save or compose the Telegram draft before requesting approval.",
+        title: t("Draft is empty"),
+        body: t("Save or compose the Telegram draft before requesting approval."),
         tone: "error",
       });
       return;
@@ -1870,13 +2165,13 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
       });
       await refresh();
       pushToast({
-        title: "Publish approval requested",
-        body: `Approval ${approval.id} is ready for board review.`,
+        title: t("Publish approval requested"),
+        body: translateTelegramTemplate(locale, `Approval ${approval.id} is ready for board review.`, `Согласование ${approval.id} готово для review на board.`),
         tone: "success",
       });
     } catch (nextError) {
       pushToast({
-        title: "Failed to request publish approval",
+        title: t("Failed to request publish approval"),
         body: nextError instanceof Error ? nextError.message : String(nextError),
         tone: "error",
       });
@@ -1889,16 +2184,16 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
     if (!issueId || !companyId || !issue) return;
     if (!latestApprovedApproval) {
       pushToast({
-        title: "Publish approval required",
-        body: "Approve the Telegram publish request before sending the message.",
+        title: t("Publish approval required"),
+        body: t("Approve the Telegram publish request before sending the message."),
         tone: "error",
       });
       return;
     }
     if (!composerText.trim()) {
       pushToast({
-        title: "Draft is empty",
-        body: "Write the Telegram post before publishing it.",
+        title: t("Draft is empty"),
+        body: t("Write the Telegram post before publishing it."),
         tone: "error",
       });
       return;
@@ -1926,8 +2221,8 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
         type: "artifact",
         provider: "telegram",
         title: issue.identifier
-          ? `Telegram post for ${issue.identifier}`
-          : `Telegram post for ${issue.title}`,
+          ? translateTelegramTemplate(locale, `Telegram post for ${issue.identifier}`, `Пост Telegram для ${issue.identifier}`)
+          : translateTelegramTemplate(locale, `Telegram post for ${issue.title}`, `Пост Telegram для ${issue.title}`),
         status: "approved",
         reviewState: "approved",
         isPrimary: true,
@@ -1970,15 +2265,15 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
         overview.refresh(),
       ]);
       pushToast({
-        title: "Telegram post published",
+        title: t("Telegram post published"),
         body: publication.url
-          ? "The issue now has a visible Telegram work product with a clickable post URL."
-          : "The issue now has a Telegram work product. Set a public handle to expose clickable post URLs.",
+          ? t("The issue now has a visible Telegram work product with a clickable post URL.")
+          : t("The issue now has a Telegram work product. Set a public handle to expose clickable post URLs."),
         tone: "success",
       });
     } catch (nextError) {
       pushToast({
-        title: "Failed to publish Telegram post",
+        title: t("Failed to publish Telegram post"),
         body: nextError instanceof Error ? nextError.message : String(nextError),
         tone: "error",
       });
@@ -1991,8 +2286,8 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
     if (!companyId || !issueId) return;
     if (!latestApprovedApproval) {
       pushToast({
-        title: "Publish approval required",
-        body: "Approve the Telegram publish request before scheduling the delivery queue.",
+        title: t("Publish approval required"),
+        body: t("Approve the Telegram publish request before scheduling the delivery queue."),
         tone: "error",
       });
       return;
@@ -2018,13 +2313,17 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
         overview.refresh(),
       ]);
       pushToast({
-        title: activePublicationJob ? "Telegram publish rescheduled" : "Telegram publish scheduled",
-        body: `Queue item ${String((response as { id?: string }).id ?? "updated")} is ready.`,
+        title: activePublicationJob ? t("Telegram publish rescheduled") : t("Telegram publish scheduled"),
+        body: translateTelegramTemplate(
+          locale,
+          `Queue item ${String((response as { id?: string }).id ?? "updated")} is ready.`,
+          `Элемент очереди ${String((response as { id?: string }).id ?? "обновлён")} готов.`,
+        ),
         tone: "success",
       });
     } catch (nextError) {
       pushToast({
-        title: activePublicationJob ? "Failed to reschedule Telegram publish" : "Failed to schedule Telegram publish",
+        title: activePublicationJob ? t("Failed to reschedule Telegram publish") : t("Failed to schedule Telegram publish"),
         body: nextError instanceof Error ? nextError.message : String(nextError),
         tone: "error",
       });
@@ -2046,13 +2345,13 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
         overview.refresh(),
       ]);
       pushToast({
-        title: "Telegram publish cancelled",
-        body: "The scheduled queue item was cancelled.",
+        title: t("Telegram publish cancelled"),
+        body: t("The scheduled queue item was cancelled."),
         tone: "success",
       });
     } catch (nextError) {
       pushToast({
-        title: "Failed to cancel Telegram publish",
+        title: t("Failed to cancel Telegram publish"),
         body: nextError instanceof Error ? nextError.message : String(nextError),
         tone: "error",
       });
@@ -2062,11 +2361,11 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
   }
 
   if (!companyId || !issueId) {
-    return <div style={mutedTextStyle}>Issue context is required.</div>;
+    return <div style={mutedTextStyle}>{t("Issue context is required.")}</div>;
   }
 
   if (loading && !issue) {
-    return <div style={mutedTextStyle}>Loading Telegram issue workflow...</div>;
+    return <div style={mutedTextStyle}>{t("Loading Telegram issue workflow...")}</div>;
   }
 
   if (error) {
@@ -2078,25 +2377,26 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
       <div style={cardStyle}>
         <div style={{ ...rowStyle, justifyContent: "space-between" }}>
           <div style={{ display: "grid", gap: "8px" }}>
-            <div style={sectionTitleStyle}>Telegram publish handoff</div>
+            <div style={sectionTitleStyle}>{t("Telegram publish handoff")}</div>
             <div style={mutedTextStyle}>
-              Keep the draft, approval, and final Telegram post attached to this issue instead of hiding the distribution workflow in comments.
+              {t("Keep the draft, approval, and final Telegram post attached to this issue instead of hiding the distribution workflow in comments.")}
             </div>
           </div>
           <div style={rowStyle}>
-            {latestApprovedApproval ? <Pill label="Approved to publish" tone="success" /> : null}
-            {latestPendingApproval ? <Pill label="Approval pending" tone="warn" /> : null}
-            <a href={pluginPagePath(context.companyPrefix)} style={{ fontSize: "12px" }}>Open Telegram dashboard</a>
+            {latestApprovedApproval ? <Pill label="Approved to publish" tone="success" locale={locale} /> : null}
+            {latestPendingApproval ? <Pill label="Approval pending" tone="warn" locale={locale} /> : null}
+            <a href={pluginPagePath(context.companyPrefix)} style={{ fontSize: "12px" }}>{t("Open Telegram dashboard")}</a>
           </div>
         </div>
       </div>
 
       <div style={{ display: "grid", gap: "16px", gridTemplateColumns: "minmax(0, 1.2fr) minmax(280px, 0.8fr)" }}>
         <div style={{ ...cardStyle, ...layoutStack }}>
-          <div style={sectionTitleStyle}>Composer</div>
+          <div style={sectionTitleStyle}>{t("Composer")}</div>
           <SettingsField
             label="Load issue document"
             hint="Use an existing issue document as the starting point, then adjust the final Telegram copy here."
+            locale={locale}
           >
             <div style={rowStyle}>
               <select
@@ -2104,7 +2404,7 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
                 value={selectedDocumentKey}
                 onChange={(event) => setSelectedDocumentKey(event.target.value)}
               >
-                <option value="">Select document...</option>
+                <option value="">{t("Select document...")}</option>
                 {documentOptions.map((document) => (
                   <option key={document.key} value={document.key}>
                     {document.title ?? document.key}
@@ -2117,7 +2417,7 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
                 disabled={!selectedDocumentKey || busyAction === "load-document"}
                 onClick={() => void loadSelectedDocumentBody()}
               >
-                  {busyAction === "load-document" ? "Loading..." : "Load"}
+                  {busyAction === "load-document" ? t("Loading...") : t("Load")}
               </button>
             </div>
           </SettingsField>
@@ -2125,31 +2425,32 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
           <SettingsField
             label="Telegram draft"
             hint="This is the exact text that will be saved for review and later sent to Telegram."
+            locale={locale}
           >
             <textarea
               style={textareaStyle}
               value={composerText}
               onChange={(event) => setComposerText(event.target.value)}
-              placeholder="Write the final Telegram post here..."
+              placeholder={t("Write the final Telegram post here...")}
             />
           </SettingsField>
 
           <div style={{ display: "grid", gap: "12px", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
-            <SettingsField label="Configured destination">
+            <SettingsField label="Configured destination" locale={locale}>
               <select
                 style={inputStyle}
                 value={destinationId}
                 onChange={(event) => setDestinationId(event.target.value)}
               >
-                <option value="">Use default destination</option>
+                <option value="">{t("Use default destination")}</option>
                 {destinationOptions.map((destination) => (
                   <option key={destination.id} value={destination.id}>
-                    {destination.label} {destination.enabled ? "" : "(disabled)"}
+                    {destination.label} {destination.enabled ? "" : t("(disabled)")}
                   </option>
                 ))}
               </select>
             </SettingsField>
-            <SettingsField label="Destination label">
+            <SettingsField label="Destination label" locale={locale}>
               <input
                 style={inputStyle}
                 value={destinationLabel}
@@ -2157,7 +2458,7 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
                 placeholder="@my_channel"
               />
             </SettingsField>
-            <SettingsField label="Chat id / username">
+            <SettingsField label="Chat id / username" locale={locale}>
               <input
                 style={inputStyle}
                 value={chatId}
@@ -2165,7 +2466,7 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
                 placeholder="@my_channel"
               />
             </SettingsField>
-            <SettingsField label="Public handle">
+            <SettingsField label="Public handle" locale={locale}>
               <input
                 style={inputStyle}
                 value={publicHandle}
@@ -2173,18 +2474,18 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
                 placeholder="@my_channel"
               />
             </SettingsField>
-            <SettingsField label="Parse mode">
+            <SettingsField label="Parse mode" locale={locale}>
               <select
                 style={inputStyle}
                 value={parseMode}
                 onChange={(event) => setParseMode(event.target.value as "" | "HTML" | "MarkdownV2")}
               >
-                <option value="">Plain text</option>
+                <option value="">{t("Plain text")}</option>
                 <option value="HTML">HTML</option>
                 <option value="MarkdownV2">MarkdownV2</option>
               </select>
             </SettingsField>
-            <SettingsField label="Publish at">
+            <SettingsField label="Publish at" locale={locale}>
               <input
                 style={inputStyle}
                 type="datetime-local"
@@ -2201,7 +2502,7 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
                 checked={disableLinkPreview}
                 onChange={(event) => setDisableLinkPreview(event.target.checked)}
               />
-              <span style={{ fontSize: "12px" }}>Disable link preview</span>
+              <span style={{ fontSize: "12px" }}>{t("Disable link preview")}</span>
             </label>
             <label style={rowStyle}>
               <input
@@ -2209,7 +2510,7 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
                 checked={disableNotification}
                 onChange={(event) => setDisableNotification(event.target.checked)}
               />
-              <span style={{ fontSize: "12px" }}>Send silently</span>
+              <span style={{ fontSize: "12px" }}>{t("Send silently")}</span>
             </label>
           </div>
 
@@ -2220,11 +2521,11 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
               disabled={busyAction === "save-draft"}
               onClick={() => void saveDraftOutput()}
             >
-              {busyAction === "save-draft" ? "Saving..." : "Save draft output"}
+              {busyAction === "save-draft" ? t("Saving...") : t("Save draft output")}
             </button>
             {latestPendingApproval ? (
               <a href={`/approvals/${latestPendingApproval.id}`} style={{ ...buttonStyle, textDecoration: "none" }}>
-                Open pending approval
+                {t("Open pending approval")}
               </a>
             ) : (
               <button
@@ -2233,7 +2534,7 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
                 disabled={busyAction === "request-approval"}
                 onClick={() => void requestPublishApproval()}
               >
-                {busyAction === "request-approval" ? "Requesting..." : "Request publish approval"}
+                {busyAction === "request-approval" ? t("Requesting...") : t("Request publish approval")}
               </button>
             )}
             <button
@@ -2243,12 +2544,12 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
               onClick={() => void schedulePublication()}
             >
               {busyAction === "schedule-publication"
-                ? "Scheduling..."
+                ? t("Scheduling...")
                 : busyAction === "reschedule-publication"
-                  ? "Rescheduling..."
+                  ? t("Rescheduling...")
                   : activePublicationJob
-                    ? "Reschedule publish"
-                    : "Schedule publish"}
+                    ? t("Reschedule publish")
+                    : t("Schedule publish")}
             </button>
             {activePublicationJob ? (
               <button
@@ -2257,7 +2558,7 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
                 disabled={busyAction === "cancel-publication"}
                 onClick={() => void cancelScheduledPublication()}
               >
-                {busyAction === "cancel-publication" ? "Cancelling..." : "Cancel scheduled publish"}
+                {busyAction === "cancel-publication" ? t("Cancelling...") : t("Cancel scheduled publish")}
               </button>
             ) : null}
             <button
@@ -2266,50 +2567,54 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
               disabled={busyAction === "publish-message" || !latestApprovedApproval}
               onClick={() => void publishApprovedMessage()}
             >
-              {busyAction === "publish-message" ? "Publishing..." : "Publish approved message"}
+              {busyAction === "publish-message" ? t("Publishing...") : t("Publish approved message")}
             </button>
           </div>
         </div>
 
         <div style={{ ...cardStyle, ...layoutStack }}>
-          <div style={sectionTitleStyle}>State</div>
+          <div style={sectionTitleStyle}>{t("State")}</div>
           <div style={{ display: "grid", gap: "8px", fontSize: "12px" }}>
-            <div>Issue: {issue?.identifier ?? issue?.title ?? "unknown"}</div>
-            <div>Telegram work products: {telegramWorkProducts.length}</div>
-            <div>Linked Telegram approvals: {telegramApprovals.length}</div>
-            <div>Recent issue publishes: {issuePublications.data?.length ?? 0}</div>
-            <div>Queued publish jobs: {(issuePublicationJobs.data ?? []).filter((job) => ["pending", "scheduled", "sending"].includes(job.status)).length}</div>
+            <div>{t("Issue")}: {issue?.identifier ?? issue?.title ?? t("unknown")}</div>
+            <div>{t("Telegram work products")}: {telegramWorkProducts.length}</div>
+            <div>{t("Linked Telegram approvals")}: {telegramApprovals.length}</div>
+            <div>{t("Recent issue publishes")}: {issuePublications.data?.length ?? 0}</div>
+            <div>{t("Queued publish jobs")}: {(issuePublicationJobs.data ?? []).filter((job) => ["pending", "scheduled", "sending"].includes(job.status)).length}</div>
           </div>
 
           {latestApprovedApproval ? (
             <div style={{ border: "1px solid var(--border)", borderRadius: "10px", padding: "12px" }}>
-              <div style={{ fontSize: "12px", fontWeight: 600 }}>Latest approved publish</div>
+              <div style={{ fontSize: "12px", fontWeight: 600 }}>{t("Latest approved publish")}</div>
               <div style={mutedTextStyle}>
-                Approval {latestApprovedApproval.id} approved for {approvalDestinationLabel(latestApprovedApproval) ?? "Telegram"}.
+                {translateTelegramTemplate(
+                  locale,
+                  `Approval ${latestApprovedApproval.id} approved for ${approvalDestinationLabel(latestApprovedApproval) ?? "Telegram"}.`,
+                  `Согласование ${latestApprovedApproval.id} утверждено для ${approvalDestinationLabel(latestApprovedApproval) ?? "Telegram"}.`,
+                )}
               </div>
               <a href={`/approvals/${latestApprovedApproval.id}`} style={{ fontSize: "12px" }}>
-                Open approval
+                {t("Open approval")}
               </a>
             </div>
           ) : (
             <div style={mutedTextStyle}>
-              No approved Telegram publish approval is linked to this issue yet.
+              {t("No approved Telegram publish approval is linked to this issue yet.")}
             </div>
           )}
 
           {telegramWorkProducts.length > 0 ? (
             <div style={{ display: "grid", gap: "8px" }}>
-              <div style={{ fontSize: "12px", fontWeight: 600 }}>Existing Telegram outputs</div>
+              <div style={{ fontSize: "12px", fontWeight: 600 }}>{t("Existing Telegram outputs")}</div>
               {telegramWorkProducts.map((product) => (
                 <div key={product.id} style={{ border: "1px solid var(--border)", borderRadius: "10px", padding: "10px" }}>
                   <div style={{ ...rowStyle, justifyContent: "space-between" }}>
                     <strong style={{ fontSize: "12px" }}>{product.title}</strong>
-                    <Pill label={product.status} tone={product.status === "approved" ? "success" : product.status === "draft" ? "warn" : "neutral"} />
+                    <Pill label={product.status} tone={product.status === "approved" ? "success" : product.status === "draft" ? "warn" : "neutral"} locale={locale} />
                   </div>
                   {product.summary ? <div style={mutedTextStyle}>{product.summary}</div> : null}
                   {product.url ? (
                     <a href={product.url} target="_blank" rel="noreferrer" style={{ fontSize: "12px" }}>
-                      Open Telegram link
+                      {t("Open Telegram link")}
                     </a>
                   ) : null}
                 </div>
@@ -2319,9 +2624,9 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
 
           {activePublicationJob ? (
             <div style={{ border: "1px solid var(--border)", borderRadius: "10px", padding: "12px", display: "grid", gap: "6px" }}>
-              <div style={{ fontSize: "12px", fontWeight: 600 }}>Active queue item</div>
+              <div style={{ fontSize: "12px", fontWeight: 600 }}>{t("Active queue item")}</div>
               <div style={mutedTextStyle}>
-                {activePublicationJob.status} for {activePublicationJob.destinationId} at {formatTimestamp(activePublicationJob.publishAt)}
+                {translateTelegramText(locale, activePublicationJob.status)} {t("for")} {activePublicationJob.destinationId} {t("at")} {formatTimestamp(activePublicationJob.publishAt, locale)}
               </div>
               {activePublicationJob.failureReason ? <div style={mutedTextStyle}>{activePublicationJob.failureReason}</div> : null}
             </div>
@@ -2330,16 +2635,16 @@ export function TelegramIssueTab({ context }: PluginDetailTabProps) {
       </div>
 
       <div style={cardStyle}>
-        <div style={sectionTitleStyle}>Scheduled queue for this issue</div>
+        <div style={sectionTitleStyle}>{t("Scheduled queue for this issue")}</div>
         <div style={{ marginTop: "12px" }}>
-          <PublicationJobList jobs={issuePublicationJobs.data ?? []} />
+          <PublicationJobList jobs={issuePublicationJobs.data ?? []} locale={locale} />
         </div>
       </div>
 
       <div style={cardStyle}>
-        <div style={sectionTitleStyle}>Publication history for this issue</div>
+        <div style={sectionTitleStyle}>{t("Publication history for this issue")}</div>
         <div style={{ marginTop: "12px" }}>
-          <PublicationList publications={issuePublications.data ?? []} />
+          <PublicationList publications={issuePublications.data ?? []} locale={locale} />
         </div>
       </div>
     </div>

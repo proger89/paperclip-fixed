@@ -45,6 +45,7 @@ describe("instance settings routes", () => {
     delete process.env.PORT;
     mockInstanceSettingsService.getGeneral.mockResolvedValue({
       censorUsernameInLogs: false,
+      uiLanguage: null,
     });
     mockInstanceSettingsService.getExperimental.mockResolvedValue({
       enableIsolatedWorkspaces: false,
@@ -54,6 +55,7 @@ describe("instance settings routes", () => {
       id: "instance-settings-1",
       general: {
         censorUsernameInLogs: true,
+        uiLanguage: null,
       },
     });
     mockInstanceSettingsService.updateExperimental.mockResolvedValue({
@@ -122,6 +124,8 @@ describe("instance settings routes", () => {
     expect(getRes.status).toBe(200);
     expect(getRes.body).toEqual({
       censorUsernameInLogs: false,
+      uiLanguage: null,
+      effectiveUiLanguage: "en",
       defaultLocalExecutionLocation: "container",
       hostBridgeConfigured: false,
       agentFacingApiUrl: "http://localhost:3100",
@@ -137,6 +141,8 @@ describe("instance settings routes", () => {
     });
     expect(patchRes.body).toEqual({
       censorUsernameInLogs: true,
+      uiLanguage: null,
+      effectiveUiLanguage: "en",
       defaultLocalExecutionLocation: "container",
       hostBridgeConfigured: false,
       agentFacingApiUrl: "http://localhost:3100",
@@ -163,6 +169,8 @@ describe("instance settings routes", () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
       censorUsernameInLogs: false,
+      uiLanguage: null,
+      effectiveUiLanguage: "en",
       defaultLocalExecutionLocation: "host",
       hostBridgeConfigured: true,
       agentFacingApiUrl: "https://agents.example.com",
@@ -183,6 +191,65 @@ describe("instance settings routes", () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
       censorUsernameInLogs: false,
+      uiLanguage: null,
+      effectiveUiLanguage: "en",
+      defaultLocalExecutionLocation: "container",
+      hostBridgeConfigured: false,
+      agentFacingApiUrl: "http://localhost:3100",
+    });
+  });
+
+  it("derives effective UI language from Accept-Language when no instance language is saved", async () => {
+    const app = createApp({
+      type: "board",
+      userId: "local-board",
+      source: "local_implicit",
+      isInstanceAdmin: true,
+    });
+
+    const res = await request(app)
+      .get("/api/instance/settings/general")
+      .set("Accept-Language", "ru-RU,ru;q=0.9,en;q=0.8");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      censorUsernameInLogs: false,
+      uiLanguage: null,
+      effectiveUiLanguage: "ru",
+      defaultLocalExecutionLocation: "container",
+      hostBridgeConfigured: false,
+      agentFacingApiUrl: "http://localhost:3100",
+    });
+  });
+
+  it("persists explicit instance uiLanguage and returns it as the effective locale", async () => {
+    mockInstanceSettingsService.updateGeneral.mockResolvedValue({
+      id: "instance-settings-1",
+      general: {
+        censorUsernameInLogs: false,
+        uiLanguage: "ru",
+      },
+    });
+
+    const app = createApp({
+      type: "board",
+      userId: "local-board",
+      source: "local_implicit",
+      isInstanceAdmin: true,
+    });
+
+    const res = await request(app)
+      .patch("/api/instance/settings/general")
+      .send({ uiLanguage: "ru" });
+
+    expect(res.status).toBe(200);
+    expect(mockInstanceSettingsService.updateGeneral).toHaveBeenCalledWith({
+      uiLanguage: "ru",
+    });
+    expect(res.body).toEqual({
+      censorUsernameInLogs: false,
+      uiLanguage: "ru",
+      effectiveUiLanguage: "ru",
       defaultLocalExecutionLocation: "container",
       hostBridgeConfigured: false,
       agentFacingApiUrl: "http://localhost:3100",

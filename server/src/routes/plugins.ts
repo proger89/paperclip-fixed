@@ -59,6 +59,13 @@ import { getRequestUiLanguage } from "../ui-language.js";
 type PluginUiSlotDeclaration = NonNullable<NonNullable<PaperclipPluginManifestV1["ui"]>["slots"]>[number];
 /** Launcher declaration extracted from plugin manifest */
 type PluginLauncherDeclaration = NonNullable<PaperclipPluginManifestV1["launchers"]>[number];
+type LocalizedPluginUiSlotContribution = Omit<PluginUiSlotDeclaration, "displayName"> & {
+  displayName: string;
+};
+type LocalizedPluginLauncherContribution = Omit<PluginLauncherDeclaration, "displayName" | "description"> & {
+  displayName: string;
+  description?: string;
+};
 
 /**
  * Normalized UI contribution for frontend slot host consumption.
@@ -76,8 +83,8 @@ type PluginUiContribution = {
    * `/_plugins/${pluginId}/ui/${uiEntryFile}`.
    */
   uiEntryFile: string;
-  slots: PluginUiSlotDeclaration[];
-  launchers: PluginLauncherDeclaration[];
+  slots: LocalizedPluginUiSlotContribution[];
+  launchers: LocalizedPluginLauncherContribution[];
 };
 
 function localizePluginText(value: LocalizedText | undefined, locale: UiLanguage): string {
@@ -427,7 +434,7 @@ export function pluginRoutes(
     const locale = getRequestUiLanguage(req);
     const plugins = await registry.listByStatus("ready");
 
-    const contributions: PluginUiContribution[] = plugins
+    const contributions = plugins
       .map((plugin) => {
         // Safety check: manifestJson should always exist for ready plugins, but guard against null
         const manifest = plugin.manifestJson;
@@ -457,7 +464,7 @@ export function pluginRoutes(
           })),
         };
       })
-      .filter((item): item is PluginUiContribution => item !== null);
+      .filter((item): item is NonNullable<typeof item> => item !== null);
     res.json(contributions);
   });
 
@@ -1192,6 +1199,10 @@ export function pluginRoutes(
 
     try {
       const result = await lifecycle.unload(plugin.id, purge);
+      if (!result) {
+        res.status(404).json({ error: "Plugin not found" });
+        return;
+      }
       await logPluginMutationActivity(req, "plugin.uninstalled", plugin.id, {
         pluginId: plugin.id,
         pluginKey: plugin.pluginKey,

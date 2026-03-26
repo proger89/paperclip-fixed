@@ -11,7 +11,7 @@ import { cn } from "../lib/utils";
 export function InstanceGeneralSettings() {
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
-  const { t, setLocale } = useI18n();
+  const { t, translateText, setLocale } = useI18n();
   const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -61,7 +61,7 @@ export function InstanceGeneralSettings() {
       <div className="space-y-2">
         <div className="flex items-center gap-2">
           <SlidersHorizontal className="h-5 w-5 text-muted-foreground" />
-          <h1 className="text-lg font-semibold">General</h1>
+          <h1 className="text-lg font-semibold">{translateText("General")}</h1>
         </div>
         <p className="text-sm text-muted-foreground">{t("instance.general.description")}</p>
       </div>

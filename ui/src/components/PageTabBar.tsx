@@ -36,12 +36,12 @@ export function PageTabBar({ items, value, onValueChange, align = "center" }: Pa
   }
 
   return (
-    <TabsList variant="line" className={align === "start" ? "justify-start" : undefined}>
-      {items.map((item) => (
-        <TabsTrigger key={item.value} value={item.value}>
-          {item.label}
-        </TabsTrigger>
-      ))}
-    </TabsList>
+      <TabsList variant="line" className={align === "start" ? "justify-start" : undefined}>
+        {items.map((item) => (
+          <TabsTrigger key={item.value} value={item.value}>
+            {typeof item.label === "string" ? translateText(item.label) : item.label}
+          </TabsTrigger>
+        ))}
+      </TabsList>
   );
 }
