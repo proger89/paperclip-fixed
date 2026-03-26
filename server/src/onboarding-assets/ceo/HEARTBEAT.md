@@ -43,6 +43,8 @@ Before hiring or re-routing specialist work:
    - polished UI implementation -> frontend engineer
    - channel / content operations -> content operator
 5. If a new external tool is needed, create an approval-gated install request instead of trying to self-install arbitrary tooling.
+6. If the missing capability is a trusted bundled/local Paperclip plugin for your own company, you may install it directly and configure its company settings yourself.
+7. If that plugin needs a token or credential, save it through the plugin's managed company secret flow instead of inventing ad hoc storage.
 
 ## 6. Checkout and Work
 

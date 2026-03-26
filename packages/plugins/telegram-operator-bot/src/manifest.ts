@@ -54,8 +54,6 @@ const manifest: PaperclipPluginManifestV1 = {
     "metrics.write",
     "jobs.schedule",
     "instance.settings.register",
-    "ui.dashboardWidget.register",
-    "ui.sidebar.register",
     "ui.page.register",
   ],
   jobs: [
@@ -101,24 +99,6 @@ const manifest: PaperclipPluginManifestV1 = {
           ru: "Telegram Operator Settings",
         },
         exportName: EXPORT_NAMES.settingsPage,
-      },
-      {
-        type: "dashboardWidget",
-        id: SLOT_IDS.dashboardWidget,
-        displayName: {
-          en: "Telegram Bot",
-          ru: "Telegram Bot",
-        },
-        exportName: EXPORT_NAMES.dashboardWidget,
-      },
-      {
-        type: "sidebar",
-        id: SLOT_IDS.sidebar,
-        displayName: {
-          en: "Telegram Bot",
-          ru: "Telegram Bot",
-        },
-        exportName: EXPORT_NAMES.sidebar,
       },
       {
         type: "page",

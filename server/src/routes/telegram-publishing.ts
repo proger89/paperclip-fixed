@@ -82,7 +82,7 @@ function normalizeTelegramDestination(input: unknown, index: number): TelegramDe
   if (!chatId && !publicHandle) return null;
   return {
     id: trimToNull(record.id) ?? `destination-${index + 1}`,
-    label: trimToNull(record.label) ?? publicHandle || chatId || `Destination ${index + 1}`,
+    label: trimToNull(record.label) ?? (publicHandle || chatId || `Destination ${index + 1}`),
     chatId,
     publicHandle,
     parseMode: normalizeParseMode(record.parseMode),
@@ -176,7 +176,7 @@ function normalizeAuthorVoiceProfiles(input: unknown): AuthorVoiceProfileRecord[
       const item = entry as Record<string, unknown>;
       const destinationId = trimToNull(item.destinationId);
       if (!destinationId) return null;
-      return {
+      const profile: AuthorVoiceProfileRecord = {
         id: trimToNull(item.id) ?? `profile-${index + 1}`,
         name: trimToNull(item.name) ?? trimToNull(item.label) ?? `Profile ${index + 1}`,
         destinationId,
@@ -186,7 +186,8 @@ function normalizeAuthorVoiceProfiles(input: unknown): AuthorVoiceProfileRecord[
         bannedPhrases: trimToNull(item.bannedPhrases),
         ctaRules: trimToNull(item.ctaRules),
         enabled: item.enabled !== false,
-      } satisfies AuthorVoiceProfileRecord;
+      };
+      return profile;
     })
     .filter((entry): entry is AuthorVoiceProfileRecord => Boolean(entry));
 }
@@ -389,7 +390,7 @@ export function telegramPublishingRoutes(db: Db) {
         assigneeUserId: null,
       });
 
-      const sourceDocument = await documents.upsertIssueDocument({
+      const sourceDocumentResult = await documents.upsertIssueDocument({
         issueId: issue.id,
         key: "telegram-source",
         title: requestedTitle ?? imported?.title ?? rewrite.title,
@@ -399,8 +400,9 @@ export function telegramPublishingRoutes(db: Db) {
         createdByAgentId: actor.agentId,
         createdByUserId: actor.actorType === "user" ? actor.actorId : null,
       });
+      const sourceDocument = sourceDocumentResult.document;
 
-      const draftDocument = await documents.upsertIssueDocument({
+      const draftDocumentResult = await documents.upsertIssueDocument({
         issueId: issue.id,
         key: "telegram-draft",
         title: rewrite.title,
@@ -410,8 +412,9 @@ export function telegramPublishingRoutes(db: Db) {
         createdByAgentId: actor.agentId,
         createdByUserId: actor.actorType === "user" ? actor.actorId : null,
       });
+      const draftDocument = draftDocumentResult.document;
 
-      const finalDocument = await documents.upsertIssueDocument({
+      const finalDocumentResult = await documents.upsertIssueDocument({
         issueId: issue.id,
         key: "telegram-final-copy",
         title: rewrite.title,
@@ -421,6 +424,7 @@ export function telegramPublishingRoutes(db: Db) {
         createdByAgentId: actor.agentId,
         createdByUserId: actor.actorType === "user" ? actor.actorId : null,
       });
+      const finalDocument = finalDocumentResult.document;
 
       await documents.upsertIssueDocument({
         issueId: issue.id,

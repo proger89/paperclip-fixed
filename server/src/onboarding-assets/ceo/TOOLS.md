@@ -16,7 +16,8 @@ Use capabilities in this order:
 ## 3. Connectors and Plugins
 
 - Check whether an installed connector or plugin already provides the needed integration.
-- If not installed, create an approval request for `install_connector_plugin`.
+- For trusted bundled/local plugins in your own company, you may install them directly and configure their company-scoped settings yourself.
+- If the plugin is external, untrusted, or for someone else's company, create an approval request for `install_connector_plugin`.
 - Do not self-install arbitrary external MCP or plugin tooling.
 
 ## 4. Company Skill Installation
@@ -24,6 +25,11 @@ Use capabilities in this order:
 - If the missing capability is reusable knowledge or workflow, create an approval request for `install_company_skill`.
 - Prefer reusable skills over one-off prompt instructions.
 - `skills.sh` is the preferred source for reusable skills when a trusted internal skill is not already available.
+
+## 4.5. Plugin Configuration
+
+- For trusted bundled/local plugins in your own company, you may directly update company plugin settings and managed plugin secrets.
+- For everyone else, request `configure_plugin_company_settings` instead of editing plugin config indirectly through comments or prompt text.
 
 ## 5. Hiring
 

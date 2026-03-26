@@ -6182,11 +6182,11 @@
 [17:11:23] [31mERROR[39m: [36mEmbedded PostgreSQL failed; showing buffered startup logs[39m [90m{"phase":"start","recentLogs":["2026-03-26 20:11:23.370 MSK [28944] FATAL:  lock file \"postmaster.pid\" already exists","2026-03-26 20:11:23.370 MSK [28944] HINT:  Is another postmaster (PID 25476) running in data directory \"C:/Users/test/.paperclip-worktrees/instances/repo-local/db\"?"]}[39m
 [17:11:23] [31mERROR[39m: [36mPaperclip server failed to start[39m
 20:16:52 [tsx] change in ./src\app.ts Rerunning...
-cm{"checked":2,"enqueued":1,"skipped":0}[39m
-[15:28:32] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
-[2m18:37:58[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/plugins/slots.tsx[22m
-[15:38:38] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
-18:38:56 [tsx] change in ./..\packages\plugins\sdk\dist\index.js Restarting...
+cD:\new-projects\paperclip\server:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @paperclipai/server@0.3.1 dev:watch: `cross-env PAPERCLIP_MIGRATION_PROMPT=never PAPERCLIP_MIGRATION_AUTO_APPLY=true tsx watch --ignore ../ui/node_modules --ignore ../ui/.vite --ignore ../ui/dist src/index.ts`
+Exit status 3221225786
+ ELIFECYCLE  Command failed with exit code 3221225786.
+[tsx] change in ./..\packages\plugins\sdk\dist\index.js Restarting...
 c18:38:57 [tsx] change in ./..\packages\plugins\sdk\dist\index.js Restarting...
 c[15:39:02] [33mWARN[39m: [36mEmbedded PostgreSQL port is in use; using next free port (requestedPort=55432, selectedPort=55433)[39m
 [15:39:02] [32mINFO[39m: [36mUsing embedded PostgreSQL because no DATABASE_URL set (dataDir=C:\Users\test\.paperclip-worktrees\instances\repo-local\db, port=55433)[39m
@@ -6517,4 +6517,6 @@
 [17:15:54] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
 [17:16:24] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
 20:16:52 [tsx] change in ./src\app.ts Restarting...
-c
+cD:\new-projects\paperclip\server:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @paperclipai/server@0.3.1 dev:watch: `cross-env PAPERCLIP_MIGRATION_PROMPT=never PAPERCLIP_MIGRATION_AUTO_APPLY=true tsx watch --ignore ../ui/node_modules --ignore ../ui/.vite --ignore ../ui/dist src/index.ts`
+Exit status 3221225786

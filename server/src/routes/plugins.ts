@@ -18,6 +18,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import path from "node:path";
 import { Router } from "express";
 import type { Request } from "express";
 import { and, desc, eq, gte } from "drizzle-orm";
@@ -475,8 +476,9 @@ export function pluginRoutes(
   router.get("/plugins/examples", async (req, res) => {
     assertBoard(req);
     const locale = getRequestUiLanguage(req);
+    const includeDevOnly = req.query.includeDevOnly === "true";
     res.json(
-      listBundledPluginExamples().map((example) => ({
+      listBundledPluginExamples({ includeDevOnly }).map((example) => ({
         ...example,
         displayName: localizePluginText(example.displayName, locale),
         description: localizePluginText(example.description, locale),

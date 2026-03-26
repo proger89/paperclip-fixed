@@ -19,13 +19,13 @@ function makeBundle(overrides: Partial<RoleBundleCatalogEntry> = {}): RoleBundle
     requiredConnectorPlugins: [],
     suggestedConnectorPlugins: [
       {
-        key: "paperclip-kitchen-sink-example",
-        displayName: "Kitchen Sink (Example)",
-        pluginKey: "paperclip-kitchen-sink-example",
-        packageName: "@paperclipai/plugin-kitchen-sink-example",
+        key: "paperclip.telegram-publishing",
+        displayName: "Telegram Publishing",
+        pluginKey: "paperclip.telegram-publishing",
+        packageName: "@paperclipai/plugin-telegram-publishing",
         source: "local_path",
-        localPath: "D:/new-projects/paperclip/packages/plugins/examples/plugin-kitchen-sink-example",
-        reason: "Useful sandbox",
+        localPath: "D:/new-projects/paperclip/packages/plugins/telegram-publishing",
+        reason: "Useful for governed Telegram publishing",
       },
     ],
     defaultReviewPolicyKey: null,
@@ -37,8 +37,8 @@ function makeBundle(overrides: Partial<RoleBundleCatalogEntry> = {}): RoleBundle
 function makePlugin(overrides: Partial<PluginRecord> = {}): PluginRecord {
   return {
     id: "plugin-1",
-    pluginKey: "paperclip-kitchen-sink-example",
-    packageName: "@paperclipai/plugin-kitchen-sink-example",
+    pluginKey: "paperclip.telegram-publishing",
+    packageName: "@paperclipai/plugin-telegram-publishing",
     version: "1.0.0",
     apiVersion: 1,
     categories: ["connector"],
@@ -62,8 +62,8 @@ function makeApproval(overrides: Partial<Approval> = {}): Approval {
     requestedByUserId: "user-1",
     status: "pending",
     payload: {
-      pluginKey: "paperclip-kitchen-sink-example",
-      packageName: "@paperclipai/plugin-kitchen-sink-example",
+      pluginKey: "paperclip.telegram-publishing",
+      packageName: "@paperclipai/plugin-telegram-publishing",
     },
     decisionNote: null,
     decidedByUserId: null,
@@ -87,7 +87,7 @@ describe("role bundle connector suggestions", () => {
         status: "available",
         bundleKey: "pm",
         requirement: expect.objectContaining({
-          key: "paperclip-kitchen-sink-example",
+          key: "paperclip.telegram-publishing",
         }),
       }),
     ]);
@@ -122,7 +122,7 @@ describe("role bundle connector suggestions", () => {
       expect.objectContaining({
         status: "installed",
         installedPlugin: expect.objectContaining({
-          pluginKey: "paperclip-kitchen-sink-example",
+          pluginKey: "paperclip.telegram-publishing",
         }),
       }),
     ]);

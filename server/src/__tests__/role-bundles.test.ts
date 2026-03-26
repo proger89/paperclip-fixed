@@ -57,15 +57,15 @@ describe("role bundles", () => {
     ]));
     expect(pm.suggestedConnectorPlugins).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        key: "paperclip-kitchen-sink-example",
+        key: "paperclip.telegram-publishing",
         source: "local_path",
       }),
       expect.objectContaining({
-        key: "paperclip.telegram-channel-connector",
+        key: "paperclip.telegram-operator-bot",
         source: "local_path",
       }),
       expect.objectContaining({
-        key: "paperclipai.plugin-authoring-smoke-example",
+        key: "paperclip.author-voice-profiles",
         source: "local_path",
       }),
     ]));
@@ -74,12 +74,16 @@ describe("role bundles", () => {
   it("requires the Telegram connector for content workflows", () => {
     const content = resolveRoleBundle("content_operator", null);
 
-    expect(content.requiredConnectorPlugins).toEqual([
+    expect(content.requiredConnectorPlugins).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        key: "paperclip.telegram-channel-connector",
+        key: "paperclip.telegram-publishing",
         source: "local_path",
       }),
-    ]);
+      expect.objectContaining({
+        key: "paperclip.author-voice-profiles",
+        source: "local_path",
+      }),
+    ]));
   });
 
   it("uses only curated skill refs that can be resolved by the install flow", () => {

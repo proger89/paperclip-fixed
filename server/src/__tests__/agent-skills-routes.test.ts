@@ -576,20 +576,24 @@ describe("agent skill routes", () => {
         ]),
         suggestedConnectorPlugins: expect.arrayContaining([
           expect.objectContaining({
-            key: "paperclip-kitchen-sink-example",
+            key: "paperclip.web-content-import",
             source: "local_path",
           }),
           expect.objectContaining({
-            key: "paperclipai.plugin-authoring-smoke-example",
+            key: "paperclip.feed-sources",
             source: "local_path",
           }),
         ]),
-        requiredConnectorPlugins: [
+        requiredConnectorPlugins: expect.arrayContaining([
           expect.objectContaining({
-            key: "paperclip.telegram-channel-connector",
+            key: "paperclip.telegram-publishing",
             source: "local_path",
           }),
-        ],
+          expect.objectContaining({
+            key: "paperclip.author-voice-profiles",
+            source: "local_path",
+          }),
+        ]),
       }),
       expect.objectContaining({
         key: "general_specialist",
@@ -602,11 +606,11 @@ describe("agent skill routes", () => {
         ]),
         suggestedConnectorPlugins: expect.arrayContaining([
           expect.objectContaining({
-            key: "paperclip-kitchen-sink-example",
+            key: "paperclip.telegram-publishing",
             source: "local_path",
           }),
           expect.objectContaining({
-            key: "paperclip.telegram-channel-connector",
+            key: "paperclip.telegram-operator-bot",
             source: "local_path",
           }),
         ]),
@@ -618,12 +622,12 @@ describe("agent skill routes", () => {
     const previousRequirements = ROLE_BUNDLES.pm.requiredConnectorPlugins;
     ROLE_BUNDLES.pm.requiredConnectorPlugins = [
       {
-        key: "paperclipai.plugin-authoring-smoke-example",
-        displayName: "Plugin Authoring Smoke Example",
-        pluginKey: "paperclipai.plugin-authoring-smoke-example",
-        packageName: "@paperclipai/plugin-authoring-smoke-example",
+        key: "paperclip.feed-sources",
+        displayName: "Feed Sources",
+        pluginKey: "paperclip.feed-sources",
+        packageName: "@paperclipai/plugin-feed-sources",
         source: "local_path",
-        localPath: "D:/new-projects/paperclip/packages/plugins/examples/plugin-authoring-smoke-example",
+        localPath: "D:/new-projects/paperclip/packages/plugins/feed-sources",
         version: "0.1.0",
       },
     ];
@@ -638,24 +642,24 @@ describe("agent skill routes", () => {
           key: "pm",
           suggestedConnectorPlugins: expect.arrayContaining([
             expect.objectContaining({
-              key: "paperclip-kitchen-sink-example",
+              key: "paperclip.telegram-publishing",
               source: "local_path",
             }),
             expect.objectContaining({
-              key: "paperclipai.plugin-authoring-smoke-example",
-              packageName: "@paperclipai/plugin-authoring-smoke-example",
+              key: "paperclip.feed-sources",
+              packageName: "@paperclipai/plugin-feed-sources",
               source: "local_path",
             }),
           ]),
-          requiredConnectorPlugins: [
+          requiredConnectorPlugins: expect.arrayContaining([
             expect.objectContaining({
-              key: "paperclipai.plugin-authoring-smoke-example",
-              packageName: "@paperclipai/plugin-authoring-smoke-example",
+              key: "paperclip.feed-sources",
+              packageName: "@paperclipai/plugin-feed-sources",
               source: "local_path",
-              localPath: "D:/new-projects/paperclip/packages/plugins/examples/plugin-authoring-smoke-example",
+              localPath: "D:/new-projects/paperclip/packages/plugins/feed-sources",
               version: "0.1.0",
             }),
-          ],
+          ]),
         }),
       ]);
     } finally {
