@@ -1,11 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Puzzle, ArrowLeft, ShieldAlert, ActivitySquare, CheckCircle, XCircle, Loader2, Clock, Cpu, Webhook, CalendarClock, AlertTriangle } from "lucide-react";
 import { useCompany } from "@/context/CompanyContext";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { Link, Navigate, useParams } from "@/lib/router";
-import { PluginSlotMount, usePluginSlots } from "@/plugins/slots";
-import { pluginsApi } from "@/api/plugins";
+import {
+  PluginSlotMount,
+  ensurePluginContributionLoaded,
+  type ResolvedPluginSlot,
+} from "@/plugins/slots";
+import { pluginsApi, type PluginUiContribution } from "@/api/plugins";
 import { queryKeys } from "@/lib/queryKeys";
 import { getPluginCompanyPagePath, getPluginPageLinkLabel } from "@/lib/plugin-pages";
 import { Button } from "@/components/ui/button";
@@ -101,17 +105,109 @@ export function PluginSettings() {
     enabled: !!pluginId && !!hasConfigSchema,
   });
 
-  const { slots } = usePluginSlots({
-    slotTypes: ["settingsPage"],
-    companyId: selectedCompanyId,
-    enabled: !!selectedCompanyId,
+  const pluginDeclaresCustomSettingsPage = Boolean(
+    plugin?.manifestJson?.ui?.slots?.some((slot) => slot.type === "settingsPage"),
+  );
+
+  const {
+    data: uiContributions,
+    isLoading: uiContributionsLoading,
+    error: uiContributionsError,
+  } = useQuery({
+    queryKey: queryKeys.plugins.uiContributions,
+    queryFn: () => pluginsApi.listUiContributions(),
+    enabled: !!selectedCompanyId && pluginDeclaresCustomSettingsPage,
   });
 
-  // Filter slots to only show settings pages for this specific plugin
-  const pluginSlots = slots.filter((slot) => slot.pluginId === pluginId);
+  const matchingUiContributions = useMemo(() => {
+    if (!plugin || !uiContributions) return [] as PluginUiContribution[];
+    const identifiers = new Set<string>([
+      plugin.id,
+      plugin.pluginKey,
+      pluginId ?? "",
+    ]);
+    return uiContributions.filter((contribution) => (
+      identifiers.has(contribution.pluginId)
+      || identifiers.has(contribution.pluginKey)
+    ));
+  }, [plugin, pluginId, uiContributions]);
 
-  // If the plugin has a custom settingsPage slot, prefer that over auto-generated form
-  const hasCustomSettingsPage = pluginSlots.length > 0;
+  const pluginSlots = useMemo(() => {
+    const rows: ResolvedPluginSlot[] = [];
+    for (const contribution of matchingUiContributions) {
+      for (const slot of contribution.slots) {
+        if (slot.type !== "settingsPage") continue;
+        rows.push({
+          ...slot,
+          pluginId: contribution.pluginId,
+          pluginKey: contribution.pluginKey,
+          pluginDisplayName: contribution.displayName,
+          pluginVersion: contribution.version,
+        });
+      }
+    }
+    rows.sort((left, right) => {
+      const leftOrder = left.order ?? Number.MAX_SAFE_INTEGER;
+      const rightOrder = right.order ?? Number.MAX_SAFE_INTEGER;
+      if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+      return left.displayName.localeCompare(right.displayName);
+    });
+    return rows;
+  }, [matchingUiContributions]);
+
+  const [pluginSlotsLoading, setPluginSlotsLoading] = useState(false);
+  const [pluginSlotsError, setPluginSlotsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!pluginDeclaresCustomSettingsPage) {
+      setPluginSlotsLoading(false);
+      setPluginSlotsError(null);
+      return;
+    }
+    if (uiContributionsLoading) {
+      setPluginSlotsLoading(true);
+      setPluginSlotsError(null);
+      return;
+    }
+    if (uiContributionsError) {
+      setPluginSlotsLoading(false);
+      setPluginSlotsError(uiContributionsError instanceof Error ? uiContributionsError.message : String(uiContributionsError));
+      return;
+    }
+    if (matchingUiContributions.length === 0) {
+      setPluginSlotsLoading(false);
+      setPluginSlotsError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setPluginSlotsLoading(true);
+    setPluginSlotsError(null);
+    void Promise.all(matchingUiContributions.map((contribution) => ensurePluginContributionLoaded(contribution)))
+      .then(() => {
+        if (cancelled) return;
+        setPluginSlotsLoading(false);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setPluginSlotsLoading(false);
+        setPluginSlotsError(error instanceof Error ? error.message : String(error));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    matchingUiContributions,
+    pluginDeclaresCustomSettingsPage,
+    uiContributionsError,
+    uiContributionsLoading,
+  ]);
+
+  // If the plugin declares a custom settingsPage slot, wait for that slot to
+  // resolve instead of falling back to the generic schema form. Some plugins
+  // intentionally provide richer settings UIs than their instanceConfigSchema.
+  const hasCustomSettingsPage = pluginDeclaresCustomSettingsPage && pluginSlots.length > 0;
 
   useEffect(() => {
     setBreadcrumbs([
@@ -221,29 +317,46 @@ export function PluginSettings() {
               <div className="space-y-1">
                 <h2 className="text-base font-semibold">Settings</h2>
               </div>
-              {hasCustomSettingsPage ? (
-                <div className="space-y-3">
-                  {pluginSlots.map((slot) => (
-                    <PluginSlotMount
-                      key={`${slot.pluginKey}:${slot.id}`}
-                      slot={slot}
-                      context={{
-                        companyId: selectedCompanyId,
-                        companyPrefix: companyPrefix ?? null,
-                      }}
-                      missingBehavior="placeholder"
-                    />
-                  ))}
-                </div>
+              {pluginDeclaresCustomSettingsPage ? (
+                pluginSlotsLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading plugin settings...
+                  </div>
+                ) : pluginSlotsError ? (
+                  <p className="text-sm text-destructive">
+                    Plugin settings UI is unavailable right now: {pluginSlotsError}
+                  </p>
+                ) : hasCustomSettingsPage ? (
+                  <div className="space-y-3">
+                    {pluginSlots.map((slot) => (
+                      <PluginSlotMount
+                        key={`${slot.pluginKey}:${slot.id}`}
+                        slot={slot}
+                        context={{
+                          companyId: selectedCompanyId,
+                          companyPrefix: selectedCompany?.issuePrefix ?? companyPrefix ?? null,
+                        }}
+                        missingBehavior="placeholder"
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    This plugin declares a custom settings page, but it has not loaded yet.
+                  </p>
+                )
               ) : hasConfigSchema ? (
-                <PluginConfigForm
-                  pluginId={pluginId!}
-                  schema={configSchema!}
-                  initialValues={configData?.configJson}
-                  isLoading={configLoading}
-                  pluginStatus={plugin.status}
-                  supportsConfigTest={(plugin as unknown as { supportsConfigTest?: boolean }).supportsConfigTest === true}
-                />
+                <div className="space-y-3">
+                  <PluginConfigForm
+                    pluginId={pluginId!}
+                    schema={configSchema!}
+                    initialValues={configData?.configJson}
+                    isLoading={configLoading}
+                    pluginStatus={plugin.status}
+                    supportsConfigTest={(plugin as unknown as { supportsConfigTest?: boolean }).supportsConfigTest === true}
+                  />
+                </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
                   This plugin does not require any settings.
