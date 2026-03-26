@@ -14,6 +14,7 @@ import { useToast } from "../context/ToastContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { assigneeValueFromSelection, suggestedCommentAssigneeValue } from "../lib/assignees";
 import { queryKeys } from "../lib/queryKeys";
+import { resolveUiText } from "../lib/localized";
 import { readIssueDetailBreadcrumb } from "../lib/issueDetailBreadcrumb";
 import { useProjectOrder } from "../hooks/useProjectOrder";
 import { relativeTime, cn, formatTokens, visibleRunCostUsd } from "../lib/utils";
@@ -320,7 +321,7 @@ export function IssueDetail() {
   const issuePluginTabItems = useMemo(
     () => issuePluginDetailSlots.map((slot) => ({
       value: `plugin:${slot.pluginKey}:${slot.id}`,
-      label: slot.displayName,
+      label: resolveUiText(slot.displayName),
       slot,
     })),
     [issuePluginDetailSlots],

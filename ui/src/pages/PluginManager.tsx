@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/context/ToastContext";
 import { cn } from "@/lib/utils";
+import { resolveUiText } from "@/lib/localized";
 import { getPluginCompanyPagePath, getPluginPageLinkLabel } from "@/lib/plugin-pages";
 
 function firstNonEmptyLine(value: string | null | undefined): string | null {
@@ -346,9 +347,9 @@ export function PluginManager() {
                       <Link
                         to={`/instance/settings/plugins/${plugin.id}`}
                         className="font-medium hover:underline truncate block"
-                        title={plugin.manifestJson.displayName ?? plugin.packageName}
+                        title={resolveUiText(plugin.manifestJson.displayName) || plugin.packageName}
                       >
-                        {plugin.manifestJson.displayName ?? plugin.packageName}
+                        {resolveUiText(plugin.manifestJson.displayName) || plugin.packageName}
                       </Link>
                       {examplePackageNames.has(plugin.packageName) && (
                         <Badge variant="outline">Example</Badge>
@@ -359,8 +360,11 @@ export function PluginManager() {
                         {plugin.packageName} · v{plugin.manifestJson.version ?? plugin.version}
                       </p>
                     </div>
-                    <p className="text-sm text-muted-foreground truncate mt-0.5" title={plugin.manifestJson.description}>
-                      {plugin.manifestJson.description || "No description provided."}
+                    <p
+                      className="text-sm text-muted-foreground truncate mt-0.5"
+                      title={resolveUiText(plugin.manifestJson.description) || undefined}
+                    >
+                      {resolveUiText(plugin.manifestJson.description) || "No description provided."}
                     </p>
                     {plugin.status === "error" && (
                       <div className="mt-3 rounded-md border border-red-500/25 bg-red-500/[0.06] px-3 py-2">
@@ -430,7 +434,7 @@ export function PluginManager() {
                           title="Uninstall"
                           onClick={() => {
                             setUninstallPluginId(plugin.id);
-                            setUninstallPluginName(plugin.manifestJson.displayName ?? plugin.packageName);
+                            setUninstallPluginName(resolveUiText(plugin.manifestJson.displayName) || plugin.packageName);
                           }}
                           disabled={uninstallMutation.isPending}
                         >
@@ -496,10 +500,10 @@ export function PluginManager() {
         onOpenChange={(open) => { if (!open) setErrorDetailsPlugin(null); }}
       >
         <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Error Details</DialogTitle>
-            <DialogDescription>
-              {errorDetailsPlugin?.manifestJson.displayName ?? errorDetailsPlugin?.packageName ?? "Plugin"} hit an error state.
+            <DialogHeader>
+              <DialogTitle>Error Details</DialogTitle>
+              <DialogDescription>
+                {resolveUiText(errorDetailsPlugin?.manifestJson.displayName) || errorDetailsPlugin?.packageName || "Plugin"} hit an error state.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">

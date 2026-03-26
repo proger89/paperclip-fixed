@@ -24,13 +24,17 @@ import { and, desc, eq, gte } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { companies, pluginLogs, pluginWebhookDeliveries } from "@paperclipai/db";
 import type {
+  LocalizedText,
   PluginStatus,
   PaperclipPluginManifestV1,
   PluginBridgeErrorCode,
   PluginLauncherRenderContextSnapshot,
+  UiLanguage,
 } from "@paperclipai/shared";
 import {
   PLUGIN_STATUSES,
+  localizePluginManifest,
+  resolveLocalizedText,
 } from "@paperclipai/shared";
 import { pluginRegistryService } from "../services/plugin-registry.js";
 import { pluginLifecycleManager } from "../services/plugin-lifecycle.js";
@@ -49,6 +53,7 @@ import type { ToolRunContext } from "@paperclipai/plugin-sdk";
 import { JsonRpcCallError, PLUGIN_RPC_ERROR_CODES } from "@paperclipai/plugin-sdk";
 import { assertBoard, assertCompanyAccess, getActorInfo } from "./authz.js";
 import { validateInstanceConfig } from "../services/plugin-config-validator.js";
+import { getRequestUiLanguage } from "../ui-language.js";
 
 /** UI slot declaration extracted from plugin manifest */
 type PluginUiSlotDeclaration = NonNullable<NonNullable<PaperclipPluginManifestV1["ui"]>["slots"]>[number];
@@ -74,6 +79,22 @@ type PluginUiContribution = {
   slots: PluginUiSlotDeclaration[];
   launchers: PluginLauncherDeclaration[];
 };
+
+function localizePluginText(value: LocalizedText | undefined, locale: UiLanguage): string {
+  return resolveLocalizedText(value, locale);
+}
+
+function localizePluginRecord<T extends {
+  manifestJson: PaperclipPluginManifestV1;
+}>(
+  plugin: T,
+  locale: UiLanguage,
+): T {
+  return {
+    ...plugin,
+    manifestJson: localizePluginManifest(plugin.manifestJson, locale),
+  };
+}
 
 /** Request body for POST /api/plugins/install */
 interface PluginInstallRequest {
@@ -326,6 +347,7 @@ export function pluginRoutes(
    */
   router.get("/plugins", async (req, res) => {
     assertBoard(req);
+    const locale = getRequestUiLanguage(req);
     const rawStatus = req.query.status;
     if (rawStatus !== undefined) {
       if (typeof rawStatus !== "string" || !(PLUGIN_STATUSES as readonly string[]).includes(rawStatus)) {
@@ -339,7 +361,7 @@ export function pluginRoutes(
     const plugins = status
       ? await registry.listByStatus(status)
       : await registry.listInstalled();
-    res.json(plugins);
+    res.json(plugins.map((plugin) => localizePluginRecord(plugin, locale)));
   });
 
   /**
@@ -350,7 +372,14 @@ export function pluginRoutes(
    */
   router.get("/plugins/examples", async (req, res) => {
     assertBoard(req);
-    res.json(listBundledPluginExamples());
+    const locale = getRequestUiLanguage(req);
+    res.json(
+      listBundledPluginExamples().map((example) => ({
+        ...example,
+        displayName: localizePluginText(example.displayName, locale),
+        description: localizePluginText(example.description, locale),
+      })),
+    );
   });
 
   // IMPORTANT: Static routes must come before parameterized routes
@@ -395,6 +424,7 @@ export function pluginRoutes(
    */
   router.get("/plugins/ui-contributions", async (req, res) => {
     assertBoard(req);
+    const locale = getRequestUiLanguage(req);
     const plugins = await registry.listByStatus("ready");
 
     const contributions: PluginUiContribution[] = plugins
@@ -409,12 +439,22 @@ export function pluginRoutes(
         return {
           pluginId: plugin.id,
           pluginKey: plugin.pluginKey,
-          displayName: manifest.displayName,
+          displayName: localizePluginText(manifest.displayName, locale),
           version: plugin.version,
           updatedAt: plugin.updatedAt.toISOString(),
           uiEntryFile: uiMetadata.uiEntryFile,
-          slots: uiMetadata.slots,
-          launchers: uiMetadata.launchers,
+          slots: uiMetadata.slots.map((slot) => ({
+            ...slot,
+            displayName: localizePluginText(slot.displayName, locale),
+          })),
+          launchers: uiMetadata.launchers.map((launcher) => ({
+            ...launcher,
+            displayName: localizePluginText(launcher.displayName, locale),
+            description:
+              launcher.description === undefined
+                ? undefined
+                : localizePluginText(launcher.description, locale),
+          })),
         };
       })
       .filter((item): item is PluginUiContribution => item !== null);
@@ -556,6 +596,7 @@ export function pluginRoutes(
    */
   router.post("/plugins/install", async (req, res) => {
     assertBoard(req);
+    const locale = getRequestUiLanguage(req);
     const { packageName, version, isLocalPath } = req.body as PluginInstallRequest;
 
     try {
@@ -571,7 +612,7 @@ export function pluginRoutes(
         version: plugin.version,
         source,
       });
-      res.json(plugin);
+      res.json(localizePluginRecord(plugin, locale));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       res.status(400).json({ error: message });
@@ -1108,6 +1149,7 @@ export function pluginRoutes(
    */
   router.get("/plugins/:pluginId", async (req, res) => {
     assertBoard(req);
+    const locale = getRequestUiLanguage(req);
     const { pluginId } = req.params;
     const plugin = await resolvePlugin(registry, pluginId);
     if (!plugin) {
@@ -1121,7 +1163,7 @@ export function pluginRoutes(
       ? worker.supportedMethods.includes("validateConfig")
       : false;
 
-    res.json({ ...plugin, supportsConfigTest });
+    res.json({ ...localizePluginRecord(plugin, locale), supportsConfigTest });
   });
 
   /**
@@ -1138,6 +1180,7 @@ export function pluginRoutes(
    */
   router.delete("/plugins/:pluginId", async (req, res) => {
     assertBoard(req);
+    const locale = getRequestUiLanguage(req);
     const { pluginId } = req.params;
     const purge = req.query.purge === "true";
 
@@ -1155,7 +1198,7 @@ export function pluginRoutes(
         purge,
       });
       publishGlobalLiveEvent({ type: "plugin.ui.updated", payload: { pluginId: plugin.id, action: "uninstalled" } });
-      res.json(result);
+      res.json(localizePluginRecord(result, locale));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       res.status(400).json({ error: message });
@@ -1174,6 +1217,7 @@ export function pluginRoutes(
    */
   router.post("/plugins/:pluginId/enable", async (req, res) => {
     assertBoard(req);
+    const locale = getRequestUiLanguage(req);
     const { pluginId } = req.params;
 
     const plugin = await resolvePlugin(registry, pluginId);
@@ -1190,7 +1234,7 @@ export function pluginRoutes(
         version: result?.version ?? plugin.version,
       });
       publishGlobalLiveEvent({ type: "plugin.ui.updated", payload: { pluginId: plugin.id, action: "enabled" } });
-      res.json(result);
+      res.json(localizePluginRecord(result, locale));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       res.status(400).json({ error: message });
@@ -1212,6 +1256,7 @@ export function pluginRoutes(
    */
   router.post("/plugins/:pluginId/disable", async (req, res) => {
     assertBoard(req);
+    const locale = getRequestUiLanguage(req);
     const { pluginId } = req.params;
     const body = req.body as { reason?: string } | undefined;
     const reason = body?.reason;
@@ -1230,7 +1275,7 @@ export function pluginRoutes(
         reason: reason ?? null,
       });
       publishGlobalLiveEvent({ type: "plugin.ui.updated", payload: { pluginId: plugin.id, action: "disabled" } });
-      res.json(result);
+      res.json(localizePluginRecord(result, locale));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       res.status(400).json({ error: message });

@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Link, useLocation } from "@/lib/router";
 import { AlertTriangle, Compass } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/context/I18nContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useCompany } from "../context/CompanyContext";
 
@@ -16,6 +17,7 @@ export function NotFoundPage({ scope = "global", requestedPrefix }: NotFoundPage
   const location = useLocation();
   const { setBreadcrumbs } = useBreadcrumbs();
   const { companies, selectedCompany } = useCompany();
+  const { t, translateText } = useI18n();
 
   useEffect(() => {
     setBreadcrumbs([{ label: "Not Found" }]);
@@ -29,8 +31,8 @@ export function NotFoundPage({ scope = "global", requestedPrefix }: NotFoundPage
   const title = scope === "invalid_company_prefix" ? "Company not found" : "Page not found";
   const description =
     scope === "invalid_company_prefix"
-      ? `No company matches prefix "${normalizedPrefix ?? "unknown"}".`
-      : "This route does not exist.";
+      ? t("notFound.companyMissing", { prefix: normalizedPrefix ?? "unknown" })
+      : translateText("This route does not exist.");
 
   return (
     <div className="mx-auto max-w-2xl py-10">
@@ -40,24 +42,24 @@ export function NotFoundPage({ scope = "global", requestedPrefix }: NotFoundPage
             <AlertTriangle className="h-5 w-5 text-destructive" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold">{title}</h1>
+            <h1 className="text-xl font-semibold">{translateText(title)}</h1>
             <p className="text-sm text-muted-foreground">{description}</p>
           </div>
         </div>
 
         <div className="mt-4 rounded-md border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-          Requested path: <code className="font-mono">{currentPath}</code>
+          {t("notFound.requestedPath", { path: currentPath })}
         </div>
 
         <div className="mt-5 flex flex-wrap gap-2">
           <Button asChild>
             <Link to={dashboardHref}>
               <Compass className="mr-1.5 h-4 w-4" />
-              Open dashboard
+              {translateText("Open dashboard")}
             </Link>
           </Button>
           <Button variant="outline" asChild>
-            <Link to="/">Go home</Link>
+            <Link to="/">{translateText("Go home")}</Link>
           </Button>
         </div>
       </div>

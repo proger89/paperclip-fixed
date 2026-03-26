@@ -5,6 +5,7 @@ export {
   DEPLOYMENT_MODES,
   DEPLOYMENT_EXPOSURES,
   AUTH_BASE_URL_MODES,
+  UI_LANGUAGES,
   AGENT_STATUSES,
   AGENT_ADAPTER_TYPES,
   AGENT_ROLES,
@@ -81,6 +82,7 @@ export {
   type DeploymentMode,
   type DeploymentExposure,
   type AuthBaseUrlMode,
+  type UiLanguage,
   type AgentStatus,
   type AgentAdapterType,
   type AgentRole,
@@ -309,6 +311,7 @@ export type {
   RoutineExecutionIssueOrigin,
   RoutineListItem,
   JsonSchema,
+  LocalizedText,
   PluginJobDeclaration,
   PluginWebhookDeclaration,
   PluginToolDeclaration,
@@ -331,6 +334,13 @@ export type {
   QuotaWindow,
   ProviderQuotaResult,
 } from "./types/index.js";
+
+export {
+  isLocalizedTextRecord,
+  localizeJsonSchemaPresentation,
+  localizePluginManifest,
+  resolveLocalizedText,
+} from "./plugin-localization.js";
 
 export {
   instanceGeneralSettingsSchema,

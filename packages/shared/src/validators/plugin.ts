@@ -13,6 +13,14 @@ import {
   PLUGIN_STATE_SCOPE_KINDS,
 } from "../constants.js";
 
+export const localizedTextSchema = z.union([
+  z.string().min(1),
+  z.object({
+    en: z.string().min(1),
+    ru: z.string().min(1),
+  }),
+]);
+
 // ---------------------------------------------------------------------------
 // JSON Schema placeholder – a permissive validator for JSON Schema objects
 // ---------------------------------------------------------------------------
@@ -65,8 +73,8 @@ function isValidCronExpression(expression: string): boolean {
 
 export const pluginJobDeclarationSchema = z.object({
   jobKey: z.string().min(1),
-  displayName: z.string().min(1),
-  description: z.string().optional(),
+  displayName: localizedTextSchema,
+  description: localizedTextSchema.optional(),
   schedule: z.string().refine(
     (val) => isValidCronExpression(val),
     { message: "schedule must be a valid 5-field cron expression (e.g. '*/15 * * * *')" },
@@ -83,8 +91,8 @@ export type PluginJobDeclarationInput = z.infer<typeof pluginJobDeclarationSchem
  */
 export const pluginWebhookDeclarationSchema = z.object({
   endpointKey: z.string().min(1),
-  displayName: z.string().min(1),
-  description: z.string().optional(),
+  displayName: localizedTextSchema,
+  description: localizedTextSchema.optional(),
 });
 
 export type PluginWebhookDeclarationInput = z.infer<typeof pluginWebhookDeclarationSchema>;
@@ -115,7 +123,7 @@ export type PluginToolDeclarationInput = z.infer<typeof pluginToolDeclarationSch
 export const pluginUiSlotDeclarationSchema = z.object({
   type: z.enum(PLUGIN_UI_SLOT_TYPES),
   id: z.string().min(1),
-  displayName: z.string().min(1),
+  displayName: localizedTextSchema,
   exportName: z.string().min(1),
   entityTypes: z.array(z.enum(PLUGIN_UI_SLOT_ENTITY_TYPES)).optional(),
   routePath: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, {
@@ -254,8 +262,8 @@ export type PluginLauncherRenderDeclarationInput =
  */
 export const pluginLauncherDeclarationSchema = z.object({
   id: z.string().min(1),
-  displayName: z.string().min(1),
-  description: z.string().optional(),
+  displayName: localizedTextSchema,
+  description: localizedTextSchema.optional(),
   placementZone: z.enum(PLUGIN_LAUNCHER_PLACEMENT_ZONES),
   exportName: z.string().min(1).optional(),
   entityTypes: z.array(z.enum(PLUGIN_UI_SLOT_ENTITY_TYPES)).optional(),
@@ -384,8 +392,8 @@ export const pluginManifestV1Schema = z.object({
     /^\d+\.\d+\.\d+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$/,
     "Version must follow semver (e.g. 1.0.0 or 1.0.0-beta.1)",
   ),
-  displayName: z.string().min(1).max(100),
-  description: z.string().min(1).max(500),
+  displayName: localizedTextSchema,
+  description: localizedTextSchema,
   author: z.string().min(1).max(200),
   categories: z.array(z.enum(PLUGIN_CATEGORIES)).min(1),
   minimumHostVersion: z.string().regex(

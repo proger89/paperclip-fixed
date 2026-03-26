@@ -12,6 +12,7 @@ import {
 import { pluginsApi, type PluginUiContribution } from "@/api/plugins";
 import { queryKeys } from "@/lib/queryKeys";
 import { getPluginCompanyPagePath, getPluginPageLinkLabel } from "@/lib/plugin-pages";
+import { resolveUiText } from "@/lib/localized";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -150,7 +151,7 @@ export function PluginSettings() {
       const leftOrder = left.order ?? Number.MAX_SAFE_INTEGER;
       const rightOrder = right.order ?? Number.MAX_SAFE_INTEGER;
       if (leftOrder !== rightOrder) return leftOrder - rightOrder;
-      return left.displayName.localeCompare(right.displayName);
+      return resolveUiText(left.displayName).localeCompare(resolveUiText(right.displayName));
     });
     return rows;
   }, [matchingUiContributions]);
@@ -214,7 +215,7 @@ export function PluginSettings() {
       { label: selectedCompany?.name ?? "Company", href: "/dashboard" },
       { label: "Settings", href: "/instance/settings/heartbeats" },
       { label: "Plugins", href: "/instance/settings/plugins" },
-      { label: plugin?.manifestJson?.displayName ?? plugin?.packageName ?? "Plugin Details" },
+      { label: resolveUiText(plugin?.manifestJson?.displayName) || plugin?.packageName || "Plugin Details" },
     ]);
   }, [selectedCompany?.name, setBreadcrumbs, companyPrefix, plugin]);
 
@@ -237,7 +238,7 @@ export function PluginSettings() {
       : plugin.status === "error"
         ? "destructive"
         : "secondary";
-  const pluginDescription = plugin.manifestJson.description || "No description provided.";
+  const pluginDescription = resolveUiText(plugin.manifestJson.description) || "No description provided.";
   const pluginCapabilities = plugin.manifestJson.capabilities ?? [];
   const companyPluginPagePath = getPluginCompanyPagePath(plugin, selectedCompany?.issuePrefix ?? companyPrefix ?? null);
 
@@ -252,7 +253,7 @@ export function PluginSettings() {
           </Link>
           <div className="flex items-center gap-2">
             <Puzzle className="h-6 w-6 text-muted-foreground" />
-            <h1 className="text-xl font-semibold">{plugin.manifestJson.displayName ?? plugin.packageName}</h1>
+            <h1 className="text-xl font-semibold">{resolveUiText(plugin.manifestJson.displayName) || plugin.packageName}</h1>
             <Badge variant={statusVariant} className="ml-2">
               {displayStatus}
             </Badge>

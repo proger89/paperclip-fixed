@@ -5,6 +5,7 @@ export type {
   InstanceGeneralSettingsView,
   InstanceSettings,
   LocalAdapterExecutionLocation,
+  UiLanguage,
 } from "./instance.js";
 export type {
   CompanySkillSourceType,
@@ -183,6 +184,7 @@ export type {
 } from "./company-portability.js";
 export type {
   JsonSchema,
+  LocalizedText,
   PluginJobDeclaration,
   PluginWebhookDeclaration,
   PluginToolDeclaration,

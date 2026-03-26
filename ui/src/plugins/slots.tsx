@@ -40,6 +40,8 @@ import { pluginsApi, type PluginUiContribution } from "@/api/plugins";
 import { authApi } from "@/api/auth";
 import { queryKeys } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/context/I18nContext";
+import { resolveUiText } from "@/lib/localized";
 import {
   PluginBridgeContext,
   type PluginHostContext,
@@ -579,7 +581,7 @@ export function usePluginSlots(filters: SlotFilters): UsePluginSlotsResult {
       if (ao !== bo) return ao - bo;
       const pluginCmp = a.pluginDisplayName.localeCompare(b.pluginDisplayName);
       if (pluginCmp !== 0) return pluginCmp;
-      return a.displayName.localeCompare(b.displayName);
+      return resolveUiText(a.displayName).localeCompare(resolveUiText(b.displayName));
     });
     return rows;
   }, [data, filters.entityType, slotTypesKey]);
@@ -677,6 +679,7 @@ type PluginSlotMountProps = {
 function slotContextToHostContext(
   pluginSlotContext: PluginSlotContext,
   userId: string | null,
+  locale: PluginHostContext["locale"],
 ): PluginHostContext {
   return {
     companyId: pluginSlotContext.companyId ?? null,
@@ -686,6 +689,7 @@ function slotContextToHostContext(
     entityType: pluginSlotContext.entityType ?? null,
     parentEntityId: pluginSlotContext.parentEntityId ?? null,
     userId,
+    locale,
     renderEnvironment: null,
   };
 }
@@ -705,12 +709,16 @@ function PluginBridgeScope({
   context: PluginSlotContext;
   children: ReactNode;
 }) {
+  const { locale } = useI18n();
   const { data: session } = useQuery({
     queryKey: queryKeys.auth.session,
     queryFn: () => authApi.getSession(),
   });
   const userId = session?.user?.id ?? session?.session?.userId ?? null;
-  const hostContext = useMemo(() => slotContextToHostContext(context, userId), [context, userId]);
+  const hostContext = useMemo(
+    () => slotContextToHostContext(context, userId, locale),
+    [context, locale, userId],
+  );
   const value = useMemo(() => ({ pluginId, hostContext }), [pluginId, hostContext]);
 
   return (
@@ -750,7 +758,7 @@ export function PluginSlotMount({
     if (missingBehavior === "hidden") return null;
     return (
       <div className={cn("rounded-md border border-dashed border-border px-2 py-1 text-xs text-muted-foreground", className)}>
-        {slot.pluginDisplayName}: {slot.displayName}
+        {slot.pluginDisplayName}: {resolveUiText(slot.displayName)}
       </div>
     );
   }

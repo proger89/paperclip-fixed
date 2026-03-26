@@ -29,6 +29,8 @@ import { Button } from "@/components/ui/button";
 import { useNavigate, useLocation } from "@/lib/router";
 import { queryKeys } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/context/I18nContext";
+import { resolveUiText } from "@/lib/localized";
 import {
   PluginBridgeContext,
   type PluginHostContext,
@@ -136,6 +138,7 @@ function buildLauncherHostContext(
   context: PluginLauncherContext,
   renderEnvironment: PluginRenderEnvironmentContext | null,
   userId: string | null,
+  locale: PluginHostContext["locale"],
 ): PluginHostContext {
   return {
     companyId: context.companyId ?? null,
@@ -144,6 +147,7 @@ function buildLauncherHostContext(
     entityId: context.entityId ?? null,
     entityType: context.entityType ?? null,
     userId,
+    locale,
     renderEnvironment,
   };
 }
@@ -312,7 +316,7 @@ export function usePluginLaunchers(
       if (ao !== bo) return ao - bo;
       const pluginCmp = a.pluginDisplayName.localeCompare(b.pluginDisplayName);
       if (pluginCmp !== 0) return pluginCmp;
-      return a.displayName.localeCompare(b.displayName);
+      return resolveUiText(a.displayName).localeCompare(resolveUiText(b.displayName));
     });
 
     return rows;
@@ -406,6 +410,7 @@ function LauncherRenderContent({
   instance: LauncherInstance;
   renderEnvironment: PluginRenderEnvironmentContext;
 }) {
+  const { locale } = useI18n();
   const component = instance.component;
   const { data: session } = useQuery({
     queryKey: queryKeys.auth.session,
@@ -413,8 +418,8 @@ function LauncherRenderContent({
   });
   const userId = session?.user?.id ?? session?.session?.userId ?? null;
   const hostContext = useMemo(
-    () => buildLauncherHostContext(instance.hostContext, renderEnvironment, userId),
-    [instance.hostContext, renderEnvironment, userId],
+    () => buildLauncherHostContext(instance.hostContext, renderEnvironment, userId, locale),
+    [instance.hostContext, locale, renderEnvironment, userId],
   );
 
   if (!component) {
@@ -557,7 +562,7 @@ function LauncherModalShell({
         <div className="flex items-center gap-3 border-b border-border px-4 py-3">
           <div className="min-w-0">
             <h2 id={titleId} className="truncate text-sm font-semibold">
-              {instance.launcher.displayName}
+              {resolveUiText(instance.launcher.displayName)}
             </h2>
             <p className="truncate text-xs text-muted-foreground">
               {instance.launcher.pluginDisplayName}
@@ -741,7 +746,7 @@ function DefaultLauncherTrigger({
       className={launcherTriggerClassName(placementZone)}
       onClick={onClick}
     >
-      {launcher.displayName}
+      {resolveUiText(launcher.displayName)}
     </Button>
   );
 }

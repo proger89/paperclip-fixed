@@ -31,6 +31,7 @@ import type {
   PluginLauncherBounds,
   PluginLauncherRenderContextSnapshot,
   PluginLauncherRenderEnvironment,
+  UiLanguage,
 } from "@paperclipai/shared";
 import { pluginsApi } from "@/api/plugins";
 import { ApiError } from "@/api/client";
@@ -75,6 +76,7 @@ export interface PluginHostContext {
   entityType: string | null;
   parentEntityId?: string | null;
   userId: string | null;
+  locale: UiLanguage;
   renderEnvironment?: PluginRenderEnvironmentContext | null;
 }
 

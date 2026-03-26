@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useCompany } from "../context/CompanyContext";
 import { useDialog } from "../context/DialogContext";
+import { useI18n } from "@/context/I18nContext";
 import { cn } from "../lib/utils";
 import { useInboxBadge } from "../hooks/useInboxBadge";
 
@@ -37,6 +38,7 @@ export function MobileBottomNav({ visible }: MobileBottomNavProps) {
   const location = useLocation();
   const { selectedCompanyId } = useCompany();
   const { openNewIssue } = useDialog();
+  const { translateText } = useI18n();
   const inboxBadge = useInboxBadge(selectedCompanyId);
 
   const items = useMemo<MobileNavItem[]>(
@@ -62,7 +64,7 @@ export function MobileBottomNav({ visible }: MobileBottomNavProps) {
         "fixed bottom-0 left-0 right-0 z-30 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/85 transition-transform duration-200 ease-out md:hidden pb-[env(safe-area-inset-bottom)]",
         visible ? "translate-y-0" : "translate-y-full",
       )}
-      aria-label="Mobile navigation"
+      aria-label={translateText("Mobile navigation")}
     >
       <div className="grid h-16 grid-cols-5 px-1">
         {items.map((item) => {
@@ -82,7 +84,7 @@ export function MobileBottomNav({ visible }: MobileBottomNavProps) {
                 )}
               >
                 <Icon className="h-[18px] w-[18px]" />
-                <span className="truncate">{item.label}</span>
+                <span className="truncate">{translateText(item.label)}</span>
               </button>
             );
           }
@@ -111,7 +113,7 @@ export function MobileBottomNav({ visible }: MobileBottomNavProps) {
                       </span>
                     )}
                   </span>
-                  <span className="truncate">{item.label}</span>
+                  <span className="truncate">{translateText(item.label)}</span>
                 </>
               )}
             </NavLink>

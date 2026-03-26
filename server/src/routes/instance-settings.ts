@@ -11,6 +11,7 @@ import {
   resolveAgentFacingApiUrl,
   resolveDefaultLocalAdapterExecutionLocation,
 } from "../local-adapter-defaults.js";
+import { resolveEffectiveUiLanguage } from "../ui-language.js";
 
 function assertCanManageInstanceSettings(req: Request) {
   if (req.actor.type !== "board") {
@@ -28,9 +29,16 @@ function assertCanReadGeneralInstanceSettings(req: Request) {
   }
 }
 
-function toGeneralView(general: InstanceGeneralSettings): InstanceGeneralSettingsView {
+function toGeneralView(
+  general: InstanceGeneralSettings,
+  acceptLanguage?: string | string[],
+): InstanceGeneralSettingsView {
   return {
     ...general,
+    effectiveUiLanguage: resolveEffectiveUiLanguage({
+      storedUiLanguage: general.uiLanguage,
+      acceptLanguage,
+    }),
     defaultLocalExecutionLocation: resolveDefaultLocalAdapterExecutionLocation(),
     hostBridgeConfigured: isHostBridgeConfigured(),
     agentFacingApiUrl: resolveAgentFacingApiUrl(),
@@ -43,7 +51,7 @@ export function instanceSettingsRoutes(db: Db) {
 
   router.get("/instance/settings/general", async (req, res) => {
     assertCanReadGeneralInstanceSettings(req);
-    res.json(toGeneralView(await svc.getGeneral()));
+    res.json(toGeneralView(await svc.getGeneral(), req.header("accept-language")));
   });
 
   router.patch(
@@ -72,7 +80,7 @@ export function instanceSettingsRoutes(db: Db) {
           }),
         ),
       );
-      res.json(toGeneralView(updated.general));
+      res.json(toGeneralView(updated.general, req.header("accept-language")));
     },
   );
 

@@ -1,4 +1,5 @@
 import type { PluginRecord, PluginUiSlotDeclaration } from "@paperclipai/shared";
+import { resolveUiText } from "./localized";
 
 function getPageSlot(plugin: PluginRecord | null | undefined): PluginUiSlotDeclaration | null {
   const slots = plugin?.manifestJson?.ui?.slots;
@@ -24,7 +25,7 @@ export function getPluginCompanyPagePath(
 }
 
 export function getPluginPageLinkLabel(plugin: PluginRecord | null | undefined): string {
-  const displayName = plugin?.manifestJson?.displayName?.trim();
+  const displayName = resolveUiText(plugin?.manifestJson?.displayName).trim();
   if (!displayName) return "Open plugin page";
   if (/telegram/i.test(displayName)) return "Open Telegram dashboard";
   return `Open ${displayName} page`;

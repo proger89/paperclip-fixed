@@ -18,6 +18,7 @@ import type {
   PluginBridgeErrorCode,
   PluginLauncherBounds,
   PluginLauncherRenderEnvironment,
+  UiLanguage,
 } from "@paperclipai/shared";
 import type {
   PluginLauncherRenderContextSnapshot,
@@ -30,6 +31,7 @@ export type {
   PluginBridgeErrorCode,
   PluginLauncherBounds,
   PluginLauncherRenderEnvironment,
+  UiLanguage,
 } from "@paperclipai/shared";
 export type {
   PluginLauncherRenderContextSnapshot,
@@ -98,6 +100,8 @@ export interface PluginHostContext {
   parentEntityId?: string | null;
   /** UUID of the current authenticated user. */
   userId: string | null;
+  /** Effective operator UI locale resolved by the host. */
+  locale: UiLanguage;
   /** Runtime metadata for the host container currently rendering this plugin UI. */
   renderEnvironment?: PluginRenderEnvironmentContext | null;
 }

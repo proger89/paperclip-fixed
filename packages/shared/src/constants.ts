@@ -16,6 +16,9 @@ export type DeploymentExposure = (typeof DEPLOYMENT_EXPOSURES)[number];
 export const AUTH_BASE_URL_MODES = ["auto", "explicit"] as const;
 export type AuthBaseUrlMode = (typeof AUTH_BASE_URL_MODES)[number];
 
+export const UI_LANGUAGES = ["en", "ru"] as const;
+export type UiLanguage = (typeof UI_LANGUAGES)[number];
+
 export const AGENT_STATUSES = [
   "active",
   "paused",

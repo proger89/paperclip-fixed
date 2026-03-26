@@ -32,6 +32,7 @@ import { pluginRoutes } from "./routes/plugins.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
 import { applyUiBranding } from "./ui-branding.js";
 import { logger } from "./middleware/logger.js";
+import { operatorErrorLocalizationMiddleware } from "./operator-error-localization.js";
 import { DEFAULT_LOCAL_PLUGIN_DIR, pluginLoader } from "./services/plugin-loader.js";
 import { createPluginWorkerManager } from "./services/plugin-worker-manager.js";
 import { createPluginJobScheduler } from "./services/plugin-job-scheduler.js";
@@ -48,6 +49,7 @@ import { installManagedPlugin } from "./services/plugin-installs.js";
 import { pluginRegistryService } from "./services/plugin-registry.js";
 import { createHostClientHandlers } from "@paperclipai/plugin-sdk";
 import type { BetterAuthSessionResult } from "./auth/better-auth.js";
+import { uiLanguageMiddleware } from "./ui-language.js";
 
 type UiMode = "none" | "static" | "vite-dev";
 
@@ -105,6 +107,8 @@ export async function createApp(
       resolveSession: opts.resolveSession,
     }),
   );
+  app.use(uiLanguageMiddleware(db));
+  app.use(operatorErrorLocalizationMiddleware());
   app.get("/api/auth/get-session", (req, res) => {
     if (req.actor.type !== "board" || !req.actor.userId) {
       res.status(401).json({ error: "Unauthorized" });

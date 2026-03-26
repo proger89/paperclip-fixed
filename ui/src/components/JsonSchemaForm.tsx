@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
+import type { LocalizedText } from "@paperclipai/shared";
 import {
   ChevronDown,
   ChevronRight,
@@ -20,6 +21,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { translateText } from "@/lib/i18n";
+import { resolveUiText } from "@/lib/localized";
+import { getCurrentUiLanguage } from "@/lib/ui-language";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -41,8 +45,8 @@ const TEXTAREA_THRESHOLD = 200;
  */
 export interface JsonSchemaNode {
   type?: string | string[];
-  title?: string;
-  description?: string;
+  title?: LocalizedText;
+  description?: LocalizedText;
   default?: unknown;
   enum?: unknown[];
   const?: unknown;
@@ -111,7 +115,7 @@ export function resolveType(schema: JsonSchemaNode): string {
 
 /** Human-readable label from schema title or property key. */
 export function labelFromKey(key: string, schema: JsonSchemaNode): string {
-  if (schema.title) return schema.title;
+  if (schema.title) return resolveUiText(schema.title);
   // Convert camelCase / snake_case to Title Case
   return key
     .replace(/([a-z])([A-Z])/g, "$1 $2")
@@ -151,6 +155,10 @@ export function getDefaultForSchema(schema: JsonSchemaNode): unknown {
 }
 
 /** Validate a single field value against schema constraints. Returns error string or null. */
+function localizedMessage(en: string, ru: string): string {
+  return getCurrentUiLanguage() === "ru" ? ru : en;
+}
+
 export function validateField(
   value: unknown,
   schema: JsonSchemaNode,
@@ -160,7 +168,7 @@ export function validateField(
 
   // Required check
   if (isRequired && (value === undefined || value === null || value === "")) {
-    return "This field is required";
+    return localizedMessage("This field is required", "Поле обязательно");
   }
 
   // Skip further validation if empty and not required
@@ -169,10 +177,16 @@ export function validateField(
   if (type === "string" || type === "secret-ref") {
     const str = String(value);
     if (schema.minLength != null && str.length < schema.minLength) {
-      return `Must be at least ${schema.minLength} characters`;
+      return localizedMessage(
+        `Must be at least ${schema.minLength} characters`,
+        `Минимум ${schema.minLength} символов`,
+      );
     }
     if (schema.maxLength != null && str.length > schema.maxLength) {
-      return `Must be at most ${schema.maxLength} characters`;
+      return localizedMessage(
+        `Must be at most ${schema.maxLength} characters`,
+        `Максимум ${schema.maxLength} символов`,
+      );
     }
     if (schema.pattern) {
       // Guard against ReDoS: reject overly complex patterns from plugin JSON Schemas.
@@ -182,7 +196,10 @@ export function validateField(
         try {
           const re = new RegExp(schema.pattern);
           if (!re.test(str)) {
-            return `Must match pattern: ${schema.pattern}`;
+            return localizedMessage(
+              `Must match pattern: ${schema.pattern}`,
+              `Значение должно соответствовать шаблону: ${schema.pattern}`,
+            );
           }
         } catch {
           // Invalid regex in schema — skip
@@ -193,34 +210,49 @@ export function validateField(
 
   if (type === "number" || type === "integer") {
     const num = Number(value);
-    if (isNaN(num)) return "Must be a valid number";
+    if (isNaN(num)) return localizedMessage("Must be a valid number", "Введите корректное число");
     if (schema.minimum != null && num < schema.minimum) {
-      return `Must be at least ${schema.minimum}`;
+      return localizedMessage(`Must be at least ${schema.minimum}`, `Минимум ${schema.minimum}`);
     }
     if (schema.maximum != null && num > schema.maximum) {
-      return `Must be at most ${schema.maximum}`;
+      return localizedMessage(`Must be at most ${schema.maximum}`, `Максимум ${schema.maximum}`);
     }
     if (schema.exclusiveMinimum != null && num <= schema.exclusiveMinimum) {
-      return `Must be greater than ${schema.exclusiveMinimum}`;
+      return localizedMessage(
+        `Must be greater than ${schema.exclusiveMinimum}`,
+        `Значение должно быть больше ${schema.exclusiveMinimum}`,
+      );
     }
     if (schema.exclusiveMaximum != null && num >= schema.exclusiveMaximum) {
-      return `Must be less than ${schema.exclusiveMaximum}`;
+      return localizedMessage(
+        `Must be less than ${schema.exclusiveMaximum}`,
+        `Значение должно быть меньше ${schema.exclusiveMaximum}`,
+      );
     }
     if (type === "integer" && !Number.isInteger(num)) {
-      return "Must be a whole number";
+      return localizedMessage("Must be a whole number", "Введите целое число");
     }
     if (schema.multipleOf != null && num % schema.multipleOf !== 0) {
-      return `Must be a multiple of ${schema.multipleOf}`;
+      return localizedMessage(
+        `Must be a multiple of ${schema.multipleOf}`,
+        `Значение должно быть кратно ${schema.multipleOf}`,
+      );
     }
   }
 
   if (type === "array") {
     const arr = value as unknown[];
     if (schema.minItems != null && arr.length < schema.minItems) {
-      return `Must have at least ${schema.minItems} items`;
+      return localizedMessage(
+        `Must have at least ${schema.minItems} items`,
+        `Минимум элементов: ${schema.minItems}`,
+      );
     }
     if (schema.maxItems != null && arr.length > schema.maxItems) {
-      return `Must have at most ${schema.maxItems} items`;
+      return localizedMessage(
+        `Must have at most ${schema.maxItems} items`,
+        `Максимум элементов: ${schema.maxItems}`,
+      );
     }
   }
 
@@ -451,7 +483,7 @@ const EnumField = React.memo(({
       disabled={disabled}
     >
       <SelectTrigger className="w-full">
-        <SelectValue placeholder="Select an option" />
+        <SelectValue placeholder={translateText("Select an option")} />
       </SelectTrigger>
       <SelectContent>
         {options.map((option) => (
@@ -494,7 +526,7 @@ const SecretField = React.memo(({
       label={label}
       description={
         description ||
-        "This secret is stored securely via the Paperclip secret provider."
+        translateText("This secret is stored securely via the Paperclip secret provider.")
       }
       required={isRequired}
       error={error}
@@ -524,7 +556,7 @@ const SecretField = React.memo(({
             <Eye className="h-4 w-4 text-muted-foreground" />
           )}
           <span className="sr-only">
-            {isVisible ? "Hide secret" : "Show secret"}
+            {translateText(isVisible ? "Hide secret" : "Show secret")}
           </span>
         </Button>
       </div>
@@ -675,7 +707,7 @@ const ArrayField = React.memo(({
           <Label className="text-sm font-medium">{label}</Label>
           {propSchema.description && (
             <p className="text-xs text-muted-foreground">
-              {propSchema.description}
+              {resolveUiText(propSchema.description)}
             </p>
           )}
         </div>
@@ -694,7 +726,7 @@ const ArrayField = React.memo(({
           }}
         >
           <Plus className="mr-2 h-4 w-4" />
-          {isComplex ? "Add item" : "Add"}
+          {translateText(isComplex ? "Add item" : "Add")}
         </Button>
       </div>
 
@@ -706,7 +738,7 @@ const ArrayField = React.memo(({
           >
             <div className="flex-1">
               <div className="mb-2 text-xs font-medium text-muted-foreground">
-                Item {index + 1}
+                {translateText("Item")} {index + 1}
               </div>
               <FormField
                 propSchema={itemSchema}
@@ -739,13 +771,13 @@ const ArrayField = React.memo(({
               }}
             >
               <Trash2 className="h-4 w-4" />
-              <span className="sr-only">Remove item</span>
+              <span className="sr-only">{translateText("Remove item")}</span>
             </Button>
           </div>
         ))}
         {items.length === 0 && (
           <div className="rounded-lg border border-dashed p-4 text-center text-xs text-muted-foreground">
-            No items added yet.
+            {translateText("No items added yet.")}
           </div>
         )}
       </div>
@@ -796,7 +828,7 @@ const ObjectField = React.memo(({
           </Label>
           {propSchema.description && (
             <p className="text-xs text-muted-foreground">
-              {propSchema.description}
+              {resolveUiText(propSchema.description)}
             </p>
           )}
         </div>
@@ -855,7 +887,7 @@ const FormField = React.memo(({
           disabled={isReadOnly}
           label={label}
           isRequired={isRequired}
-          description={propSchema.description}
+          description={resolveUiText(propSchema.description)}
           error={error}
         />
       );
@@ -868,7 +900,7 @@ const FormField = React.memo(({
           disabled={isReadOnly}
           label={label}
           isRequired={isRequired}
-          description={propSchema.description}
+          description={resolveUiText(propSchema.description)}
           error={error}
           options={propSchema.enum ?? []}
         />
@@ -882,7 +914,7 @@ const FormField = React.memo(({
           disabled={isReadOnly}
           label={label}
           isRequired={isRequired}
-          description={propSchema.description}
+          description={resolveUiText(propSchema.description)}
           error={error}
           defaultValue={propSchema.default}
         />
@@ -897,7 +929,7 @@ const FormField = React.memo(({
           disabled={isReadOnly}
           label={label}
           isRequired={isRequired}
-          description={propSchema.description}
+          description={resolveUiText(propSchema.description)}
           error={error}
           defaultValue={propSchema.default}
           type={type as "number" | "integer"}
@@ -939,7 +971,7 @@ const FormField = React.memo(({
           disabled={isReadOnly}
           label={label}
           isRequired={isRequired}
-          description={propSchema.description}
+          description={resolveUiText(propSchema.description)}
           error={error}
           defaultValue={propSchema.default}
           format={propSchema.format}
@@ -1014,7 +1046,7 @@ export function JsonSchemaForm({
           className,
         )}
       >
-        No configuration options available.
+        {translateText("No configuration options available.")}
       </div>
     );
   }

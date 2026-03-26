@@ -1,7 +1,9 @@
 import { z } from "zod";
+import { UI_LANGUAGES } from "../constants.js";
 
 export const instanceGeneralSettingsSchema = z.object({
   censorUsernameInLogs: z.boolean().default(false),
+  uiLanguage: z.enum(UI_LANGUAGES).nullable().default(null),
 }).strict();
 
 export const patchInstanceGeneralSettingsSchema = instanceGeneralSettingsSchema.partial();

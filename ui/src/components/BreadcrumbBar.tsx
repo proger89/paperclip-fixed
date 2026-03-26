@@ -1,5 +1,6 @@
 import { Link } from "@/lib/router";
 import { Menu } from "lucide-react";
+import { useI18n } from "@/context/I18nContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useSidebar } from "../context/SidebarContext";
 import { useCompany } from "../context/CompanyContext";
@@ -34,6 +35,7 @@ export function BreadcrumbBar() {
   const { breadcrumbs } = useBreadcrumbs();
   const { toggleSidebar, isMobile } = useSidebar();
   const { selectedCompanyId, selectedCompany } = useCompany();
+  const { translateText } = useI18n();
 
   const globalToolbarSlotContext = useMemo(
     () => ({
@@ -59,7 +61,7 @@ export function BreadcrumbBar() {
       size="icon-sm"
       className="mr-2 shrink-0"
       onClick={toggleSidebar}
-      aria-label="Open sidebar"
+      aria-label={translateText("Open sidebar")}
     >
       <Menu className="h-5 w-5" />
     </Button>
@@ -72,7 +74,7 @@ export function BreadcrumbBar() {
         {menuButton}
         <div className="min-w-0 overflow-hidden flex-1">
           <h1 className="text-sm font-semibold uppercase tracking-wider truncate">
-            {breadcrumbs[0].label}
+            {translateText(breadcrumbs[0].label)}
           </h1>
         </div>
         {globalToolbarSlots}
@@ -94,10 +96,10 @@ export function BreadcrumbBar() {
                   {i > 0 && <BreadcrumbSeparator />}
                   <BreadcrumbItem className={isLast ? "min-w-0" : "shrink-0"}>
                     {isLast || !crumb.href ? (
-                      <BreadcrumbPage className="truncate">{crumb.label}</BreadcrumbPage>
+                      <BreadcrumbPage className="truncate">{translateText(crumb.label)}</BreadcrumbPage>
                     ) : (
                       <BreadcrumbLink asChild>
-                        <Link to={crumb.href}>{crumb.label}</Link>
+                        <Link to={crumb.href}>{translateText(crumb.label)}</Link>
                       </BreadcrumbLink>
                     )}
                   </BreadcrumbItem>

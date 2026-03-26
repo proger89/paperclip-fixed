@@ -20,14 +20,23 @@
     <script>
       (() => {
         const key = "paperclip.theme";
+        const languageKey = "paperclip.uiLanguage";
         const darkThemeColor = "#18181b";
         const lightThemeColor = "#ffffff";
         try {
           const stored = window.localStorage.getItem(key);
+          const storedLanguage = window.localStorage.getItem(languageKey);
           const theme = stored === "light" || stored === "dark" ? stored : "dark";
+          const language =
+            storedLanguage === "ru" || storedLanguage === "en"
+              ? storedLanguage
+              : (navigator.languages ?? [navigator.language]).some((entry) => /^ru(?:[-_]|$)/i.test(entry ?? ""))
+                ? "ru"
+                : "en";
           const isDark = theme === "dark";
           document.documentElement.classList.toggle("dark", isDark);
           document.documentElement.style.colorScheme = isDark ? "dark" : "light";
+          document.documentElement.lang = language;
           const themeColorMeta = document.querySelector('meta[name="theme-color"]');
           if (themeColorMeta) {
             themeColorMeta.setAttribute("content", isDark ? darkThemeColor : lightThemeColor);
@@ -35,6 +44,7 @@
         } catch {
           document.documentElement.classList.add("dark");
           document.documentElement.style.colorScheme = "dark";
+          document.documentElement.lang = "en";
         }
       })();
     </script>

@@ -1,5 +1,7 @@
 export {};
 
+import type { UiLanguage } from "@paperclipai/shared";
+
 declare global {
   namespace Express {
     interface Request {
@@ -14,6 +16,7 @@ declare global {
         runId?: string;
         source?: "local_implicit" | "session" | "agent_key" | "agent_jwt" | "none";
       };
+      uiLanguage?: UiLanguage;
     }
   }
 }

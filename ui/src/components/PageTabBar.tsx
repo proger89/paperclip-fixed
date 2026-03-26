@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useI18n } from "@/context/I18nContext";
 import { useSidebar } from "../context/SidebarContext";
 
 export interface PageTabItem {
@@ -16,6 +17,7 @@ interface PageTabBarProps {
 
 export function PageTabBar({ items, value, onValueChange, align = "center" }: PageTabBarProps) {
   const { isMobile } = useSidebar();
+  const { translateText } = useI18n();
 
   if (isMobile && value !== undefined && onValueChange) {
     return (
@@ -26,7 +28,7 @@ export function PageTabBar({ items, value, onValueChange, align = "center" }: Pa
       >
         {items.map((item) => (
           <option key={item.value} value={item.value}>
-            {typeof item.label === "string" ? item.label : item.value}
+            {typeof item.label === "string" ? translateText(item.label) : item.value}
           </option>
         ))}
       </select>

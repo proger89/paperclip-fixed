@@ -13,6 +13,7 @@ import { useCompany } from "../context/CompanyContext";
 import { useToast } from "../context/ToastContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
+import { resolveUiText } from "../lib/localized";
 import { ProjectProperties, type ProjectConfigFieldKey, type ProjectFieldSaveState } from "../components/ProjectProperties";
 import { ProjectCodeOutputsPanel } from "../components/ProjectCodeOutputsPanel";
 import { InlineEditor } from "../components/InlineEditor";
@@ -259,7 +260,7 @@ export function ProjectDetail() {
   const pluginTabItems = useMemo(
     () => pluginDetailSlots.map((slot) => ({
       value: `plugin:${slot.pluginKey}:${slot.id}` as ProjectPluginTab,
-      label: slot.displayName,
+      label: resolveUiText(slot.displayName),
       slot,
     })),
     [pluginDetailSlots],

@@ -21,6 +21,11 @@ import type {
  */
 export type JsonSchema = Record<string, unknown>;
 
+export type LocalizedText = string | {
+  en: string;
+  ru: string;
+};
+
 // ---------------------------------------------------------------------------
 // Manifest sub-types — nested declarations within PaperclipPluginManifestV1
 // ---------------------------------------------------------------------------
@@ -34,9 +39,9 @@ export interface PluginJobDeclaration {
   /** Stable identifier for this job, unique within the plugin. */
   jobKey: string;
   /** Human-readable name shown in the operator UI. */
-  displayName: string;
+  displayName: LocalizedText;
   /** Optional description of what the job does. */
-  description?: string;
+  description?: LocalizedText;
   /** Cron expression for the schedule (e.g. "star/15 star star star star" or "0 * * * *"). */
   schedule?: string;
 }
@@ -51,9 +56,9 @@ export interface PluginWebhookDeclaration {
   /** Stable identifier for this endpoint, unique within the plugin. */
   endpointKey: string;
   /** Human-readable name shown in the operator UI. */
-  displayName: string;
+  displayName: LocalizedText;
   /** Optional description of what this webhook handles. */
-  description?: string;
+  description?: LocalizedText;
 }
 
 /**
@@ -86,7 +91,7 @@ export interface PluginUiSlotDeclaration {
   /** Unique slot identifier within the plugin. */
   id: string;
   /** Human-readable name shown in navigation or tab labels. */
-  displayName: string;
+  displayName: LocalizedText;
   /** Which export name in the UI bundle provides this component. */
   exportName: string;
   /**
@@ -151,9 +156,9 @@ export interface PluginLauncherDeclaration {
   /** Stable identifier for this launcher, unique within the plugin. */
   id: string;
   /** Human-readable label shown for the launcher. */
-  displayName: string;
+  displayName: LocalizedText;
   /** Optional description for operator-facing docs or future UI affordances. */
-  description?: string;
+  description?: LocalizedText;
   /** Where in the host UI this launcher should be placed. */
   placementZone: PluginLauncherPlacementZone;
   /** Optional export name in the UI bundle when the launcher has custom UI. */
@@ -206,9 +211,9 @@ export interface PaperclipPluginManifestV1 {
   /** Semver version of the plugin package (e.g. `"1.2.0"`). */
   version: string;
   /** Human-readable name (max 100 chars). */
-  displayName: string;
+  displayName: LocalizedText;
   /** Short description (max 500 chars). */
-  description: string;
+  description: LocalizedText;
   /** Author name (max 200 chars). May include email in angle brackets, e.g. `"Jane Doe <jane@example.com>"`. */
   author: string;
   /** One or more categories classifying this plugin. */

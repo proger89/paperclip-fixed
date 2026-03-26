@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SlidersHorizontal } from "lucide-react";
+import type { PatchInstanceGeneralSettings, UiLanguage } from "@paperclipai/shared";
 import { instanceSettingsApi } from "@/api/instanceSettings";
+import { useI18n } from "@/context/I18nContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { cn } from "../lib/utils";
@@ -9,6 +11,7 @@ import { cn } from "../lib/utils";
 export function InstanceGeneralSettings() {
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
+  const { t, setLocale } = useI18n();
   const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -23,20 +26,21 @@ export function InstanceGeneralSettings() {
     queryFn: () => instanceSettingsApi.getGeneral(),
   });
 
-  const toggleMutation = useMutation({
-    mutationFn: async (enabled: boolean) =>
-      instanceSettingsApi.updateGeneral({ censorUsernameInLogs: enabled }),
-    onSuccess: async () => {
+  const generalMutation = useMutation({
+    mutationFn: async (patch: PatchInstanceGeneralSettings) =>
+      instanceSettingsApi.updateGeneral(patch),
+    onSuccess: async (data) => {
       setActionError(null);
+      setLocale(data.effectiveUiLanguage, { persist: data.uiLanguage !== null });
       await queryClient.invalidateQueries({ queryKey: queryKeys.instance.generalSettings });
     },
     onError: (error) => {
-      setActionError(error instanceof Error ? error.message : "Failed to update general settings.");
+      setActionError(error instanceof Error ? error.message : t("common.failedToUpdateGeneralSettings"));
     },
   });
 
   if (generalQuery.isLoading) {
-    return <div className="text-sm text-muted-foreground">Loading general settings...</div>;
+    return <div className="text-sm text-muted-foreground">{t("common.loadingGeneralSettings")}</div>;
   }
 
   if (generalQuery.error) {
@@ -44,12 +48,13 @@ export function InstanceGeneralSettings() {
       <div className="text-sm text-destructive">
         {generalQuery.error instanceof Error
           ? generalQuery.error.message
-          : "Failed to load general settings."}
+          : t("common.failedToLoadGeneralSettings")}
       </div>
     );
   }
 
   const censorUsernameInLogs = generalQuery.data?.censorUsernameInLogs === true;
+  const languageValue = generalQuery.data?.uiLanguage ?? "__browser__";
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -58,9 +63,7 @@ export function InstanceGeneralSettings() {
           <SlidersHorizontal className="h-5 w-5 text-muted-foreground" />
           <h1 className="text-lg font-semibold">General</h1>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Configure instance-wide defaults that affect how operator-visible logs are displayed.
-        </p>
+        <p className="text-sm text-muted-foreground">{t("instance.general.description")}</p>
       </div>
 
       {actionError && (
@@ -72,22 +75,18 @@ export function InstanceGeneralSettings() {
       <section className="rounded-xl border border-border bg-card p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1.5">
-            <h2 className="text-sm font-semibold">Censor username in logs</h2>
-            <p className="max-w-2xl text-sm text-muted-foreground">
-              Hide the username segment in home-directory paths and similar operator-visible log output. Standalone
-              username mentions outside of paths are not yet masked in the live transcript view. This is off by
-              default.
-            </p>
+            <h2 className="text-sm font-semibold">{t("instance.general.censorTitle")}</h2>
+            <p className="max-w-2xl text-sm text-muted-foreground">{t("instance.general.censorDescription")}</p>
           </div>
           <button
             type="button"
-            aria-label="Toggle username log censoring"
-            disabled={toggleMutation.isPending}
+            aria-label={t("instance.general.toggleCensor")}
+            disabled={generalMutation.isPending}
             className={cn(
               "relative inline-flex h-5 w-9 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-60",
               censorUsernameInLogs ? "bg-green-600" : "bg-muted",
             )}
-            onClick={() => toggleMutation.mutate(!censorUsernameInLogs)}
+            onClick={() => generalMutation.mutate({ censorUsernameInLogs: !censorUsernameInLogs })}
           >
             <span
               className={cn(
@@ -96,6 +95,31 @@ export function InstanceGeneralSettings() {
               )}
             />
           </button>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-border bg-card p-5">
+        <div className="grid gap-3">
+          <div className="space-y-1.5">
+            <h2 className="text-sm font-semibold">{t("instance.general.uiLanguageTitle")}</h2>
+            <p className="max-w-2xl text-sm text-muted-foreground">{t("instance.general.uiLanguageDescription")}</p>
+          </div>
+          <div className="max-w-sm">
+            <select
+              value={languageValue}
+              disabled={generalMutation.isPending}
+              onChange={(event) => {
+                const nextValue = event.target.value === "__browser__" ? null : event.target.value as UiLanguage;
+                generalMutation.mutate({ uiLanguage: nextValue });
+              }}
+              className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+              aria-label={t("instance.general.uiLanguageTitle")}
+            >
+              <option value="__browser__">{t("instance.general.useBrowserLanguage")}</option>
+              <option value="en">{t("common.language.english")}</option>
+              <option value="ru">Русский</option>
+            </select>
+          </div>
         </div>
       </section>
     </div>
