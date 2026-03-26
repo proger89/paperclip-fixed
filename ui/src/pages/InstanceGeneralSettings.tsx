@@ -73,6 +73,31 @@ export function InstanceGeneralSettings() {
       )}
 
       <section className="rounded-xl border border-border bg-card p-5">
+        <div className="grid gap-3">
+          <div className="space-y-1.5">
+            <h2 className="text-sm font-semibold">{t("instance.general.uiLanguageTitle")}</h2>
+            <p className="max-w-2xl text-sm text-muted-foreground">{t("instance.general.uiLanguageDescription")}</p>
+          </div>
+          <div className="max-w-sm">
+            <select
+              value={languageValue}
+              disabled={generalMutation.isPending}
+              onChange={(event) => {
+                const nextValue = event.target.value === "__browser__" ? null : event.target.value as UiLanguage;
+                generalMutation.mutate({ uiLanguage: nextValue });
+              }}
+              className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+              aria-label={t("instance.general.uiLanguageTitle")}
+            >
+              <option value="__browser__">{t("instance.general.useBrowserLanguage")}</option>
+              <option value="en">{t("common.language.english")}</option>
+              <option value="ru">{t("common.language.russian")}</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-border bg-card p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1.5">
             <h2 className="text-sm font-semibold">{t("instance.general.censorTitle")}</h2>
@@ -95,31 +120,6 @@ export function InstanceGeneralSettings() {
               )}
             />
           </button>
-        </div>
-      </section>
-
-      <section className="rounded-xl border border-border bg-card p-5">
-        <div className="grid gap-3">
-          <div className="space-y-1.5">
-            <h2 className="text-sm font-semibold">{t("instance.general.uiLanguageTitle")}</h2>
-            <p className="max-w-2xl text-sm text-muted-foreground">{t("instance.general.uiLanguageDescription")}</p>
-          </div>
-          <div className="max-w-sm">
-            <select
-              value={languageValue}
-              disabled={generalMutation.isPending}
-              onChange={(event) => {
-                const nextValue = event.target.value === "__browser__" ? null : event.target.value as UiLanguage;
-                generalMutation.mutate({ uiLanguage: nextValue });
-              }}
-              className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
-              aria-label={t("instance.general.uiLanguageTitle")}
-            >
-              <option value="__browser__">{t("instance.general.useBrowserLanguage")}</option>
-              <option value="en">{t("common.language.english")}</option>
-              <option value="ru">Русский</option>
-            </select>
-          </div>
         </div>
       </section>
     </div>

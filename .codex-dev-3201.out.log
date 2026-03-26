@@ -5812,236 +5812,161 @@
 [11:41:08] [32mINFO[39m: [36mplugin tool dispatcher initialized[39m [90m{"service":"plugin-tool-dispatcher","totalTools":0}[39m
 [11:41:08] [32mINFO[39m: [36mplugin-loader: no ready plugins to load[39m [90m{"service":"plugin-loader"}[39m
 [11:51:08] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
-es.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/Agents.tsx 200[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/Projects.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/AgentDetail.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/IssueDetail.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/Issues.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/ProjectDetail.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/Routines.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/ExecutionWorkspaceDetail.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/RoutineDetail.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/Goals.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/GoalDetail.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/Approvals.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/ApprovalDetail.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/Costs.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/Activity.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/Inbox.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/CompanySettings.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/CompanySkills.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/CompanyExport.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/CompanyImport.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/InstanceGeneralSettings.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/DesignGuide.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/InstanceSettings.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/InstanceExperimentalSettings.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/PluginManager.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/PluginSettings.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/PluginPage.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/OrgChart.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/RunTranscriptUxLab.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/NewAgent.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/Auth.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/BoardClaim.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/ResetPassword.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/InviteLanding.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/queryKeys.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/pages/NotFound.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/inbox.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/api/companies.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/onboarding-route.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/api/client.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/run-errors.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/i18n.ts 200[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/ui-language.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/api/instanceSettings.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/plugins/bridge.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/utils.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/shared/src/index.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/api/plugins.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/localized.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/CompanyRail.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/plugins/slots.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/Sidebar.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/InstanceSidebar.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/BreadcrumbBar.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/PropertiesPanel.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/CommandPalette.tsx 200[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/NewIssueDialog.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/NewProjectDialog.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/NewAgentDialog.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/NewGoalDialog.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ToastViewport.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/MobileBottomNav.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/DevRestartBanner.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/WorktreeBanner.tsx 200[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/hooks/useKeyboardShortcuts.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/hooks/useCompanyPageMemory.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/company-selection.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/instance-settings.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/api/agents.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/api/goals.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/api/issues.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/api/approvals.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/model-utils.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ui/dialog.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ui/popover.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/onboarding-goal.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/adapters/index.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/agent-config-defaults.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/adapters/codex-local/src/index.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/adapters/cursor-local/src/index.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/AsciiArtAnimation.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/adapters/gemini-local/src/index.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/onboarding-connector-recommendations.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/OpenCodeLogoIcon.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ui/input.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ui/dropdown-menu.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/api/activity.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/api/dashboard.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/api/projects.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/api/heartbeats.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/StatusIcon.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/MetricCard.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/EmptyState.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/PriorityIcon.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/Identity.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ActivityRow.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/timeAgo.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ActivityCharts.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ActiveAgentsPanel.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/RoleBundleConnectorSuggestionsPanel.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/PageSkeleton.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/WorkProductCard.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/EntityRow.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/role-bundle-connector-suggestions.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/StatusBadge.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/status-colors.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/PageTabBar.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ui/tabs.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/api/companySkills.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/api/budgets.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/AgentConfigForm.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/MarkdownEditor.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/agent-config-primitives.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/api/assets.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/MarkdownBody.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/CopyText.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/AgentActionButtons.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/BudgetPolicyCard.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/PackageFileTree.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ScrollToBottom.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ui/skeleton.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/AgentIconPicker.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ui/collapsible.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/transcript/RunTranscriptView.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/adapter-utils/src/index.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/agent-skills-state.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/IssuesList.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ProjectProperties.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/issueDetailBreadcrumb.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ProjectCodeOutputsPanel.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/InlineEditor.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/assignees.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/CommentThread.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/hooks/useProjectOrder.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/LiveRunWidget.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/IssueProperties.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/IssueReviewHandoffCard.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/IssueDocumentsSection.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ui/separator.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ui/sheet.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/api/execution-workspaces.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ui/scroll-area.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/api/routines.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/recent-assignees.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/InlineEntitySelector.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ui/card.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ui/select.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/routine-trigger-patch.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ScheduleEditor.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ui/label.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ui/badge.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/GoalTree.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/GoalProperties.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ApprovalCard.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/install-approval-prefill.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/InstallApprovalComposer.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/plugin-pages.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ApprovalPayload.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ui/textarea.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/api/costs.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/BudgetIncidentCard.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/BillerSpendCard.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/FinanceBillerCard.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/FinanceKindCard.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/FinanceTimelineCard.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ProviderQuotaCard.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/hooks/useDateRange.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/api/access.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/CompanyPatternIcon.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/CompanyReviewRulesEditor.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/company-review-rule-drafts.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/IssueRow.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/zip.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/hooks/useInboxBadge.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/portable-files.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ui/checkbox.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ui/command.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ui/breadcrumb.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ui/avatar.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/FilterBar.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/JsonSchemaForm.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/fixtures/runTranscriptFixtures.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/install-approval-drafts.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/agent-hire-feedback.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/role-bundle-readiness.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/i18n-catalog.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/i18n-overlay.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/shared/src/constants.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/shared/src/plugin-localization.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/shared/src/validators/index.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/shared/src/api.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/shared/src/agent-url-key.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/shared/src/project-url-key.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/shared/src/project-mentions.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/shared/src/config-schema.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/api/sidebarBadges.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/SidebarSection.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/SidebarNavItem.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/SidebarProjects.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/worktree-branding.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/PathInstructionsModal.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/SidebarAgents.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/company-page-memory.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/adapters/registry.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/adapters/transcript.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/transcript/useLiveRunTranscripts.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/api/secrets.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/legacy-agent-config.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/adapters/claude-local/config-fields.tsx 200[39m
-[11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/adapter-utils/src/session-compaction.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/adapter-utils/src/host-runtime.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/adapter-utils/src/log-redaction.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/adapter-utils/src/billing.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/groupBy.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/KanbanBoard.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/hooks/useAutosaveIndicator.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/project-order.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/lib/issue-review.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/QuotaBar.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/CodexSubscriptionPanel.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /src/components/ClaudeSubscriptionPanel.tsx 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/shared/src/validators/instance.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/shared/src/validators/budget.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/shared/src/validators/company.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/shared/src/validators/company-skill.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/shared/src/validators/adapter-skills.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/shared/src/validators/company-portability.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/shared/src/validators/agent.ts 304[39m
-[11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/shared/src/validators/project.ts 304[39m
+[11:51:28] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
+[12:01:38] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[12:02:06] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
+[12:02:08] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[12:08:38] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[12:09:08] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[12:09:27] [32mINFO[39m: [36mGET /companies/0acc2154-a891-4d7e-9b07-269b8b245d15/issues?assigneeAgentId=eb1c777a-2e3e-44a4-8cbc-67f7a68ad4af&status=todo,in_progress,blocked 200[39m
+[12:09:27] [32mINFO[39m: [36mGET / 200[39m
+[12:09:27] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
+[12:09:27] [32mINFO[39m: [36mGET /agents/me 200[39m
+[12:09:38] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[12:09:40] [32mINFO[39m: [36mGET /issues/0b37784d-24ef-4fc1-bf02-1558d564b805/comments?order=desc&limit=5 200[39m
+[12:09:40] [32mINFO[39m: [36mGET /issues/0b37784d-24ef-4fc1-bf02-1558d564b805/heartbeat-context 200[39m
+[12:10:08] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[12:12:38] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[12:12:55] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
+[12:23:08] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[12:23:32] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
+[12:23:38] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[12:34:09] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[12:34:35] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
+[12:34:39] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[12:41:08] [32mINFO[39m: [36mAutomatic database backup complete: C:\Users\test\.paperclip-worktrees\instances\repo-local\data\backups\paperclip-20260326-154108.sql (5.1M)[39m [90m{"backupFile":"C:\Users\test\.paperclip-worktrees\instances\repo-local\data\backups\paperclip-20260326-154108.sql","sizeBytes":5359917,"prunedCount":0,"backupDir":"C:\Users\test\.paperclip-worktrees\instances\repo-local\data\backups","retentionDays":30}[39m
+[12:45:09] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[12:45:34] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
+[12:45:39] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[12:56:09] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[12:56:29] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
+[13:06:39] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[13:07:06] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
+[13:07:09] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[13:10:39] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[13:11:08] [32mINFO[39m: [36mGET / 200[39m
+[13:11:08] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
+[13:11:08] [32mINFO[39m: [36mGET /issues/0b37784d-24ef-4fc1-bf02-1558d564b805/heartbeat-context 200[39m
+[13:11:09] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[13:17:39] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[13:18:09] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[13:18:27] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
+[13:28:40] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[13:29:06] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
+[13:29:10] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[13:39:40] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[13:39:59] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
+[13:41:08] [32mINFO[39m: [36mAutomatic database backup complete: C:\Users\test\.paperclip-worktrees\instances\repo-local\data\backups\paperclip-20260326-164108.sql (5.3M)[39m [90m{"backupFile":"C:\Users\test\.paperclip-worktrees\instances\repo-local\data\backups\paperclip-20260326-164108.sql","sizeBytes":5544067,"prunedCount":0,"backupDir":"C:\Users\test\.paperclip-worktrees\instances\repo-local\data\backups","retentionDays":30}[39m
+[13:50:10] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[13:50:32] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
+[14:00:40] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[14:00:59] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
+[14:01:10] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[14:11:40] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":2,"skipped":0}[39m
+[14:12:03] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
+[14:12:07] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
+[14:12:07] [32mINFO[39m: [36mGET /issues/0b37784d-24ef-4fc1-bf02-1558d564b805/heartbeat-context 200[39m
+[14:12:10] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":2,"skipped":0}[39m
+[14:12:40] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[14:13:10] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[14:13:30] [32mINFO[39m: [36mGET / 200[39m
+[14:13:30] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
+[14:13:40] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[14:13:46] [32mINFO[39m: [36mGET /issues/0b37784d-24ef-4fc1-bf02-1558d564b805/heartbeat-context 200[39m
+[14:13:46] [32mINFO[39m: [36mGET /agents/me 200[39m
+[14:14:10] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[14:22:40] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[14:23:10] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[14:23:14] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
+[14:33:41] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[14:34:08] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
+[14:34:11] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[14:41:08] [32mINFO[39m: [36mAutomatic database backup complete: C:\Users\test\.paperclip-worktrees\instances\repo-local\data\backups\paperclip-20260326-174108.sql (5.5M)[39m [90m{"backupFile":"C:\Users\test\.paperclip-worktrees\instances\repo-local\data\backups\paperclip-20260326-174108.sql","sizeBytes":5784467,"prunedCount":0,"backupDir":"C:\Users\test\.paperclip-worktrees\instances\repo-local\data\backups","retentionDays":30}[39m
+[14:44:41] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[14:45:11] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[14:45:41] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[14:45:48] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
+[14:56:11] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[14:56:32] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
+[15:06:41] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[15:07:04] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
+[15:07:11] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[15:14:11] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[15:14:41] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[15:14:42] [32mINFO[39m: [36mGET / 200[39m
+[15:14:42] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
+[15:14:58] [32mINFO[39m: [36mGET /agents/me 200[39m
+[15:14:58] [32mINFO[39m: [36mGET /issues/0b37784d-24ef-4fc1-bf02-1558d564b805/heartbeat-context 200[39m
+[15:15:11] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+18:16:43 [tsx] change in ./..\packages\plugins\sdk\dist\index.js Restarting...
+c[15:16:48] [32mINFO[39m: [36mUsing embedded PostgreSQL because no DATABASE_URL set (dataDir=C:\Users\test\.paperclip-worktrees\instances\repo-local\db, port=55432)[39m
+[15:16:48] [32mINFO[39m: [36mEmbedded PostgreSQL cluster already exists (C:\Users\test\.paperclip-worktrees\instances\repo-local\db\PG_VERSION); skipping init[39m
+[15:16:48] [33mWARN[39m: [36mRemoving stale embedded PostgreSQL lock file[39m
+[15:16:49] [32mINFO[39m: [36mEmbedded PostgreSQL ready[39m
+18:16:51 [tsx] change in ./..\packages\plugins\sdk\dist\index.js Restarting...
+c18:16:52 [tsx] change in ./..\packages\plugins\sdk\dist\index.js Restarting...
+c[15:16:56] [32mINFO[39m: [36mUsing embedded PostgreSQL because no DATABASE_URL set (dataDir=C:\Users\test\.paperclip-worktrees\instances\repo-local\db, port=55432)[39m
+[15:16:56] [32mINFO[39m: [36mEmbedded PostgreSQL cluster already exists (C:\Users\test\.paperclip-worktrees\instances\repo-local\db\PG_VERSION); skipping init[39m
+[15:16:56] [31mERROR[39m: [36mEmbedded PostgreSQL failed; showing buffered startup logs[39m [90m{"phase":"start","recentLogs":["2026-03-26 18:16:56.277 MSK [21552] FATAL:  lock file \"postmaster.pid\" already exists","2026-03-26 18:16:56.277 MSK [21552] HINT:  Is another postmaster (PID 9524) running in data directory \"C:/Users/test/.paperclip-worktrees/instances/repo-local/db\"?"]}[39m
+[15:16:56] [31mERROR[39m: [36mPaperclip server failed to start[39m
+18:17:01 [tsx] change in ./..\packages\plugins\sdk\dist\index.js Rerunning...
+c18:17:01 [tsx] change in ./..\packages\plugins\sdk\dist\index.js Restarting...
+c[15:17:05] [33mWARN[39m: [36mEmbedded PostgreSQL port is in use; using next free port (requestedPort=55432, selectedPort=55433)[39m
+[15:17:05] [32mINFO[39m: [36mUsing embedded PostgreSQL because no DATABASE_URL set (dataDir=C:\Users\test\.paperclip-worktrees\instances\repo-local\db, port=55433)[39m
+[15:17:05] [32mINFO[39m: [36mEmbedded PostgreSQL cluster already exists (C:\Users\test\.paperclip-worktrees\instances\repo-local\db\PG_VERSION); skipping init[39m
+[15:17:05] [33mWARN[39m: [36mRemoving stale embedded PostgreSQL lock file[39m
+[15:17:05] [31mERROR[39m: [36mEmbedded PostgreSQL failed; showing buffered startup logs[39m [90m{"phase":"start","recentLogs":["2026-03-26 18:17:05.752 MSK [30076] FATAL:  lock file \"postmaster.pid\" already exists","2026-03-26 18:17:05.752 MSK [30076] HINT:  Is another postmaster (PID 32872) running in data directory \"C:/Users/test/.paperclip-worktrees/instances/repo-local/db\"?"]}[39m
+[15:17:05] [31mERROR[39m: [36mPaperclip server failed to start[39m
+18:38:56 [tsx] change in ./..\packages\plugins\sdk\dist\index.js Rerunning...
+c18:38:57 [tsx] change in ./..\packages\plugins\sdk\dist\index.js Restarting...
+c[15:39:02] [32mINFO[39m: [36mUsing embedded PostgreSQL because no DATABASE_URL set (dataDir=C:\Users\test\.paperclip-worktrees\instances\repo-local\db, port=55432)[39m
+[15:39:02] [32mINFO[39m: [36mEmbedded PostgreSQL cluster already exists (C:\Users\test\.paperclip-worktrees\instances\repo-local\db\PG_VERSION); skipping init[39m
+[15:39:02] [33mWARN[39m: [36mRemoving stale embedded PostgreSQL lock file[39m
+[15:39:03] [32mINFO[39m: [36mEmbedded PostgreSQL ready[39m
+
+[36m██████╗  █████╗ ██████╗ ███████╗██████╗  ██████╗██╗     ██╗██████╗ [0m
+[36m██╔══██╗██╔══██╗██╔══██╗██╔════╝██╔══██╗██╔════╝██║     ██║██╔══██╗[0m
+[36m██████╔╝███████║██████╔╝█████╗  ██████╔╝██║     ██║     ██║██████╔╝[0m
+[36m██╔═══╝ ██╔══██║██╔═══╝ ██╔══╝  ██╔══██╗██║     ██║     ██║██╔═══╝ [0m
+[36m██║     ██║  ██║██║     ███████╗██║  ██║╚██████╗███████╗██║██║     [0m
+[36m╚═╝     ╚═╝  ╚═╝╚═╝     ╚══════╝╚═╝  ╚═╝ ╚═════╝╚══════╝╚═╝╚═╝     [0m
+[34m  ───────────────────────────────────────────────────────[0m
+[2mMode            [0m [32membedded-postgres[0m  |  [36mvite-dev-middleware[0m
+[2mDeploy          [0m local_trusted (private)
+[2mAuth            [0m [32mready[0m
+[2mServer          [0m 3101
+[2mAPI             [0m http://127.0.0.1:3101/api [2m(health: http://127.0.0.1:3101/api/health)[0m
+[2mUI              [0m http://127.0.0.1:3101
+[2mDatabase        [0m C:\Users\test\.paperclip-worktrees\instances\repo-local\db [2m(pg:55432)[0m
+[2mMigrations      [0m already applied
+[2mAgent JWT       [0m [32mset via PAPERCLIP_AGENT_JWT_SECRET[0m
+[2mHeartbeat       [0m enabled [2m(30000ms)[0m
+[2mDB Backup       [0m enabled [2m(every 60m, keep 30d)[0m
+[2mBackup Dir      [0m C:\Users\test\.paperclip-worktrees\instances\repo-local\data\backups
+[2mConfig          [0m D:\new-projects\paperclip\.paperclip\config.json
+[34m  ───────────────────────────────────────────────────────[0m
+
+[15:39:05] [32mINFO[39m: [36mplugin job coordinator started — listening to lifecycle events[39m [90m{"service":"plugin-job-coordinator"}[39m
+[15:39:05] [32mINFO[39m: [36mplugin job scheduler started[39m [90m{"service":"plugin-job-scheduler","tickIntervalMs":30000,"maxConcurrentJobs":10}[39m
+[15:39:05] [32mINFO[39m: [36minitializing plugin tool dispatcher[39m [90m{"service":"plugin-tool-dispatcher"}[39m
+[15:39:05] [32mINFO[39m: [36mplugin-loader: loading all ready plugins[39m [90m{"service":"plugin-loader"}[39m
+[15:39:05] [32mINFO[39m: [36mAutomatic database backups enabled[39m [90m{"intervalMinutes":60,"retentionDays":30,"backupDir":"C:\Users\test\.paperclip-worktrees\instances\repo-local\data\backups"}[39m
+[15:39:05] [32mINFO[39m: [36mServer listening on 127.0.0.1:3101[39m
+[15:39:05] [32mINFO[39m: [36mloaded tools from ready plugins[39m [90m{"service":"plugin-tool-dispatcher","readyPlugins":0,"registeredTools":0}[39m
+[15:39:05] [32mINFO[39m: [36mplugin tool dispatcher initialized[39m [90m{"service":"plugin-tool-dispatcher","totalTools":0}[39m
+[15:39:05] [32mINFO[39m: [36mplugin-loader: no ready plugins to load[39m [90m{"service":"plugin-loader"}[39m
+[15:39:05] [33mWARN[39m: [36mreaped orphaned heartbeat runs[39m [90m{"reapedCount":1,"runIds":["acfe10e5-ed4e-4b13-83c0-b1bace100bd7"]}[39m
+18:39:07 [tsx] change in ./..\packages\plugins\sdk\dist\index.js Restarting...
+c[15:39:12] [32mINFO[39m: [36mUsing embedded PostgreSQL because no DATABASE_URL set (dataDir=C:\Users\test\.paperclip-worktrees\instances\repo-local\db, port=55432)[39m
+[15:39:12] [32mINFO[39m: [36mEmbedded PostgreSQL cluster already exists (C:\Users\test\.paperclip-worktrees\instances\repo-local\db\PG_VERSION); skipping init[39m
+[15:39:12] [31mERROR[39m: [36mEmbedded PostgreSQL failed; showing buffered startup logs[39m [90m{"phase":"start","recentLogs":["2026-03-26 18:39:12.716 MSK [39212] FATAL:  lock file \"postmaster.pid\" already exists","2026-03-26 18:39:12.716 MSK [39212] HINT:  Is another postmaster (PID 39892) running in data directory \"C:/Users/test/.paperclip-worktrees/instances/repo-local/db\"?"]}[39m
+[15:39:12] [31mERROR[39m: [36mPaperclip server failed to start[39m
+18:40:17 [tsx] change in ./..\packages\plugins\sdk\dist\index.js Rerunning...
+c[15:40:21] [32mINFO[39m: [36mUsing embedded PostgreSQL because no DATABASE_URL set (dataDir=C:\Users\test\.paperclip-worktrees\instances\repo-local\db, port=55432)[39m
+[15:40:21] [32mINFO[39m: [36mEmbedded PostgreSQL cluster already exists (C:\Users\test\.paperclip-worktrees\instances\repo-local\db\PG_VERSION); skipping init[39m
+[15:40:21] [31mERROR[39m: [36mEmbedded PostgreSQL failed; showing buffered startup logs[39m [90m{"phase":"start","recentLogs":["2026-03-26 18:40:21.775 MSK [664] FATAL:  lock file \"postmaster.pid\" already exists","2026-03-26 18:40:21.775 MSK [664] HINT:  Is another postmaster (PID 29448) running in data directory \"C:/Users/test/.paperclip-worktrees/instances/repo-local/db\"?"]}[39m
+[15:40:21] [31mERROR[39m: [36mPaperclip server failed to start[39m
+ckages/shared/src/validators/project.ts 304[39m
 [11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/shared/src/validators/issue.ts 304[39m
 [11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/shared/src/validators/work-product.ts 304[39m
 [11:39:54] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/packages/shared/src/validators/execution-workspace.ts 304[39m
@@ -6154,3 +6079,225 @@ es.tsx 304[39m
 [11:41:06] [32mINFO[39m: [36mEmbedded PostgreSQL cluster already exists (C:\Users\test\.paperclip-worktrees\instances\repo-local\db\PG_VERSION); skipping init[39m
 [11:41:06] [31mERROR[39m: [36mEmbedded PostgreSQL failed; showing buffered startup logs[39m [90m{"phase":"start","recentLogs":["2026-03-26 14:41:06.251 MSK [6808] FATAL:  lock file \"postmaster.pid\" already exists","2026-03-26 14:41:06.251 MSK [6808] HINT:  Is another postmaster (PID 24276) running in data directory \"C:/Users/test/.paperclip-worktrees/instances/repo-local/db\"?"]}[39m
 [11:41:06] [31mERROR[39m: [36mPaperclip server failed to start[39m
+18:16:43 [tsx] change in ./..\packages\plugins\sdk\dist\index.js Rerunning...
+c[15:16:48] [32mINFO[39m: [36mUsing embedded PostgreSQL because no DATABASE_URL set (dataDir=C:\Users\test\.paperclip-worktrees\instances\repo-local\db, port=55432)[39m
+[15:16:48] [32mINFO[39m: [36mEmbedded PostgreSQL cluster already exists (C:\Users\test\.paperclip-worktrees\instances\repo-local\db\PG_VERSION); skipping init[39m
+[15:16:48] [31mERROR[39m: [36mEmbedded PostgreSQL failed; showing buffered startup logs[39m [90m{"phase":"start","recentLogs":["2026-03-26 18:16:48.525 MSK [3532] FATAL:  lock file \"postmaster.pid\" already exists","2026-03-26 18:16:48.525 MSK [3532] HINT:  Is another postmaster (PID 12528) running in data directory \"C:/Users/test/.paperclip-worktrees/instances/repo-local/db\"?"]}[39m
+[15:16:48] [31mERROR[39m: [36mPaperclip server failed to start[39m
+18:16:51 [tsx] change in ./..\packages\plugins\sdk\dist\index.js Rerunning...
+c18:16:52 [tsx] change in ./..\packages\plugins\sdk\dist\index.js Restarting...
+c[15:16:56] [32mINFO[39m: [36mUsing embedded PostgreSQL because no DATABASE_URL set (dataDir=C:\Users\test\.paperclip-worktrees\instances\repo-local\db, port=55432)[39m
+[15:16:56] [32mINFO[39m: [36mEmbedded PostgreSQL cluster already exists (C:\Users\test\.paperclip-worktrees\instances\repo-local\db\PG_VERSION); skipping init[39m
+[15:16:56] [33mWARN[39m: [36mRemoving stale embedded PostgreSQL lock file[39m
+[15:16:57] [32mINFO[39m: [36mEmbedded PostgreSQL ready[39m
+
+[36m██████╗  █████╗ ██████╗ ███████╗██████╗  ██████╗██╗     ██╗██████╗ [0m
+[36m██╔══██╗██╔══██╗██╔══██╗██╔════╝██╔══██╗██╔════╝██║     ██║██╔══██╗[0m
+[36m██████╔╝███████║██████╔╝█████╗  ██████╔╝██║     ██║     ██║██████╔╝[0m
+[36m██╔═══╝ ██╔══██║██╔═══╝ ██╔══╝  ██╔══██╗██║     ██║     ██║██╔═══╝ [0m
+[36m██║     ██║  ██║██║     ███████╗██║  ██║╚██████╗███████╗██║██║     [0m
+[36m╚═╝     ╚═╝  ╚═╝╚═╝     ╚══════╝╚═╝  ╚═╝ ╚═════╝╚══════╝╚═╝╚═╝     [0m
+[34m  ───────────────────────────────────────────────────────[0m
+[2mMode            [0m [32membedded-postgres[0m  |  [36mvite-dev-middleware[0m
+[2mDeploy          [0m local_trusted (private)
+[2mAuth            [0m [32mready[0m
+[2mServer          [0m 3201
+[2mAPI             [0m http://127.0.0.1:3201/api [2m(health: http://127.0.0.1:3201/api/health)[0m
+[2mUI              [0m http://127.0.0.1:3201
+[2mDatabase        [0m C:\Users\test\.paperclip-worktrees\instances\repo-local\db [2m(pg:55432)[0m
+[2mMigrations      [0m already applied
+[2mAgent JWT       [0m [32mset via PAPERCLIP_AGENT_JWT_SECRET[0m
+[2mHeartbeat       [0m enabled [2m(30000ms)[0m
+[2mDB Backup       [0m enabled [2m(every 60m, keep 30d)[0m
+[2mBackup Dir      [0m C:\Users\test\.paperclip-worktrees\instances\repo-local\data\backups
+[2mConfig          [0m D:\new-projects\paperclip\.paperclip\config.json
+[34m  ───────────────────────────────────────────────────────[0m
+
+[15:16:59] [32mINFO[39m: [36mplugin job coordinator started — listening to lifecycle events[39m [90m{"service":"plugin-job-coordinator"}[39m
+[15:16:59] [32mINFO[39m: [36mplugin job scheduler started[39m [90m{"service":"plugin-job-scheduler","tickIntervalMs":30000,"maxConcurrentJobs":10}[39m
+[15:16:59] [32mINFO[39m: [36minitializing plugin tool dispatcher[39m [90m{"service":"plugin-tool-dispatcher"}[39m
+[15:16:59] [32mINFO[39m: [36mplugin-loader: loading all ready plugins[39m [90m{"service":"plugin-loader"}[39m
+[15:16:59] [32mINFO[39m: [36mAutomatic database backups enabled[39m [90m{"intervalMinutes":60,"retentionDays":30,"backupDir":"C:\Users\test\.paperclip-worktrees\instances\repo-local\data\backups"}[39m
+[15:16:59] [32mINFO[39m: [36mServer listening on 127.0.0.1:3201[39m
+[15:16:59] [32mINFO[39m: [36mloaded tools from ready plugins[39m [90m{"service":"plugin-tool-dispatcher","readyPlugins":0,"registeredTools":0}[39m
+[15:16:59] [32mINFO[39m: [36mplugin tool dispatcher initialized[39m [90m{"service":"plugin-tool-dispatcher","totalTools":0}[39m
+[15:16:59] [32mINFO[39m: [36mplugin-loader: no ready plugins to load[39m [90m{"service":"plugin-loader"}[39m
+[15:16:59] [32mINFO[39m: [36mGET /CMP/agents/all 200[39m
+[15:17:00] [32mINFO[39m: [36mGET /@vite/client 200[39m
+[15:17:00] [32mINFO[39m: [36mGET /@react-refresh 304[39m
+[15:17:00] [32mINFO[39m: [36mGET /src/main.tsx 304[39m
+[15:17:00] [32mINFO[39m: [36mGET /@fs/D:/new-projects/paperclip/node_modules/.pnpm/vite@6.4.1_@types+node@24.12.0_jiti@2.6.1_lightningcss@1.30.2_tsx@4.21.0/node_modules/vite/dist/client/env.mjs 304[39m
+[15:17:00] [32mINFO[39m: [36mGET /src/lib/router.tsx 304[39m
+[15:17:00] [32mINFO[39m: [36mGET /src/App.tsx 304[39m
+[15:17:00] [32mINFO[39m: [36mGET /src/context/CompanyContext.tsx 304[39m
+[15:17:00] [32mINFO[39m: [36mGET /src/context/PanelContext.tsx 304[39m
+18:17:01 [tsx] change in ./..\packages\plugins\sdk\dist\index.js Restarting...
+c18:17:01 [tsx] change in ./..\packages\plugins\sdk\dist\index.js Restarting...
+c[15:17:05] [32mINFO[39m: [36mUsing embedded PostgreSQL because no DATABASE_URL set (dataDir=C:\Users\test\.paperclip-worktrees\instances\repo-local\db, port=55432)[39m
+[15:17:05] [32mINFO[39m: [36mEmbedded PostgreSQL cluster already exists (C:\Users\test\.paperclip-worktrees\instances\repo-local\db\PG_VERSION); skipping init[39m
+[15:17:05] [33mWARN[39m: [36mRemoving stale embedded PostgreSQL lock file[39m
+[15:17:06] [32mINFO[39m: [36mEmbedded PostgreSQL ready[39m
+
+[36m██████╗  █████╗ ██████╗ ███████╗██████╗  ██████╗██╗     ██╗██████╗ [0m
+[36m██╔══██╗██╔══██╗██╔══██╗██╔════╝██╔══██╗██╔════╝██║     ██║██╔══██╗[0m
+[36m██████╔╝███████║██████╔╝█████╗  ██████╔╝██║     ██║     ██║██████╔╝[0m
+[36m██╔═══╝ ██╔══██║██╔═══╝ ██╔══╝  ██╔══██╗██║     ██║     ██║██╔═══╝ [0m
+[36m██║     ██║  ██║██║     ███████╗██║  ██║╚██████╗███████╗██║██║     [0m
+[36m╚═╝     ╚═╝  ╚═╝╚═╝     ╚══════╝╚═╝  ╚═╝ ╚═════╝╚══════╝╚═╝╚═╝     [0m
+[34m  ───────────────────────────────────────────────────────[0m
+[2mMode            [0m [32membedded-postgres[0m  |  [36mvite-dev-middleware[0m
+[2mDeploy          [0m local_trusted (private)
+[2mAuth            [0m [32mready[0m
+[2mServer          [0m 3201
+[2mAPI             [0m http://127.0.0.1:3201/api [2m(health: http://127.0.0.1:3201/api/health)[0m
+[2mUI              [0m http://127.0.0.1:3201
+[2mDatabase        [0m C:\Users\test\.paperclip-worktrees\instances\repo-local\db [2m(pg:55432)[0m
+[2mMigrations      [0m already applied
+[2mAgent JWT       [0m [32mset via PAPERCLIP_AGENT_JWT_SECRET[0m
+[2mHeartbeat       [0m enabled [2m(30000ms)[0m
+[2mDB Backup       [0m enabled [2m(every 60m, keep 30d)[0m
+[2mBackup Dir      [0m C:\Users\test\.paperclip-worktrees\instances\repo-local\data\backups
+[2mConfig          [0m D:\new-projects\paperclip\.paperclip\config.json
+[34m  ───────────────────────────────────────────────────────[0m
+
+[15:17:08] [32mINFO[39m: [36mplugin job coordinator started — listening to lifecycle events[39m [90m{"service":"plugin-job-coordinator"}[39m
+[15:17:08] [32mINFO[39m: [36mplugin job scheduler started[39m [90m{"service":"plugin-job-scheduler","tickIntervalMs":30000,"maxConcurrentJobs":10}[39m
+[15:17:08] [32mINFO[39m: [36minitializing plugin tool dispatcher[39m [90m{"service":"plugin-tool-dispatcher"}[39m
+[15:17:08] [32mINFO[39m: [36mplugin-loader: loading all ready plugins[39m [90m{"service":"plugin-loader"}[39m
+[15:17:08] [32mINFO[39m: [36mAutomatic database backups enabled[39m [90m{"intervalMinutes":60,"retentionDays":30,"backupDir":"C:\Users\test\.paperclip-worktrees\instances\repo-local\data\backups"}[39m
+[15:17:08] [32mINFO[39m: [36mServer listening on 127.0.0.1:3201[39m
+[15:17:08] [32mINFO[39m: [36mloaded tools from ready plugins[39m [90m{"service":"plugin-tool-dispatcher","readyPlugins":0,"registeredTools":0}[39m
+[15:17:08] [32mINFO[39m: [36mplugin tool dispatcher initialized[39m [90m{"service":"plugin-tool-dispatcher","totalTools":0}[39m
+[15:17:08] [32mINFO[39m: [36mplugin-loader: no ready plugins to load[39m [90m{"service":"plugin-loader"}[39m
+[15:17:09] [32mINFO[39m: [36mGET /src/pages/ExecutionWorkspaceDetail.tsx 304[39m
+[15:17:09] [32mINFO[39m: [36mGET /src/pages/Issues.tsx 304[39m
+[15:17:09] [32mINFO[39m: [36mGET /src/pages/IssueDetail.tsx 304[39m
+[15:17:09] [32mINFO[39m: [36mGET /src/pages/Routines.tsx 304[39m
+[15:17:09] [32mINFO[39m: [36mGET /src/pages/RoutineDetail.tsx 304[39m
+[15:17:10] [32mINFO[39m: [36mGET /src/pages/ProjectDetail.tsx 304[39m
+[15:17:10] [32mINFO[39m: [36mGET /src/pages/Goals.tsx 304[39m
+[15:17:10] [32mINFO[39m: [36mGET /src/pages/Approvals.tsx 304[39m
+[15:17:10] [32mINFO[39m: [36mGET /src/pages/GoalDetail.tsx 304[39m
+[15:17:10] [32mINFO[39m: [36mGET /src/pages/ApprovalDetail.tsx 304[39m
+[15:17:10] [32mINFO[39m: [36mGET /src/pages/Costs.tsx 304[39m
+[15:17:11] [32mINFO[39m: [36mGET /src/pages/Activity.tsx 304[39m
+[15:17:11] [32mINFO[39m: [36mGET /src/pages/Inbox.tsx 304[39m
+[15:17:11] [32mINFO[39m: [36mGET /src/pages/CompanySettings.tsx 304[39m
+[15:17:11] [32mINFO[39m: [36mGET /src/pages/CompanyExport.tsx 304[39m
+[15:17:11] [32mINFO[39m: [36mGET /src/pages/CompanySkills.tsx 304[39m
+[15:17:11] [32mINFO[39m: [36mGET /src/pages/CompanyImport.tsx 304[39m
+[15:17:11] [32mINFO[39m: [36mGET /src/pages/DesignGuide.tsx 304[39m
+[15:17:11] [32mINFO[39m: [36mGET /src/pages/InstanceGeneralSettings.tsx 200[39m
+[15:17:12] [32mINFO[39m: [36mGET /src/pages/InstanceExperimentalSettings.tsx 304[39m
+[15:17:12] [32mINFO[39m: [36mGET /src/pages/InstanceSettings.tsx 304[39m
+[15:17:12] [32mINFO[39m: [36mGET /src/pages/PluginManager.tsx 304[39m
+[15:17:12] [32mINFO[39m: [36mGET /src/pages/PluginSettings.tsx 304[39m
+[15:17:12] [32mINFO[39m: [36mGET /src/pages/PluginPage.tsx 304[39m
+[15:17:12] [32mINFO[39m: [36mGET /src/pages/RunTranscriptUxLab.tsx 304[39m
+[15:17:12] [32mINFO[39m: [36mGET /src/pages/OrgChart.tsx 304[39m
+[15:17:12] [32mINFO[39m: [36mGET /src/pages/Auth.tsx 304[39m
+[15:17:12] [32mINFO[39m: [36mGET /src/pages/NewAgent.tsx 304[39m
+[15:17:12] [32mINFO[39m: [36mGET /src/pages/ResetPassword.tsx 304[39m
+[15:17:12] [32mINFO[39m: [36mGET /src/pages/NotFound.tsx 304[39m
+[15:17:12] [32mINFO[39m: [36mGET /src/lib/queryKeys.ts 304[39m
+[15:17:12] [32mINFO[39m: [36mGET /src/lib/inbox.ts 304[39m
+[15:17:12] [32mINFO[39m: [36mGET /src/pages/BoardClaim.tsx 304[39m
+[15:17:12] [32mINFO[39m: [36mGET /src/api/companies.ts 304[39m
+[15:17:12] [32mINFO[39m: [36mGET /src/api/client.ts 304[39m
+[15:17:12] [32mINFO[39m: [36mGET /src/context/DialogContext.tsx 304[39m
+[15:17:12] [32mINFO[39m: [36mGET /src/pages/InviteLanding.tsx 304[39m
+[15:17:12] [32mINFO[39m: [36mGET /src/context/ThemeContext.tsx 304[39m
+[15:17:12] [32mINFO[39m: [36mGET /src/context/SidebarContext.tsx 304[39m
+[15:17:12] [32mINFO[39m: [36mGET /src/context/ToastContext.tsx 304[39m
+[15:17:12] [32mINFO[39m: [36mGET /src/lib/onboarding-route.ts 304[39m
+[15:17:38] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[15:17:56] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
+[15:28:08] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[15:28:32] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m
+[2m18:37:58[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/plugins/slots.tsx[22m
+[15:38:38] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+18:38:56 [tsx] change in ./..\packages\plugins\sdk\dist\index.js Restarting...
+c18:38:57 [tsx] change in ./..\packages\plugins\sdk\dist\index.js Restarting...
+c[15:39:02] [33mWARN[39m: [36mEmbedded PostgreSQL port is in use; using next free port (requestedPort=55432, selectedPort=55433)[39m
+[15:39:02] [32mINFO[39m: [36mUsing embedded PostgreSQL because no DATABASE_URL set (dataDir=C:\Users\test\.paperclip-worktrees\instances\repo-local\db, port=55433)[39m
+[15:39:02] [32mINFO[39m: [36mEmbedded PostgreSQL cluster already exists (C:\Users\test\.paperclip-worktrees\instances\repo-local\db\PG_VERSION); skipping init[39m
+[15:39:02] [33mWARN[39m: [36mRemoving stale embedded PostgreSQL lock file[39m
+[15:39:02] [31mERROR[39m: [36mEmbedded PostgreSQL failed; showing buffered startup logs[39m [90m{"phase":"start","recentLogs":["2026-03-26 18:39:02.191 MSK [37892] FATAL:  lock file \"postmaster.pid\" already exists","2026-03-26 18:39:02.191 MSK [37892] HINT:  Is another postmaster (PID 37944) running in data directory \"C:/Users/test/.paperclip-worktrees/instances/repo-local/db\"?"]}[39m
+[15:39:02] [31mERROR[39m: [36mPaperclip server failed to start[39m
+18:39:07 [tsx] change in ./..\packages\plugins\sdk\dist\index.js Rerunning...
+c[15:39:12] [32mINFO[39m: [36mUsing embedded PostgreSQL because no DATABASE_URL set (dataDir=C:\Users\test\.paperclip-worktrees\instances\repo-local\db, port=55432)[39m
+[15:39:12] [32mINFO[39m: [36mEmbedded PostgreSQL cluster already exists (C:\Users\test\.paperclip-worktrees\instances\repo-local\db\PG_VERSION); skipping init[39m
+[15:39:12] [33mWARN[39m: [36mRemoving stale embedded PostgreSQL lock file[39m
+[15:39:14] [32mINFO[39m: [36mEmbedded PostgreSQL ready[39m
+
+[36m██████╗  █████╗ ██████╗ ███████╗██████╗  ██████╗██╗     ██╗██████╗ [0m
+[36m██╔══██╗██╔══██╗██╔══██╗██╔════╝██╔══██╗██╔════╝██║     ██║██╔══██╗[0m
+[36m██████╔╝███████║██████╔╝█████╗  ██████╔╝██║     ██║     ██║██████╔╝[0m
+[36m██╔═══╝ ██╔══██║██╔═══╝ ██╔══╝  ██╔══██╗██║     ██║     ██║██╔═══╝ [0m
+[36m██║     ██║  ██║██║     ███████╗██║  ██║╚██████╗███████╗██║██║     [0m
+[36m╚═╝     ╚═╝  ╚═╝╚═╝     ╚══════╝╚═╝  ╚═╝ ╚═════╝╚══════╝╚═╝╚═╝     [0m
+[34m  ───────────────────────────────────────────────────────[0m
+[2mMode            [0m [32membedded-postgres[0m  |  [36mvite-dev-middleware[0m
+[2mDeploy          [0m local_trusted (private)
+[2mAuth            [0m [32mready[0m
+[2mServer          [0m 3201
+[2mAPI             [0m http://127.0.0.1:3201/api [2m(health: http://127.0.0.1:3201/api/health)[0m
+[2mUI              [0m http://127.0.0.1:3201
+[2mDatabase        [0m C:\Users\test\.paperclip-worktrees\instances\repo-local\db [2m(pg:55432)[0m
+[2mMigrations      [0m already applied
+[2mAgent JWT       [0m [32mset via PAPERCLIP_AGENT_JWT_SECRET[0m
+[2mHeartbeat       [0m enabled [2m(30000ms)[0m
+[2mDB Backup       [0m enabled [2m(every 60m, keep 30d)[0m
+[2mBackup Dir      [0m C:\Users\test\.paperclip-worktrees\instances\repo-local\data\backups
+[2mConfig          [0m D:\new-projects\paperclip\.paperclip\config.json
+[34m  ───────────────────────────────────────────────────────[0m
+
+[15:39:15] [32mINFO[39m: [36mplugin job coordinator started — listening to lifecycle events[39m [90m{"service":"plugin-job-coordinator"}[39m
+[15:39:15] [32mINFO[39m: [36mplugin job scheduler started[39m [90m{"service":"plugin-job-scheduler","tickIntervalMs":30000,"maxConcurrentJobs":10}[39m
+[15:39:15] [32mINFO[39m: [36minitializing plugin tool dispatcher[39m [90m{"service":"plugin-tool-dispatcher"}[39m
+[15:39:15] [32mINFO[39m: [36mplugin-loader: loading all ready plugins[39m [90m{"service":"plugin-loader"}[39m
+[15:39:15] [32mINFO[39m: [36mAutomatic database backups enabled[39m [90m{"intervalMinutes":60,"retentionDays":30,"backupDir":"C:\Users\test\.paperclip-worktrees\instances\repo-local\data\backups"}[39m
+[15:39:15] [32mINFO[39m: [36mServer listening on 127.0.0.1:3201[39m
+[15:39:15] [32mINFO[39m: [36mloaded tools from ready plugins[39m [90m{"service":"plugin-tool-dispatcher","readyPlugins":0,"registeredTools":0}[39m
+[15:39:15] [32mINFO[39m: [36mplugin tool dispatcher initialized[39m [90m{"service":"plugin-tool-dispatcher","totalTools":0}[39m
+[15:39:15] [32mINFO[39m: [36mplugin-loader: no ready plugins to load[39m [90m{"service":"plugin-loader"}[39m
+[15:39:15] [33mWARN[39m: [36mreaped orphaned heartbeat runs[39m [90m{"reapedCount":1,"runIds":["d328c2b8-aed5-482b-afc8-8551d29c24e8"]}[39m
+18:40:17 [tsx] change in ./..\packages\plugins\sdk\dist\index.js Restarting...
+c[15:40:21] [32mINFO[39m: [36mUsing embedded PostgreSQL because no DATABASE_URL set (dataDir=C:\Users\test\.paperclip-worktrees\instances\repo-local\db, port=55432)[39m
+[15:40:21] [32mINFO[39m: [36mEmbedded PostgreSQL cluster already exists (C:\Users\test\.paperclip-worktrees\instances\repo-local\db\PG_VERSION); skipping init[39m
+[15:40:21] [33mWARN[39m: [36mRemoving stale embedded PostgreSQL lock file[39m
+[15:40:22] [32mINFO[39m: [36mEmbedded PostgreSQL ready[39m
+
+[36m██████╗  █████╗ ██████╗ ███████╗██████╗  ██████╗██╗     ██╗██████╗ [0m
+[36m██╔══██╗██╔══██╗██╔══██╗██╔════╝██╔══██╗██╔════╝██║     ██║██╔══██╗[0m
+[36m██████╔╝███████║██████╔╝█████╗  ██████╔╝██║     ██║     ██║██████╔╝[0m
+[36m██╔═══╝ ██╔══██║██╔═══╝ ██╔══╝  ██╔══██╗██║     ██║     ██║██╔═══╝ [0m
+[36m██║     ██║  ██║██║     ███████╗██║  ██║╚██████╗███████╗██║██║     [0m
+[36m╚═╝     ╚═╝  ╚═╝╚═╝     ╚══════╝╚═╝  ╚═╝ ╚═════╝╚══════╝╚═╝╚═╝     [0m
+[34m  ───────────────────────────────────────────────────────[0m
+[2mMode            [0m [32membedded-postgres[0m  |  [36mvite-dev-middleware[0m
+[2mDeploy          [0m local_trusted (private)
+[2mAuth            [0m [32mready[0m
+[2mServer          [0m 3201
+[2mAPI             [0m http://127.0.0.1:3201/api [2m(health: http://127.0.0.1:3201/api/health)[0m
+[2mUI              [0m http://127.0.0.1:3201
+[2mDatabase        [0m C:\Users\test\.paperclip-worktrees\instances\repo-local\db [2m(pg:55432)[0m
+[2mMigrations      [0m already applied
+[2mAgent JWT       [0m [32mset via PAPERCLIP_AGENT_JWT_SECRET[0m
+[2mHeartbeat       [0m enabled [2m(30000ms)[0m
+[2mDB Backup       [0m enabled [2m(every 60m, keep 30d)[0m
+[2mBackup Dir      [0m C:\Users\test\.paperclip-worktrees\instances\repo-local\data\backups
+[2mConfig          [0m D:\new-projects\paperclip\.paperclip\config.json
+[34m  ───────────────────────────────────────────────────────[0m
+
+[15:40:24] [32mINFO[39m: [36mplugin job coordinator started — listening to lifecycle events[39m [90m{"service":"plugin-job-coordinator"}[39m
+[15:40:24] [32mINFO[39m: [36mplugin job scheduler started[39m [90m{"service":"plugin-job-scheduler","tickIntervalMs":30000,"maxConcurrentJobs":10}[39m
+[15:40:24] [32mINFO[39m: [36minitializing plugin tool dispatcher[39m [90m{"service":"plugin-tool-dispatcher"}[39m
+[15:40:24] [32mINFO[39m: [36mplugin-loader: loading all ready plugins[39m [90m{"service":"plugin-loader"}[39m
+[15:40:24] [32mINFO[39m: [36mAutomatic database backups enabled[39m [90m{"intervalMinutes":60,"retentionDays":30,"backupDir":"C:\Users\test\.paperclip-worktrees\instances\repo-local\data\backups"}[39m
+[15:40:24] [32mINFO[39m: [36mServer listening on 127.0.0.1:3201[39m
+[15:40:24] [32mINFO[39m: [36mloaded tools from ready plugins[39m [90m{"service":"plugin-tool-dispatcher","readyPlugins":0,"registeredTools":0}[39m
+[15:40:24] [32mINFO[39m: [36mplugin tool dispatcher initialized[39m [90m{"service":"plugin-tool-dispatcher","totalTools":0}[39m
+[15:40:24] [32mINFO[39m: [36mplugin-loader: no ready plugins to load[39m [90m{"service":"plugin-loader"}[39m
+[15:49:24] [32mINFO[39m: [36mheartbeat timer tick enqueued runs[39m [90m{"checked":2,"enqueued":1,"skipped":0}[39m
+[15:49:46] [32mINFO[39m: [36mGET /agents/me/inbox-lite 200[39m

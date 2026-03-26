@@ -67,7 +67,7 @@ export type ResolvedPluginSlot = PluginUiSlotDeclaration & {
 
 type PluginSlotComponentProps = {
   slot: ResolvedPluginSlot;
-  context: PluginSlotContext;
+  context: PluginHostContext;
 };
 
 export type RegisteredPluginComponent =
@@ -644,20 +644,14 @@ function PluginWebComponentMount({
 }: {
   tagName: string;
   slot: ResolvedPluginSlot;
-  context: PluginSlotContext;
+  context: PluginHostContext;
   className?: string;
 }) {
   const ref = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!ref.current) return;
-    // Bridge manifest slot/context metadata onto the custom element instance.
-    const el = ref.current as HTMLElement & {
-      pluginSlot?: ResolvedPluginSlot;
-      pluginContext?: PluginSlotContext;
-    };
-    el.pluginSlot = slot;
-    el.pluginContext = context;
+    applyPluginElementBridgeContext(ref.current, slot, context);
   }, [context, slot]);
 
   return createElement(tagName, { ref, className });
@@ -694,6 +688,34 @@ function slotContextToHostContext(
   };
 }
 
+type PluginElementBridgeMetadata = HTMLElement & {
+  pluginSlot?: ResolvedPluginSlot;
+  pluginContext?: PluginHostContext;
+};
+
+function applyPluginElementBridgeContext(
+  element: PluginElementBridgeMetadata,
+  slot: ResolvedPluginSlot,
+  context: PluginHostContext,
+): void {
+  element.pluginSlot = slot;
+  element.pluginContext = context;
+}
+
+function useResolvedPluginHostContext(context: PluginSlotContext): PluginHostContext {
+  const { locale } = useI18n();
+  const { data: session } = useQuery({
+    queryKey: queryKeys.auth.session,
+    queryFn: () => authApi.getSession(),
+  });
+  const userId = session?.user?.id ?? session?.session?.userId ?? null;
+
+  return useMemo(
+    () => slotContextToHostContext(context, userId, locale),
+    [context, locale, userId],
+  );
+}
+
 /**
  * Wrapper component that sets the active bridge context around plugin renders.
  *
@@ -702,23 +724,13 @@ function slotContextToHostContext(
  */
 function PluginBridgeScope({
   pluginId,
-  context,
+  hostContext,
   children,
 }: {
   pluginId: string;
-  context: PluginSlotContext;
+  hostContext: PluginHostContext;
   children: ReactNode;
 }) {
-  const { locale } = useI18n();
-  const { data: session } = useQuery({
-    queryKey: queryKeys.auth.session,
-    queryFn: () => authApi.getSession(),
-  });
-  const userId = session?.user?.id ?? session?.session?.userId ?? null;
-  const hostContext = useMemo(
-    () => slotContextToHostContext(context, userId, locale),
-    [context, locale, userId],
-  );
   const value = useMemo(() => ({ pluginId, hostContext }), [pluginId, hostContext]);
 
   return (
@@ -736,6 +748,7 @@ export function PluginSlotMount({
 }: PluginSlotMountProps) {
   const [, forceRerender] = useState(0);
   const component = resolveRegisteredComponent(slot);
+  const hostContext = useResolvedPluginHostContext(context);
 
   useEffect(() => {
     if (component) return;
@@ -764,10 +777,10 @@ export function PluginSlotMount({
   }
 
   if (component.kind === "react") {
-    const node = createElement(component.component, { slot, context });
+    const node = createElement(component.component, { slot, context: hostContext });
     return (
       <PluginSlotErrorBoundary slot={slot} className={className}>
-        <PluginBridgeScope pluginId={slot.pluginId} context={context}>
+        <PluginBridgeScope pluginId={slot.pluginId} hostContext={hostContext}>
           {className ? <div className={className}>{node}</div> : node}
         </PluginBridgeScope>
       </PluginSlotErrorBoundary>
@@ -779,7 +792,7 @@ export function PluginSlotMount({
       <PluginWebComponentMount
         tagName={component.tagName}
         slot={slot}
-        context={context}
+        context={hostContext}
         className={className}
       />
     </PluginSlotErrorBoundary>
@@ -856,6 +869,34 @@ export function _resetPluginModuleLoader(): void {
   for (const key of Object.keys(shimBlobUrls)) {
     delete shimBlobUrls[key];
   }
+}
+
+/**
+ * Resolve a partial slot input into the full host context expected by plugin UI.
+ * Only use in tests.
+ * @internal
+ */
+export function _slotContextToHostContext(
+  pluginSlotContext: PluginSlotContext,
+  userId: string | null,
+  locale: PluginHostContext["locale"],
+): PluginHostContext {
+  return slotContextToHostContext(pluginSlotContext, userId, locale);
+}
+
+/**
+ * Attach bridge metadata to a custom element. Only use in tests.
+ * @internal
+ */
+export function _applyPluginElementBridgeContext(
+  element: HTMLElement & {
+    pluginSlot?: ResolvedPluginSlot;
+    pluginContext?: PluginHostContext;
+  },
+  slot: ResolvedPluginSlot,
+  context: PluginHostContext,
+): void {
+  applyPluginElementBridgeContext(element, slot, context);
 }
 
 export const _applyJsxRuntimeKeyForTests = applyJsxRuntimeKey;
