@@ -242,6 +242,7 @@ export const APPROVAL_TYPES = [
   "publish_content",
   "install_company_skill",
   "install_connector_plugin",
+  "configure_plugin_company_settings",
 ] as const;
 export type ApprovalType = (typeof APPROVAL_TYPES)[number];
 

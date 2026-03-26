@@ -6,7 +6,7 @@ import {
 } from "./install-approval-drafts";
 import { buildInstallApprovalPrefillPath } from "./install-approval-prefill";
 
-export const TELEGRAM_CONNECTOR_PLUGIN_KEY = "paperclip.telegram-channel-connector";
+export const TELEGRAM_CONNECTOR_PLUGIN_KEY = "paperclip.telegram-publishing";
 
 export type OnboardingConnectorRecommendationStatus =
   | "available"

@@ -10,7 +10,10 @@ import { heartbeatService } from "./heartbeat.js";
 import { completeHireFollowUp } from "./hire-follow-up.js";
 import { notifyHireApproved } from "./hire-hook.js";
 import { instanceSettingsService } from "./instance-settings.js";
+import { issueApprovalService } from "./issue-approvals.js";
+import { pluginCompanySettingsService } from "./plugin-company-settings.js";
 import type { ManagedPluginInstallRequest } from "./plugin-installs.js";
+import { pluginRegistryService } from "./plugin-registry.js";
 
 export interface ApprovalServiceOptions {
   installConnectorPlugin?: (input: ManagedPluginInstallRequest) => Promise<unknown>;
@@ -22,8 +25,12 @@ export function approvalService(db: Db, options: ApprovalServiceOptions = {}) {
   const companySkills = companySkillService(db);
   const heartbeat = heartbeatService(db);
   const instanceSettings = instanceSettingsService(db);
+  const issueApprovals = issueApprovalService(db);
+  const pluginSettings = pluginCompanySettingsService(db);
+  const plugins = pluginRegistryService(db);
   const canResolveStatuses = new Set(["pending", "revision_requested"]);
   const resolvableStatuses = Array.from(canResolveStatuses);
+  const TELEGRAM_PUBLISHING_PLUGIN_KEY = "paperclip.telegram-publishing";
   type ApprovalRecord = typeof approvals.$inferSelect;
   type ResolutionResult = {
     approval: ApprovalRecord;
@@ -59,6 +66,12 @@ export function approvalService(db: Db, options: ApprovalServiceOptions = {}) {
         ? (error as { message: string }).message
         : "";
     return maybeStatus === 409 || maybeMessage.toLowerCase().includes("already installed");
+  }
+
+  async function resolvePluginForPayload(pluginKeyOrId: string) {
+    const byId = await plugins.getById(pluginKeyOrId);
+    if (byId) return byId;
+    return await plugins.getByKey(pluginKeyOrId);
   }
 
   async function getExistingApproval(id: string) {
@@ -174,6 +187,36 @@ export function approvalService(db: Db, options: ApprovalServiceOptions = {}) {
             throw error;
           }
         }
+      }
+
+      if (existing.type === "configure_plugin_company_settings") {
+        if (!canResolveStatuses.has(existing.status)) {
+          if (existing.status === "approved") {
+            return { approval: existing, applied: false };
+          }
+          throw unprocessable("Only pending or revision requested approvals can be approved");
+        }
+
+        const payload = existing.payload as Record<string, unknown>;
+        const pluginKeyOrId = firstNonEmptyString(payload.pluginId, payload.pluginKey);
+        const settingsJson =
+          payload.settingsJson && typeof payload.settingsJson === "object" && !Array.isArray(payload.settingsJson)
+            ? payload.settingsJson as Record<string, unknown>
+            : null;
+        if (!pluginKeyOrId || !settingsJson) {
+          throw unprocessable("Plugin settings approvals require pluginId/pluginKey and settingsJson");
+        }
+        const plugin = await resolvePluginForPayload(pluginKeyOrId);
+        if (!plugin) {
+          throw notFound("Plugin not found");
+        }
+        await pluginSettings.upsert({
+          pluginId: plugin.id,
+          companyId: existing.companyId,
+          enabled: typeof payload.enabled === "boolean" ? payload.enabled : true,
+          settingsJson,
+          lastError: null,
+        });
       }
 
       const { approval: updated, applied } = await resolveApproval(
@@ -311,6 +354,57 @@ export function approvalService(db: Db, options: ApprovalServiceOptions = {}) {
           await companySkills.installUpdate(updated.companyId, skillId);
         } else if (source) {
           await companySkills.importFromSource(updated.companyId, source);
+        }
+      }
+
+      if (applied && updated.type === "publish_content") {
+        const payload = updated.payload as Record<string, unknown>;
+        const pluginKeyOrId = firstNonEmptyString(payload.pluginKey, payload.pluginId);
+        if (pluginKeyOrId === TELEGRAM_PUBLISHING_PLUGIN_KEY) {
+          const plugin = await resolvePluginForPayload(pluginKeyOrId);
+          if (!plugin) {
+            throw notFound("Telegram Publishing plugin is not installed");
+          }
+          const linkedIssues = await issueApprovals.listIssuesForApproval(updated.id);
+          const issue = linkedIssues[0] ?? null;
+          const issueId = issue?.id ?? firstNonEmptyString(payload.issueId);
+          const destinationId = firstNonEmptyString(payload.destinationId);
+          if (!issueId || !destinationId) {
+            throw unprocessable("Telegram publish approvals require a linked issue and destinationId");
+          }
+          const publishAt = firstNonEmptyString(payload.publishAt) ?? new Date().toISOString();
+          const publicationJob = {
+            companyId: updated.companyId,
+            issueId,
+            approvalId: updated.id,
+            destinationId,
+            publishAt,
+            status: "pending",
+            attemptCount: 0,
+            lastAttemptAt: null,
+            failureReason: null,
+            publishedMessageId: null,
+            publishedUrl: null,
+            createdByUserId: updated.requestedByUserId,
+            createdByAgentId: updated.requestedByAgentId,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          } as Record<string, unknown>;
+          await plugins.upsertEntity(plugin.id, {
+            entityType: "telegram-publication-job",
+            scopeKind: "issue",
+            scopeId: issueId,
+            externalId: `approval:${updated.id}:${destinationId}`,
+            title:
+              firstNonEmptyString(
+                payload.destinationLabel,
+                payload.channel,
+                issue?.identifier,
+                issue?.title,
+              ) ?? "Telegram publication job",
+            status: "pending",
+            data: publicationJob,
+          });
         }
       }
 

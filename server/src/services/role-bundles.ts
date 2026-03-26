@@ -5,7 +5,7 @@ import type {
   RoleBundleKey,
 } from "@paperclipai/shared";
 import { resolveRoleBundleSkillRequirement } from "./role-bundle-skills.js";
-import { listBundledPluginExamples } from "./plugin-example-catalog.js";
+import { listBundledProductPlugins } from "./plugin-example-catalog.js";
 
 export interface RoleBundleConnectorRequirement {
   key: string;
@@ -80,14 +80,13 @@ function dedupe(values: string[]) {
   return Array.from(new Set(values));
 }
 
-const BUNDLED_CONNECTOR_EXAMPLES = listBundledPluginExamples()
-  .filter((plugin) => plugin.categories.includes("connector"));
+const BUNDLED_PRODUCT_PLUGINS = listBundledProductPlugins();
 
 function bundledConnectorSuggestion(
   pluginKey: string,
   reason: string,
 ): RoleBundleConnectorRequirement {
-  const example = BUNDLED_CONNECTOR_EXAMPLES.find((plugin) => plugin.pluginKey === pluginKey);
+  const example = BUNDLED_PRODUCT_PLUGINS.find((plugin) => plugin.pluginKey === pluginKey);
   if (!example) {
     return {
       key: pluginKey,
@@ -331,12 +330,12 @@ export const ROLE_BUNDLES: Record<RoleBundleKey, RoleBundleDefinition> = {
     requiredConnectorPlugins: [],
     suggestedConnectorPlugins: [
       bundledConnectorSuggestion(
-        "paperclip-kitchen-sink-example",
-        "Useful sandbox for prototyping connector, automation, and workspace flows before committing to a dedicated integration.",
+        "paperclip.telegram-publishing",
+        "Install when the company needs a real Telegram publishing queue with ready-for-approval content instead of manual channel handoff.",
       ),
       bundledConnectorSuggestion(
-        "paperclip.telegram-channel-connector",
-        "Recommended when the company needs a real Telegram publishing path instead of ad hoc channel links and manual handoff.",
+        "paperclip.telegram-operator-bot",
+        "Install when operators need a Telegram inbox for tasks, approvals, joins, and budget incidents.",
       ),
     ],
     managedInstructions: ["AGENTS.md"],
@@ -419,16 +418,20 @@ export const ROLE_BUNDLES: Record<RoleBundleKey, RoleBundleDefinition> = {
     requiredConnectorPlugins: [],
     suggestedConnectorPlugins: [
       bundledConnectorSuggestion(
-        "paperclip-kitchen-sink-example",
-        "Good default sandbox when this role needs to validate a new connector or automation path before asking for a bespoke plugin.",
+        "paperclip.telegram-publishing",
+        "Useful for PM-led editorial planning when Telegram channel workflows need a visible publishing control plane.",
       ),
       bundledConnectorSuggestion(
-        "paperclip.telegram-channel-connector",
-        "Useful for PM-led content and distribution planning when Telegram channel workflows need a visible control-plane surface.",
+        "paperclip.telegram-operator-bot",
+        "Useful when PMs want Telegram inbox visibility for approvals, joins, and blocked execution without opening the full board.",
       ),
       bundledConnectorSuggestion(
-        "paperclipai.plugin-authoring-smoke-example",
-        "Minimal connector starter for cases where the company needs a small custom integration and wants a safe local install path first.",
+        "paperclip.author-voice-profiles",
+        "Install to capture channel-specific author voice, banned phrases, and CTA constraints before GPT-driven rewrites go live.",
+      ),
+      bundledConnectorSuggestion(
+        "paperclip.feed-sources",
+        "Useful when PMs need a simple editorial intake surface for recurring RSS, Atom, or web sources.",
       ),
     ],
     managedInstructions: ["AGENTS.md"],
@@ -488,18 +491,22 @@ export const ROLE_BUNDLES: Record<RoleBundleKey, RoleBundleDefinition> = {
     ]),
     requiredConnectorPlugins: [
       bundledConnectorSuggestion(
-        "paperclip.telegram-channel-connector",
-        "Content and channel workflows should install the Telegram connector before this role starts faking external publishing integrations.",
+        "paperclip.telegram-publishing",
+        "Content workflows should install Telegram Publishing before this role starts faking external distribution or approval queues.",
+      ),
+      bundledConnectorSuggestion(
+        "paperclip.author-voice-profiles",
+        "Telegram Publishing should not ship without a per-channel author profile that captures voice, banned phrases, and CTA rules.",
       ),
     ],
     suggestedConnectorPlugins: [
       bundledConnectorSuggestion(
-        "paperclip-kitchen-sink-example",
-        "Helps prototype connector-backed publishing and automation flows before the team invests in a production channel integration.",
+        "paperclip.web-content-import",
+        "Lets operators turn a raw URL into clean source text before GPT-5.4 rewrites it into an approval-ready Telegram post.",
       ),
       bundledConnectorSuggestion(
-        "paperclipai.plugin-authoring-smoke-example",
-        "Keeps a minimal local connector authoring path available when the company needs a second, bespoke distribution integration after Telegram.",
+        "paperclip.feed-sources",
+        "Useful when donor feeds should land in the editorial queue without hand-copying source material.",
       ),
     ],
     managedInstructions: ["AGENTS.md"],

@@ -29,6 +29,7 @@ import { llmRoutes } from "./routes/llms.js";
 import { assetRoutes } from "./routes/assets.js";
 import { accessRoutes } from "./routes/access.js";
 import { pluginRoutes } from "./routes/plugins.js";
+import { telegramPublishingRoutes } from "./routes/telegram-publishing.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
 import { applyUiBranding } from "./ui-branding.js";
 import { logger } from "./middleware/logger.js";
@@ -46,6 +47,7 @@ import { setPluginEventBus } from "./services/activity-log.js";
 import { createPluginDevWatcher } from "./services/plugin-dev-watcher.js";
 import { createPluginHostServiceCleanup } from "./services/plugin-host-service-cleanup.js";
 import { installManagedPlugin } from "./services/plugin-installs.js";
+import { migrateLegacyTelegramPlugin } from "./services/legacy-telegram-plugin-migration.js";
 import { pluginRegistryService } from "./services/plugin-registry.js";
 import { createHostClientHandlers } from "@paperclipai/plugin-sdk";
 import type { BetterAuthSessionResult } from "./auth/better-auth.js";
@@ -227,6 +229,7 @@ export async function createApp(
       { workerManager },
     ),
   );
+  api.use(telegramPublishingRoutes(db));
   api.use(
     accessRoutes(db, {
       deploymentMode: opts.deploymentMode,
@@ -295,6 +298,7 @@ export async function createApp(
 
   app.use(errorHandler);
 
+  await migrateLegacyTelegramPlugin(db, loader, lifecycle);
   jobCoordinator.start();
   scheduler.start();
   void toolDispatcher.initialize().catch((err) => {

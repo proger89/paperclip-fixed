@@ -36,14 +36,20 @@ import {
   localizePluginManifest,
   resolveLocalizedText,
 } from "@paperclipai/shared";
+import { forbidden } from "../errors.js";
 import { pluginRegistryService } from "../services/plugin-registry.js";
 import { pluginLifecycleManager } from "../services/plugin-lifecycle.js";
 import { getPluginUiContributionMetadata, pluginLoader } from "../services/plugin-loader.js";
 import { logActivity } from "../services/activity-log.js";
 import { publishGlobalLiveEvent } from "../services/live-events.js";
 import { installManagedPlugin } from "../services/plugin-installs.js";
-import { listBundledPluginExamples } from "../services/plugin-example-catalog.js";
+import {
+  findBundledPluginCatalogEntry,
+  listBundledPluginExamples,
+} from "../services/plugin-example-catalog.js";
 import { pluginCompanySettingsService } from "../services/plugin-company-settings.js";
+import { agentService } from "../services/agents.js";
+import { secretService } from "../services/secrets.js";
 import type { PluginJobScheduler } from "../services/plugin-job-scheduler.js";
 import type { PluginJobStore } from "../services/plugin-job-store.js";
 import type { PluginWorkerManager } from "../services/plugin-worker-manager.js";
@@ -101,6 +107,47 @@ function localizePluginRecord<T extends {
     ...plugin,
     manifestJson: localizePluginManifest(plugin.manifestJson, locale),
   };
+}
+
+function sanitizeSecretNameSegment(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function defaultManagedSecretName(pluginKey: string, settingsPath: string) {
+  const pathSegment = settingsPath.split(".").filter(Boolean).at(-1) ?? "secret";
+  const pluginSegment = sanitizeSecretNameSegment(pluginKey) || "plugin";
+  const keySegment = sanitizeSecretNameSegment(pathSegment) || "secret";
+  return `${pluginSegment}-${keySegment}`;
+}
+
+function getNestedRecordValue(record: Record<string, unknown>, dotPath: string): unknown {
+  return dotPath
+    .split(".")
+    .filter(Boolean)
+    .reduce<unknown>((current, segment) => {
+      if (!current || typeof current !== "object" || Array.isArray(current)) return undefined;
+      return (current as Record<string, unknown>)[segment];
+    }, record);
+}
+
+function setNestedRecordValue(record: Record<string, unknown>, dotPath: string, value: unknown): Record<string, unknown> {
+  const segments = dotPath.split(".").filter(Boolean);
+  if (segments.length === 0) return record;
+  const clone = structuredClone(record);
+  let cursor: Record<string, unknown> = clone;
+  for (const segment of segments.slice(0, -1)) {
+    const next = cursor[segment];
+    if (!next || typeof next !== "object" || Array.isArray(next)) {
+      cursor[segment] = {};
+    }
+    cursor = cursor[segment] as Record<string, unknown>;
+  }
+  cursor[segments[segments.length - 1]!] = value;
+  return clone;
 }
 
 /** Request body for POST /api/plugins/install */
@@ -295,6 +342,54 @@ export function pluginRoutes(
     loader,
     workerManager: bridgeDeps?.workerManager ?? webhookDeps?.workerManager,
   });
+  const agents = agentService(db);
+  const secrets = secretService(db);
+
+  async function assertTrustedCompanyPluginManager(req: Request, companyId: string, pluginKey?: string | null) {
+    assertCompanyAccess(req, companyId);
+    if (req.actor.type === "board") return;
+    if (!req.actor.agentId) throw forbidden("Agent authentication required");
+
+    const actorAgent = await agents.getById(req.actor.agentId);
+    if (!actorAgent || actorAgent.companyId !== companyId) {
+      throw forbidden("Agent key cannot access another company");
+    }
+    if (actorAgent.role !== "ceo") {
+      throw forbidden("Only CEO agents can configure company plugins directly");
+    }
+    if (pluginKey) {
+      const trusted = findBundledPluginCatalogEntry(pluginKey);
+      if (!trusted) {
+        throw forbidden("Only trusted bundled or local catalog plugins can be configured directly");
+      }
+    }
+  }
+
+  async function assertTrustedPluginInstaller(req: Request, input: PluginInstallRequest) {
+    if (req.actor.type === "board") return;
+    if (!req.actor.agentId || !req.actor.companyId) {
+      throw forbidden("Only board users or same-company CEO agents can install plugins");
+    }
+
+    const actorAgent = await agents.getById(req.actor.agentId);
+    if (!actorAgent || actorAgent.companyId !== req.actor.companyId) {
+      throw forbidden("Agent key cannot install plugins for another company");
+    }
+    if (actorAgent.role !== "ceo") {
+      throw forbidden("Only CEO agents can install trusted bundled or local catalog plugins directly");
+    }
+
+    const trusted = listBundledPluginExamples().find((plugin) => {
+      if (input.isLocalPath === true) {
+        return path.resolve(plugin.localPath) === path.resolve(input.packageName);
+      }
+      return plugin.packageName === input.packageName;
+    });
+
+    if (!trusted) {
+      throw forbidden("Direct plugin install is limited to trusted bundled or local catalog plugins");
+    }
+  }
 
   async function resolvePluginAuditCompanyIds(req: Request): Promise<string[]> {
     if (typeof (db as { select?: unknown }).select === "function") {
@@ -602,11 +697,11 @@ export function pluginRoutes(
    * - `500` — installation succeeded but manifest is missing (indicates a loader bug)
    */
   router.post("/plugins/install", async (req, res) => {
-    assertBoard(req);
     const locale = getRequestUiLanguage(req);
     const { packageName, version, isLocalPath } = req.body as PluginInstallRequest;
 
     try {
+      await assertTrustedPluginInstaller(req, { packageName, version, isLocalPath });
       const { plugin, source } = await installManagedPlugin(db, loader, lifecycle, {
         packageName,
         version,
@@ -1595,16 +1690,15 @@ export function pluginRoutes(
    * Retrieve company-scoped settings for a plugin.
    */
   router.get("/companies/:companyId/plugins/:pluginId/settings", async (req, res) => {
-    assertBoard(req);
     const companyId = req.params.companyId as string;
     const { pluginId } = req.params;
-    assertCompanyAccess(req, companyId);
 
     const plugin = await resolvePlugin(registry, pluginId);
     if (!plugin) {
       res.status(404).json({ error: "Plugin not found" });
       return;
     }
+    await assertTrustedCompanyPluginManager(req, companyId, plugin.pluginKey);
 
     const row = await companySettings.get(plugin.id, companyId);
     if (!row) {
@@ -1625,16 +1719,15 @@ export function pluginRoutes(
    * Save company-scoped settings for a plugin.
    */
   router.post("/companies/:companyId/plugins/:pluginId/settings", async (req, res) => {
-    assertBoard(req);
     const companyId = req.params.companyId as string;
     const { pluginId } = req.params;
-    assertCompanyAccess(req, companyId);
 
     const plugin = await resolvePlugin(registry, pluginId);
     if (!plugin) {
       res.status(404).json({ error: "Plugin not found" });
       return;
     }
+    await assertTrustedCompanyPluginManager(req, companyId, plugin.pluginKey);
 
     const body = req.body as {
       enabled?: boolean;
@@ -1671,6 +1764,117 @@ export function pluginRoutes(
           pluginKey: plugin.pluginKey,
           enabled: result?.enabled ?? true,
           settingsKeyCount: Object.keys(body.settingsJson).length,
+        },
+      });
+
+      res.json(result
+        ? {
+            ...result,
+            createdAt: result.createdAt.toISOString(),
+            updatedAt: result.updatedAt.toISOString(),
+          }
+        : null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(400).json({ error: message });
+    }
+  });
+
+  router.post("/companies/:companyId/plugins/:pluginId/managed-secret", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    const { pluginId } = req.params;
+
+    const plugin = await resolvePlugin(registry, pluginId);
+    if (!plugin) {
+      res.status(404).json({ error: "Plugin not found" });
+      return;
+    }
+    await assertTrustedCompanyPluginManager(req, companyId, plugin.pluginKey);
+
+    const body = req.body as {
+      settingsPath?: string;
+      value?: string;
+      secretName?: string;
+      description?: string | null;
+    } | undefined;
+    const settingsPath =
+      typeof body?.settingsPath === "string" ? body.settingsPath.trim() : "";
+    const value = typeof body?.value === "string" ? body.value.trim() : "";
+    const description =
+      typeof body?.description === "string" ? body.description.trim() : null;
+    const secretName = typeof body?.secretName === "string" ? body.secretName.trim() : "";
+
+    if (!settingsPath) {
+      res.status(400).json({ error: '"settingsPath" is required' });
+      return;
+    }
+    if (!value) {
+      res.status(400).json({ error: '"value" is required' });
+      return;
+    }
+
+    try {
+      const existingSettings = await companySettings.get(plugin.id, companyId);
+      const currentSettings =
+        existingSettings?.settingsJson && typeof existingSettings.settingsJson === "object" && !Array.isArray(existingSettings.settingsJson)
+          ? existingSettings.settingsJson as Record<string, unknown>
+          : {};
+      const currentSecretRef = getNestedRecordValue(currentSettings, settingsPath);
+      const actor = getActorInfo(req);
+      let secret = null;
+      if (typeof currentSecretRef === "string" && currentSecretRef.trim().length > 0) {
+        const existingSecret = await secrets.getById(currentSecretRef.trim());
+        if (existingSecret && existingSecret.companyId === companyId) {
+          secret = await secrets.rotate(existingSecret.id, { value }, {
+            userId: actor.actorType === "user" ? actor.actorId : null,
+            agentId: actor.agentId,
+          });
+        }
+      }
+      if (!secret) {
+        const desiredName = secretName || defaultManagedSecretName(plugin.pluginKey, settingsPath);
+        const byName = await secrets.getByName(companyId, desiredName);
+        if (byName) {
+          secret = await secrets.rotate(byName.id, { value }, {
+            userId: actor.actorType === "user" ? actor.actorId : null,
+            agentId: actor.agentId,
+          });
+        } else {
+          secret = await secrets.create(companyId, {
+            name: desiredName,
+            provider: "local_encrypted",
+            value,
+            description: description ?? `Managed secret for ${plugin.pluginKey}:${settingsPath}`,
+          }, {
+            userId: actor.actorType === "user" ? actor.actorId : null,
+            agentId: actor.agentId,
+          });
+        }
+      }
+
+      const nextSettings = setNestedRecordValue(currentSettings, settingsPath, secret.id);
+      const result = await companySettings.upsert({
+        pluginId: plugin.id,
+        companyId,
+        enabled: existingSettings?.enabled ?? true,
+        settingsJson: nextSettings,
+        lastError: existingSettings?.lastError ?? null,
+      });
+
+      await logActivity(db, {
+        companyId,
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        agentId: actor.agentId,
+        runId: actor.runId,
+        action: "plugin.company_settings.managed_secret_saved",
+        entityType: "plugin",
+        entityId: plugin.id,
+        details: {
+          pluginId: plugin.id,
+          pluginKey: plugin.pluginKey,
+          settingsPath,
+          secretId: secret.id,
         },
       });
 

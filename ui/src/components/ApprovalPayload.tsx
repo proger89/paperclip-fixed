@@ -1,4 +1,4 @@
-import { UserPlus, Lightbulb, ShieldAlert, ShieldCheck, Send, PlugZap, Workflow } from "lucide-react";
+import { UserPlus, Lightbulb, ShieldAlert, ShieldCheck, Send, PlugZap, Workflow, SlidersHorizontal } from "lucide-react";
 import { formatCents } from "../lib/utils";
 
 export const typeLabel: Record<string, string> = {
@@ -8,6 +8,7 @@ export const typeLabel: Record<string, string> = {
   publish_content: "Content Publication",
   install_company_skill: "Install Skill",
   install_connector_plugin: "Install Connector",
+  configure_plugin_company_settings: "Configure Plugin",
 };
 
 /** Build a contextual label for an approval, e.g. "Hire Agent: Designer" */
@@ -41,6 +42,7 @@ export const typeIcon: Record<string, typeof UserPlus> = {
   publish_content: Send,
   install_company_skill: Workflow,
   install_connector_plugin: PlugZap,
+  configure_plugin_company_settings: SlidersHorizontal,
 };
 
 export const defaultTypeIcon = ShieldCheck;
@@ -195,6 +197,27 @@ export function InstallConnectorPayload({ payload }: { payload: Record<string, u
   );
 }
 
+export function ConfigurePluginSettingsPayload({ payload }: { payload: Record<string, unknown> }) {
+  const settingsJson =
+    payload.settingsJson && typeof payload.settingsJson === "object" && !Array.isArray(payload.settingsJson)
+      ? payload.settingsJson as Record<string, unknown>
+      : null;
+
+  return (
+    <div className="mt-3 space-y-1.5 text-sm">
+      <PayloadField label="Plugin" value={payload.name ?? payload.pluginLabel ?? payload.pluginKey ?? payload.pluginId} />
+      <PayloadField label="Key" value={payload.pluginKey ?? payload.pluginId} />
+      <PayloadField label="Enabled" value={typeof payload.enabled === "boolean" ? String(payload.enabled) : null} />
+      <PayloadField label="Reason" value={payload.reason} />
+      {settingsJson ? (
+        <pre className="mt-2 rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground overflow-x-auto max-h-48">
+          {JSON.stringify(settingsJson, null, 2)}
+        </pre>
+      ) : null}
+    </div>
+  );
+}
+
 export function CeoStrategyPayload({ payload }: { payload: Record<string, unknown> }) {
   const plan = payload.plan ?? payload.description ?? payload.strategy ?? payload.text;
   return (
@@ -287,5 +310,6 @@ export function ApprovalPayloadRenderer({ type, payload }: { type: string; paylo
   if (type === "publish_content") return <PublishContentPayload payload={payload} />;
   if (type === "install_company_skill") return <InstallSkillPayload payload={payload} />;
   if (type === "install_connector_plugin") return <InstallConnectorPayload payload={payload} />;
+  if (type === "configure_plugin_company_settings") return <ConfigurePluginSettingsPayload payload={payload} />;
   return <CeoStrategyPayload payload={payload} />;
 }
