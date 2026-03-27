@@ -880,7 +880,7 @@ describe("telegram channel connector plugin", () => {
           requestedByAgentId: null,
           requestedByUserId: "user-1",
           status: "revision_requested",
-          payload: { packageName: "@paperclipai/plugin-telegram-channel-connector" },
+          payload: { packageName: "@paperclipai/plugin-telegram-operator-bot" },
           decisionNote: "Need approval context",
           decidedByUserId: "user-2",
           decidedAt: new Date("2026-03-25T08:21:00.000Z"),

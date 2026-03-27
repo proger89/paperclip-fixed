@@ -8,6 +8,7 @@ import {
 import { ACTION_KEYS, PAGE_ROUTE, PLUGIN_ID } from "../constants.js";
 
 type Locale = "en" | "ru";
+
 type LinkedChat = {
   chatId: string;
   username: string | null;
@@ -16,6 +17,7 @@ type LinkedChat = {
   linkedAt: string;
   revokedAt: string | null;
 };
+
 type Overview = {
   settings: {
     publishing: { botTokenSecretRef: string };
@@ -41,25 +43,91 @@ type Overview = {
   actionableApprovalCount: number;
   myRevisionApprovalCount: number;
 };
+
 type LinkCodeResult = { code: string; expiresAt: string; startCommand: string };
 
-const stack: CSSProperties = { display: "grid", gap: 16 };
+const surface: CSSProperties = { display: "grid", gap: 18 };
+const section: CSSProperties = {
+  border: "1px solid var(--border)",
+  borderRadius: 18,
+  padding: 18,
+  background: "var(--card, transparent)",
+  display: "grid",
+  gap: 14,
+};
+const panel: CSSProperties = {
+  border: "1px solid var(--border)",
+  borderRadius: 14,
+  padding: 14,
+  display: "grid",
+  gap: 12,
+};
 const row: CSSProperties = { display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" };
-const card: CSSProperties = { border: "1px solid var(--border)", borderRadius: 14, padding: 16, background: "var(--card, transparent)" };
-const input: CSSProperties = { width: "100%", border: "1px solid var(--border)", borderRadius: 10, background: "transparent", color: "inherit", padding: "9px 11px", fontSize: 12 };
-const button: CSSProperties = { appearance: "none", border: "1px solid var(--border)", borderRadius: 999, background: "transparent", color: "inherit", padding: "8px 14px", fontSize: 12, cursor: "pointer" };
-const primary: CSSProperties = { ...button, background: "var(--foreground)", borderColor: "var(--foreground)", color: "var(--background)" };
-const muted: CSSProperties = { fontSize: 12, opacity: 0.72, lineHeight: 1.45 };
-const danger: CSSProperties = { ...muted, color: "var(--destructive, #c00)", opacity: 1 };
+const statCard: CSSProperties = {
+  border: "1px solid var(--border)",
+  borderRadius: 14,
+  padding: 14,
+  minWidth: 140,
+  display: "grid",
+  gap: 6,
+};
+const input: CSSProperties = {
+  width: "100%",
+  border: "1px solid var(--border)",
+  borderRadius: 12,
+  background: "transparent",
+  color: "inherit",
+  padding: "10px 12px",
+  fontSize: 13,
+};
+const button: CSSProperties = {
+  appearance: "none",
+  border: "1px solid var(--border)",
+  borderRadius: 999,
+  background: "transparent",
+  color: "inherit",
+  padding: "9px 15px",
+  fontSize: 12,
+  cursor: "pointer",
+  textDecoration: "none",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+const primary: CSSProperties = {
+  ...button,
+  background: "var(--foreground)",
+  borderColor: "var(--foreground)",
+  color: "var(--background)",
+};
+const muted: CSSProperties = { fontSize: 12, opacity: 0.72, lineHeight: 1.5 };
+const label: CSSProperties = { fontSize: 12, fontWeight: 600, opacity: 0.8 };
+const danger: CSSProperties = { fontSize: 12, color: "var(--destructive, #d22)", lineHeight: 1.5 };
+const pill: CSSProperties = {
+  border: "1px solid var(--border)",
+  borderRadius: 999,
+  padding: "5px 10px",
+  fontSize: 11,
+  opacity: 0.9,
+};
 
-const t = (locale: Locale, en: string, ru: string) => (locale === "ru" ? ru : en);
-const fmt = (locale: Locale, value: string | null | undefined) => {
+function tr(locale: Locale, en: string, ru: string) {
+  return locale === "ru" ? ru : en;
+}
+
+function formatDate(locale: Locale, value: string | null | undefined) {
   if (!value) return "-";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(parsed);
-};
-const href = (prefix: string | null) => (prefix ? `/${prefix}/${PAGE_ROUTE}` : "#");
+  return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(parsed);
+}
+
+function pageHref(prefix: string | null | undefined) {
+  return prefix ? `/${prefix}/${PAGE_ROUTE}` : "#";
+}
 
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -71,33 +139,78 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
     try {
       const payload = await response.json() as { error?: string };
       if (payload.error) message = payload.error;
-    } catch {}
+    } catch {
+      // ignore
+    }
     throw new Error(message);
   }
   return response.json() as Promise<T>;
 }
 
-function Surface({ companyId, companyPrefix, locale }: { companyId: string | null; companyPrefix: string | null; locale: Locale }) {
+function LinkedChatsSection({
+  locale,
+  chats,
+  onRevoke,
+}: {
+  locale: Locale;
+  chats: LinkedChat[];
+  onRevoke: (chatId: string) => Promise<void>;
+}) {
+  if (chats.length === 0) {
+    return <div style={muted}>{tr(locale, "No linked private chats yet.", "Пока нет привязанных приватных чатов.")}</div>;
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      {chats.map((chat) => (
+        <div key={chat.chatId} style={panel}>
+          <div style={{ ...row, justifyContent: "space-between" }}>
+            <div style={{ display: "grid", gap: 6 }}>
+              <strong>{chat.displayName}</strong>
+              <div style={muted}>
+                {chat.username ? `@${chat.username} · ` : ""}{chat.chatId} · {formatDate(locale, chat.linkedAt)}
+              </div>
+            </div>
+            <button type="button" style={button} onClick={() => void onRevoke(chat.chatId)}>
+              {tr(locale, "Revoke", "Отвязать")}
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function OperatorSurface({
+  companyId,
+  companyPrefix,
+  locale,
+}: {
+  companyId: string | null;
+  companyPrefix: string | null;
+  locale: Locale;
+}) {
   const toast = usePluginToast();
   const generateLinkCode = usePluginAction(ACTION_KEYS.generateLinkCode);
   const revokeLinkedChat = usePluginAction(ACTION_KEYS.revokeLinkedChat);
+
   const [overview, setOverview] = useState<Overview | null>(null);
   const [token, setToken] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [savingToken, setSavingToken] = useState(false);
-  const [savingSettings, setSavingSettings] = useState(false);
   const [lastLinkCode, setLastLinkCode] = useState<LinkCodeResult | null>(null);
   const [settingsDraft, setSettingsDraft] = useState({
     enabled: false,
     pollingEnabled: true,
     notificationMode: "fallback_all_linked" as "linked_only" | "fallback_all_linked",
   });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [savingToken, setSavingToken] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
 
   const load = async () => {
     if (!companyId) {
-      setLoading(false);
       setOverview(null);
+      setLoading(false);
       return;
     }
     setLoading(true);
@@ -121,7 +234,7 @@ function Surface({ companyId, companyPrefix, locale }: { companyId: string | nul
     void load();
   }, [companyId]);
 
-  async function saveManagedToken() {
+  async function saveToken() {
     if (!companyId || !token.trim()) return;
     setSavingToken(true);
     try {
@@ -135,10 +248,18 @@ function Surface({ companyId, companyPrefix, locale }: { companyId: string | nul
         }),
       });
       setToken("");
-      toast({ title: t(locale, "Bot token saved", "Токен сохранен"), body: t(locale, "Stored as a company-managed secret.", "Сохранен как company-managed secret."), tone: "success" });
+      toast({
+        title: tr(locale, "Operator bot token saved", "Токен operator bot сохранен"),
+        body: tr(locale, "Stored as a company secret.", "Сохранен как секрет компании."),
+        tone: "success",
+      });
       await load();
     } catch (nextError) {
-      toast({ title: t(locale, "Failed to save token", "Не удалось сохранить токен"), body: nextError instanceof Error ? nextError.message : String(nextError), tone: "error" });
+      toast({
+        title: tr(locale, "Failed to save token", "Не удалось сохранить токен"),
+        body: nextError instanceof Error ? nextError.message : String(nextError),
+        tone: "error",
+      });
     } finally {
       setSavingToken(false);
     }
@@ -163,10 +284,17 @@ function Surface({ companyId, companyPrefix, locale }: { companyId: string | nul
           },
         }),
       });
-      toast({ title: t(locale, "Operator settings saved", "Настройки operator bot сохранены"), tone: "success" });
+      toast({
+        title: tr(locale, "Operator bot settings saved", "Настройки operator bot сохранены"),
+        tone: "success",
+      });
       await load();
     } catch (nextError) {
-      toast({ title: t(locale, "Failed to save settings", "Не удалось сохранить настройки"), body: nextError instanceof Error ? nextError.message : String(nextError), tone: "error" });
+      toast({
+        title: tr(locale, "Failed to save settings", "Не удалось сохранить настройки"),
+        body: nextError instanceof Error ? nextError.message : String(nextError),
+        tone: "error",
+      });
     } finally {
       setSavingSettings(false);
     }
@@ -177,10 +305,18 @@ function Surface({ companyId, companyPrefix, locale }: { companyId: string | nul
     try {
       const result = await generateLinkCode({ companyId }) as LinkCodeResult;
       setLastLinkCode(result);
-      toast({ title: t(locale, "Link code created", "Link code создан"), body: result.startCommand, tone: "success" });
+      toast({
+        title: tr(locale, "Link code created", "Link code создан"),
+        body: result.startCommand,
+        tone: "success",
+      });
       await load();
     } catch (nextError) {
-      toast({ title: t(locale, "Failed to create link code", "Не удалось создать link code"), body: nextError instanceof Error ? nextError.message : String(nextError), tone: "error" });
+      toast({
+        title: tr(locale, "Failed to create link code", "Не удалось создать link code"),
+        body: nextError instanceof Error ? nextError.message : String(nextError),
+        tone: "error",
+      });
     }
   }
 
@@ -188,120 +324,234 @@ function Surface({ companyId, companyPrefix, locale }: { companyId: string | nul
     if (!companyId) return;
     try {
       await revokeLinkedChat({ companyId, chatId });
-      toast({ title: t(locale, "Chat revoked", "Чат отвязан"), tone: "success" });
+      toast({
+        title: tr(locale, "Chat revoked", "Чат отвязан"),
+        tone: "success",
+      });
       await load();
     } catch (nextError) {
-      toast({ title: t(locale, "Failed to revoke chat", "Не удалось отвязать чат"), body: nextError instanceof Error ? nextError.message : String(nextError), tone: "error" });
+      toast({
+        title: tr(locale, "Failed to revoke chat", "Не удалось отвязать чат"),
+        body: nextError instanceof Error ? nextError.message : String(nextError),
+        tone: "error",
+      });
     }
   }
 
-  if (!companyId) return <div style={muted}>{t(locale, "Company context is required.", "Нужен контекст компании.")}</div>;
-  if (loading) return <div style={muted}>{t(locale, "Loading Telegram Operator Bot...", "Загрузка Telegram Operator Bot...")}</div>;
+  if (!companyId) return <div style={muted}>{tr(locale, "Company context is required.", "Нужен контекст компании.")}</div>;
+  if (loading) return <div style={muted}>{tr(locale, "Loading Telegram Operator Bot...", "Загрузка Telegram Operator Bot...")}</div>;
   if (error) return <div style={danger}>{error}</div>;
   if (!overview) return null;
 
   return (
-    <div style={stack}>
-      <div style={card}>
+    <div style={surface}>
+      <section style={section}>
         <div style={{ ...row, justifyContent: "space-between" }}>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>{t(locale, "Telegram Operator Bot", "Telegram Operator Bot")}</div>
-            <div style={{ ...muted, marginTop: 8 }}>{t(locale, "Private-chat control plane only: tasks, approvals, joins, budgets, replies, and wakeups.", "Только private-chat control plane: задачи, approvals, joins, budgets, replies и wakeups.")}</div>
+            <div style={{ fontSize: 18, fontWeight: 700 }}>{tr(locale, "Telegram Operator Bot", "Telegram Operator Bot")}</div>
+            <div style={muted}>
+              {tr(
+                locale,
+                "Private-chat bot for tasks, approvals, joins, budgets, and replies through getUpdates polling.",
+                "Приватный бот для задач, approvals, joins, budgets и replies через getUpdates polling.",
+              )}
+            </div>
           </div>
-          <a href={href(companyPrefix)} style={{ ...button, textDecoration: "none" }}>{t(locale, "Open page", "Открыть страницу")}</a>
+          {companyPrefix ? (
+            <a href={pageHref(companyPrefix)} style={button}>
+              {tr(locale, "Open bot page", "Открыть страницу бота")}
+            </a>
+          ) : null}
         </div>
-        <div style={{ ...row, marginTop: 14 }}>
-          <div style={card}><strong>{overview.blockedTaskCount}</strong><div style={muted}>{t(locale, "Blocked tasks", "Блокеры")}</div></div>
-          <div style={card}><strong>{overview.reviewTaskCount}</strong><div style={muted}>{t(locale, "In review", "На ревью")}</div></div>
-          <div style={card}><strong>{overview.actionableApprovalCount}</strong><div style={muted}>{t(locale, "Approvals", "Approvals")}</div></div>
-        </div>
-      </div>
 
-      <div style={card}>
-        <div style={{ fontSize: 14, fontWeight: 600 }}>{t(locale, "Bot token", "Токен бота")}</div>
-        <div style={{ ...row, marginTop: 12 }}>
-          <input type="password" style={{ ...input, flex: 1 }} value={token} onChange={(event) => setToken(event.target.value)} placeholder="123456:ABCDEF..." />
-          <button type="button" style={primary} disabled={savingToken || !token.trim()} onClick={() => void saveManagedToken()}>{savingToken ? "..." : t(locale, "Save token", "Сохранить токен")}</button>
+        <div style={row}>
+          <div style={statCard}>
+            <strong>{overview.linkedChats.length}</strong>
+            <div style={muted}>{tr(locale, "Linked chats", "Связанные чаты")}</div>
+          </div>
+          <div style={statCard}>
+            <strong>{overview.actionableApprovalCount}</strong>
+            <div style={muted}>{tr(locale, "Approvals", "Approvals")}</div>
+          </div>
+          <div style={statCard}>
+            <strong>{overview.blockedTaskCount}</strong>
+            <div style={muted}>{tr(locale, "Blocked tasks", "Блокеры")}</div>
+          </div>
+          <div style={statCard}>
+            <strong>{overview.reviewTaskCount}</strong>
+            <div style={muted}>{tr(locale, "In review", "На ревью")}</div>
+          </div>
         </div>
-        <div style={{ ...muted, marginTop: 8 }}>
-          {overview.settings.publishing.botTokenSecretRef ? t(locale, "Stored in company secrets.", "Сохранен в company secrets.") : t(locale, "No token stored yet.", "Токен пока не сохранен.")}
-        </div>
-      </div>
 
-      <div style={card}>
-        <div style={{ fontSize: 14, fontWeight: 600 }}>{t(locale, "Operator controls", "Управление ботом")}</div>
-        <div style={{ ...stack, marginTop: 12 }}>
+        <div style={row}>
+          <span style={pill}>
+            {overview.settings.taskBot.enabled
+              ? tr(locale, "Bot enabled", "Бот включен")
+              : tr(locale, "Bot disabled", "Бот выключен")}
+          </span>
+          <span style={pill}>
+            {overview.settings.publishing.botTokenSecretRef
+              ? tr(locale, "Token connected", "Токен подключен")
+              : tr(locale, "Token missing", "Нет токена")}
+          </span>
+          <span style={pill}>
+            {overview.settings.taskBot.pollingEnabled
+              ? tr(locale, "Polling on", "Polling включен")
+              : tr(locale, "Polling off", "Polling выключен")}
+          </span>
+        </div>
+
+        {overview.botHealth?.error ? <div style={danger}>{overview.botHealth.error}</div> : null}
+      </section>
+
+      <section style={section}>
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>{tr(locale, "Bot setup", "Настройка бота")}</div>
+          <div style={muted}>
+            {tr(
+              locale,
+              "Save the operator bot token, then enable polling and notifications.",
+              "Сохрани токен operator bot, затем включи polling и уведомления.",
+            )}
+          </div>
+        </div>
+
+        <div style={panel}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>{tr(locale, "Bot token", "Токен бота")}</div>
+          <div style={muted}>
+            {overview.settings.publishing.botTokenSecretRef
+              ? tr(locale, "Token is already stored in company secrets.", "Токен уже сохранен в секретах компании.")
+              : tr(locale, "No token stored yet.", "Токен еще не сохранен.")}
+          </div>
+          <div style={row}>
+            <input
+              type="password"
+              style={{ ...input, flex: 1, minWidth: 220 }}
+              value={token}
+              onChange={(event) => setToken(event.target.value)}
+              placeholder="123456:ABCDEF..."
+            />
+            <button type="button" style={primary} disabled={!token.trim() || savingToken} onClick={() => void saveToken()}>
+              {savingToken ? "..." : tr(locale, "Save token", "Сохранить токен")}
+            </button>
+          </div>
+        </div>
+
+        <div style={panel}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>{tr(locale, "Operator controls", "Управление ботом")}</div>
           <label style={{ ...row, fontSize: 12 }}>
-            <input type="checkbox" checked={settingsDraft.enabled} onChange={(event) => setSettingsDraft((current) => ({ ...current, enabled: event.target.checked }))} />
-            {t(locale, "Enable operator bot", "Включить operator bot")}
+            <input
+              type="checkbox"
+              checked={settingsDraft.enabled}
+              onChange={(event) => setSettingsDraft((current) => ({ ...current, enabled: event.target.checked }))}
+            />
+            {tr(locale, "Enable operator bot", "Включить operator bot")}
           </label>
           <label style={{ ...row, fontSize: 12 }}>
-            <input type="checkbox" checked={settingsDraft.pollingEnabled} onChange={(event) => setSettingsDraft((current) => ({ ...current, pollingEnabled: event.target.checked }))} />
-            {t(locale, "Enable polling", "Включить polling")}
+            <input
+              type="checkbox"
+              checked={settingsDraft.pollingEnabled}
+              onChange={(event) => setSettingsDraft((current) => ({ ...current, pollingEnabled: event.target.checked }))}
+            />
+            {tr(locale, "Enable polling", "Включить polling")}
           </label>
-          <label style={stack}>
-            <span style={{ fontSize: 12 }}>{t(locale, "Notification mode", "Режим уведомлений")}</span>
-            <select style={input} value={settingsDraft.notificationMode} onChange={(event) => setSettingsDraft((current) => ({ ...current, notificationMode: event.target.value as Overview["settings"]["taskBot"]["notificationMode"] }))}>
+          <div style={{ display: "grid", gap: 6 }}>
+            <div style={label}>{tr(locale, "Notification mode", "Режим уведомлений")}</div>
+            <select
+              style={input}
+              value={settingsDraft.notificationMode}
+              onChange={(event) =>
+                setSettingsDraft((current) => ({
+                  ...current,
+                  notificationMode: event.target.value as "linked_only" | "fallback_all_linked",
+                }))}
+            >
               <option value="fallback_all_linked">fallback_all_linked</option>
               <option value="linked_only">linked_only</option>
             </select>
-          </label>
-          <button type="button" style={primary} disabled={savingSettings} onClick={() => void saveSettings()}>{savingSettings ? "..." : t(locale, "Save settings", "Сохранить настройки")}</button>
-        </div>
-      </div>
-
-      <div style={card}>
-        <div style={{ ...row, justifyContent: "space-between" }}>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>{t(locale, "Linked chats", "Связанные чаты")}</div>
-            <div style={{ ...muted, marginTop: 8 }}>{t(locale, "Generate a one-time /start code for a private Telegram chat, then revoke chats if needed.", "Сгенерируй одноразовый /start code для private Telegram chat и при необходимости отвяжи чат.")}</div>
           </div>
-          <button type="button" style={button} onClick={() => void createLinkCode()}>{t(locale, "Generate link code", "Сгенерировать link code")}</button>
+          <button type="button" style={primary} disabled={savingSettings} onClick={() => void saveSettings()}>
+            {savingSettings ? "..." : tr(locale, "Save settings", "Сохранить настройки")}
+          </button>
         </div>
+      </section>
+
+      <section style={section}>
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>{tr(locale, "Linked chats", "Связанные чаты")}</div>
+          <div style={muted}>
+            {tr(
+              locale,
+              "Generate a one-time /start code for your private Telegram chat, then revoke chats if needed.",
+              "Сгенерируй одноразовый /start code для приватного Telegram-чата и при необходимости отвяжи чат.",
+            )}
+          </div>
+        </div>
+
+        <div style={row}>
+          <button type="button" style={primary} onClick={() => void createLinkCode()}>
+            {tr(locale, "Generate link code", "Сгенерировать link code")}
+          </button>
+        </div>
+
         {lastLinkCode ? (
-          <div style={{ ...card, marginTop: 12, padding: 14 }}>
-            <div><strong>{lastLinkCode.code}</strong></div>
-            <div style={{ ...muted, marginTop: 6 }}>{lastLinkCode.startCommand}</div>
-            <div style={{ ...muted, marginTop: 6 }}>{fmt(locale, lastLinkCode.expiresAt)}</div>
+          <div style={panel}>
+            <strong>{lastLinkCode.code}</strong>
+            <div style={muted}>{lastLinkCode.startCommand}</div>
+            <div style={muted}>{tr(locale, "Expires", "Истекает")}: {formatDate(locale, lastLinkCode.expiresAt)}</div>
           </div>
         ) : null}
-        <div style={{ ...stack, marginTop: 12 }}>
-          {overview.linkedChats.length === 0 ? (
-            <div style={muted}>{t(locale, "No linked Telegram chats yet.", "Связанных Telegram-чатов пока нет.")}</div>
-          ) : overview.linkedChats.map((chat) => (
-            <div key={chat.chatId} style={{ ...card, padding: 14 }}>
-              <div style={{ ...row, justifyContent: "space-between" }}>
-                <div>
-                  <strong>{chat.displayName}</strong>
-                  <div style={{ ...muted, marginTop: 6 }}>
-                    {chat.username ? `@${chat.username} · ` : ""}{chat.chatId} · {fmt(locale, chat.linkedAt)}
-                  </div>
-                </div>
-                <button type="button" style={button} onClick={() => void revoke(chat.chatId)}>{t(locale, "Revoke", "Отвязать")}</button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
 
-      <div style={card}>
-        <div style={{ fontSize: 14, fontWeight: 600 }}>{t(locale, "Bot health", "Состояние бота")}</div>
-        <div style={{ ...stack, marginTop: 12 }}>
-          <div style={muted}>{t(locale, "Last update id", "Последний update id")}: {overview.botHealth?.lastUpdateId ?? "-"}</div>
-          <div style={muted}>{t(locale, "Last notification", "Последнее уведомление")}: {fmt(locale, overview.botHealth?.lastNotificationAt ?? null)}</div>
-          <div style={muted}>{t(locale, "Last control-plane notification", "Последнее control-plane уведомление")}: {fmt(locale, overview.botHealth?.lastControlPlaneNotificationAt ?? null)}</div>
-          <div style={muted}>{t(locale, "Revision approvals", "Revision approvals")}: {overview.myRevisionApprovalCount}</div>
-          {overview.botHealth?.error ? <div style={danger}>{overview.botHealth.error}</div> : null}
+        <LinkedChatsSection locale={locale} chats={overview.linkedChats} onRevoke={revoke} />
+      </section>
+
+      <section style={section}>
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>{tr(locale, "Bot health", "Состояние бота")}</div>
+          <div style={muted}>
+            {tr(
+              locale,
+              "This is the operator bot runtime health, not the publishing pipeline.",
+              "Это runtime health operator bot, а не publishing pipeline.",
+            )}
+          </div>
         </div>
-      </div>
+
+        <div style={row}>
+          <div style={statCard}>
+            <strong>{overview.botHealth?.lastUpdateId ?? "-"}</strong>
+            <div style={muted}>{tr(locale, "Last update id", "Последний update id")}</div>
+          </div>
+          <div style={statCard}>
+            <strong>{formatDate(locale, overview.botHealth?.lastNotificationAt ?? null)}</strong>
+            <div style={muted}>{tr(locale, "Last notification", "Последнее уведомление")}</div>
+          </div>
+          <div style={statCard}>
+            <strong>{overview.myRevisionApprovalCount}</strong>
+            <div style={muted}>{tr(locale, "Revision approvals", "Revision approvals")}</div>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
 
 export function TelegramOperatorSettingsPage({ context }: PluginSettingsPageProps) {
-  return <Surface companyId={context.companyId} companyPrefix={context.companyPrefix} locale={context.locale as Locale} />;
+  return (
+    <OperatorSurface
+      companyId={context.companyId}
+      companyPrefix={context.companyPrefix}
+      locale={context.locale as Locale}
+    />
+  );
 }
 
 export function TelegramOperatorPage({ context }: PluginPageProps) {
-  return <Surface companyId={context.companyId} companyPrefix={context.companyPrefix} locale={context.locale as Locale} />;
+  return (
+    <OperatorSurface
+      companyId={context.companyId}
+      companyPrefix={context.companyPrefix}
+      locale={context.locale as Locale}
+    />
+  );
 }

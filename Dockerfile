@@ -15,7 +15,11 @@ COPY packages/db/package.json packages/db/
 COPY packages/adapter-utils/package.json packages/adapter-utils/
 COPY packages/plugins/sdk/package.json packages/plugins/sdk/
 COPY packages/plugins/create-paperclip-plugin/package.json packages/plugins/create-paperclip-plugin/
-COPY packages/plugins/telegram-channel-connector/package.json packages/plugins/telegram-channel-connector/
+COPY packages/plugins/telegram-publishing/package.json packages/plugins/telegram-publishing/
+COPY packages/plugins/telegram-operator-bot/package.json packages/plugins/telegram-operator-bot/
+COPY packages/plugins/author-voice-profiles/package.json packages/plugins/author-voice-profiles/
+COPY packages/plugins/web-content-import/package.json packages/plugins/web-content-import/
+COPY packages/plugins/feed-sources/package.json packages/plugins/feed-sources/
 COPY packages/plugins/examples/plugin-hello-world-example/package.json packages/plugins/examples/plugin-hello-world-example/
 COPY packages/plugins/examples/plugin-file-browser-example/package.json packages/plugins/examples/plugin-file-browser-example/
 COPY packages/plugins/examples/plugin-kitchen-sink-example/package.json packages/plugins/examples/plugin-kitchen-sink-example/
@@ -42,7 +46,11 @@ RUN pnpm --filter @paperclipai/plugin-hello-world-example build
 RUN pnpm --filter @paperclipai/plugin-file-browser-example build
 RUN pnpm --filter @paperclipai/plugin-kitchen-sink-example build
 RUN pnpm --filter @paperclipai/plugin-authoring-smoke-example build
-RUN pnpm --filter @paperclipai/plugin-telegram-channel-connector build
+RUN pnpm --filter @paperclipai/plugin-telegram-publishing build
+RUN pnpm --filter @paperclipai/plugin-telegram-operator-bot build
+RUN pnpm --filter @paperclipai/plugin-author-voice-profiles build
+RUN pnpm --filter @paperclipai/plugin-web-content-import build
+RUN pnpm --filter @paperclipai/plugin-feed-sources build
 RUN pnpm --filter @paperclipai/server build
 RUN node scripts/verify-docker-runtime-build.mjs
 RUN test -f server/dist/index.js || (echo "ERROR: server build output missing" && exit 1)

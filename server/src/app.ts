@@ -47,7 +47,7 @@ import { setPluginEventBus } from "./services/activity-log.js";
 import { createPluginDevWatcher } from "./services/plugin-dev-watcher.js";
 import { createPluginHostServiceCleanup } from "./services/plugin-host-service-cleanup.js";
 import { installManagedPlugin } from "./services/plugin-installs.js";
-import { migrateLegacyTelegramPlugin } from "./services/legacy-telegram-plugin-migration.js";
+import { upgradeTelegramMonolithPlugin } from "./services/telegram-plugin-split-upgrade.js";
 import { pluginRegistryService } from "./services/plugin-registry.js";
 import { createHostClientHandlers } from "@paperclipai/plugin-sdk";
 import type { BetterAuthSessionResult } from "./auth/better-auth.js";
@@ -298,7 +298,7 @@ export async function createApp(
 
   app.use(errorHandler);
 
-  await migrateLegacyTelegramPlugin(db, loader, lifecycle);
+  await upgradeTelegramMonolithPlugin(db, loader, lifecycle);
   jobCoordinator.start();
   scheduler.start();
   void toolDispatcher.initialize().catch((err) => {

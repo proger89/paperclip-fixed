@@ -8,15 +8,15 @@ import type { PluginLoader } from "./plugin-loader.js";
 import { pluginRegistryService } from "./plugin-registry.js";
 import { pluginStateStore } from "./plugin-state-store.js";
 
-const LEGACY_PLUGIN_KEY = "paperclip.telegram-channel-connector";
+const MONOLITH_PLUGIN_KEY = "paperclip.telegram-channel-connector";
 const TELEGRAM_PUBLISHING_PLUGIN_KEY = "paperclip.telegram-publishing";
 const TELEGRAM_OPERATOR_PLUGIN_KEY = "paperclip.telegram-operator-bot";
-const LEGACY_PUBLISHING_ENTITY_TYPES = new Set([
+const MONOLITH_PUBLISHING_ENTITY_TYPES = new Set([
   "telegram-message",
   "telegram-publication-job",
   "telegram-source-message",
 ]);
-const LEGACY_OPERATOR_ENTITY_TYPES = new Set([
+const MONOLITH_OPERATOR_ENTITY_TYPES = new Set([
   "telegram-linked-chat",
   "telegram-claim-code",
   "telegram-thread-link",
@@ -32,7 +32,7 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function migratePublishingSettings(value: unknown) {
+function toPublishingSettings(value: unknown) {
   const next = asRecord(value);
   const taskBot = next.taskBot && typeof next.taskBot === "object" && !Array.isArray(next.taskBot)
     ? structuredClone(next.taskBot as Record<string, unknown>)
@@ -42,7 +42,7 @@ function migratePublishingSettings(value: unknown) {
   return next;
 }
 
-function migrateOperatorSettings(value: unknown) {
+function toOperatorSettings(value: unknown) {
   const next = asRecord(value);
   const publishing = next.publishing && typeof next.publishing === "object" && !Array.isArray(next.publishing)
     ? structuredClone(next.publishing as Record<string, unknown>)
@@ -64,7 +64,7 @@ function migrateOperatorSettings(value: unknown) {
   return next;
 }
 
-async function ensureLocalPluginInstalled(
+async function ensureSplitPluginInstalled(
   registry: ReturnType<typeof pluginRegistryService>,
   loader: PluginLoader,
   pluginKey: string,
@@ -75,11 +75,10 @@ async function ensureLocalPluginInstalled(
     return existing;
   }
 
-  const localPath = path.resolve(REPO_ROOT, relativeLocalPath);
-  await loader.installPlugin({ localPath });
+  await loader.installPlugin({ localPath: path.resolve(REPO_ROOT, relativeLocalPath) });
   const installed = await registry.getByKey(pluginKey);
   if (!installed) {
-    throw new Error(`Failed to install split Telegram plugin: ${pluginKey}`);
+    throw new Error(`Failed to install Telegram split plugin: ${pluginKey}`);
   }
   if (installed.status !== "ready") {
     await registry.updateStatus(installed.id, { status: "ready", lastError: null });
@@ -87,7 +86,7 @@ async function ensureLocalPluginInstalled(
   return (await registry.getById(installed.id)) ?? installed;
 }
 
-export async function migrateLegacyTelegramPlugin(
+export async function upgradeTelegramMonolithPlugin(
   db: Db,
   loader: PluginLoader,
   _lifecycle: PluginLifecycleManager,
@@ -96,30 +95,32 @@ export async function migrateLegacyTelegramPlugin(
   const pluginSettings = pluginCompanySettingsService(db);
   const stateStore = pluginStateStore(db);
 
-  const legacy = await registry.getByKey(LEGACY_PLUGIN_KEY);
-  if (!legacy || legacy.status === "uninstalled") return;
+  const monolith = await registry.getByKey(MONOLITH_PLUGIN_KEY);
+  if (!monolith || monolith.status === "uninstalled") return;
 
-  logger.info({ pluginId: legacy.id }, "migrating legacy Telegram plugin into publishing/operator split");
+  logger.info({ pluginId: monolith.id }, "upgrading monolith Telegram plugin into split publishing/operator plugins");
+
+  const [settingsRows, entityRows, stateRows] = await Promise.all([
+    pluginSettings.listByPlugin(monolith.id),
+    registry.listEntities(monolith.id, { limit: 2_000, offset: 0 }),
+    stateStore.list(monolith.id),
+  ]);
+
+  await registry.uninstall(monolith.id, false);
 
   const [publishingPlugin, operatorPlugin] = await Promise.all([
-    ensureLocalPluginInstalled(
+    ensureSplitPluginInstalled(
       registry,
       loader,
       TELEGRAM_PUBLISHING_PLUGIN_KEY,
       "packages/plugins/telegram-publishing",
     ),
-    ensureLocalPluginInstalled(
+    ensureSplitPluginInstalled(
       registry,
       loader,
       TELEGRAM_OPERATOR_PLUGIN_KEY,
       "packages/plugins/telegram-operator-bot",
     ),
-  ]);
-
-  const [settingsRows, entityRows, stateRows] = await Promise.all([
-    pluginSettings.listByPlugin(legacy.id),
-    registry.listEntities(legacy.id, { limit: 2_000, offset: 0 }),
-    stateStore.list(legacy.id),
   ]);
 
   for (const row of settingsRows) {
@@ -133,7 +134,7 @@ export async function migrateLegacyTelegramPlugin(
         pluginId: publishingPlugin.id,
         companyId: row.companyId,
         enabled: row.enabled,
-        settingsJson: migratePublishingSettings(row.settingsJson),
+        settingsJson: toPublishingSettings(row.settingsJson),
         lastError: row.lastError,
       });
     }
@@ -143,14 +144,14 @@ export async function migrateLegacyTelegramPlugin(
         pluginId: operatorPlugin.id,
         companyId: row.companyId,
         enabled: row.enabled,
-        settingsJson: migrateOperatorSettings(row.settingsJson),
+        settingsJson: toOperatorSettings(row.settingsJson),
         lastError: row.lastError,
       });
     }
   }
 
   for (const entity of entityRows) {
-    if (LEGACY_PUBLISHING_ENTITY_TYPES.has(entity.entityType)) {
+    if (MONOLITH_PUBLISHING_ENTITY_TYPES.has(entity.entityType)) {
       await registry.upsertEntity(publishingPlugin.id, {
         entityType: entity.entityType,
         scopeKind: entity.scopeKind,
@@ -161,7 +162,8 @@ export async function migrateLegacyTelegramPlugin(
         data: entity.data,
       });
     }
-    if (LEGACY_OPERATOR_ENTITY_TYPES.has(entity.entityType)) {
+
+    if (MONOLITH_OPERATOR_ENTITY_TYPES.has(entity.entityType)) {
       await registry.upsertEntity(operatorPlugin.id, {
         entityType: entity.entityType,
         scopeKind: entity.scopeKind,
@@ -201,6 +203,5 @@ export async function migrateLegacyTelegramPlugin(
     }
   }
 
-  await registry.uninstall(legacy.id, false);
-  logger.info({ pluginId: legacy.id }, "legacy Telegram plugin migration complete");
+  logger.info({ pluginId: monolith.id }, "monolith Telegram plugin upgrade complete");
 }

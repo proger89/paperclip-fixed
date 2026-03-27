@@ -14,8 +14,8 @@ function createSlot(overrides: Partial<ResolvedPluginSlot> = {}): ResolvedPlugin
     displayName: "Telegram",
     exportName: "TelegramSidebarLink",
     pluginId: "plugin-telegram",
-    pluginKey: "paperclip.telegram-channel-connector",
-    pluginDisplayName: "Telegram Channel Connector",
+    pluginKey: "paperclip.telegram-publishing",
+    pluginDisplayName: "Telegram Publishing",
     pluginVersion: "0.1.0",
     ...overrides,
   } as ResolvedPluginSlot;

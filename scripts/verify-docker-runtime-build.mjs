@@ -24,12 +24,14 @@ const [
   agentAuthJwt,
   heartbeatService,
   ceoAgentsMarkdown,
-  telegramPluginPackageJson,
+  telegramPublishingPackageJson,
+  telegramOperatorPackageJson,
 ] = await Promise.all([
   read("server/dist/agent-auth-jwt.js"),
   read("server/dist/services/heartbeat.js"),
   read("server/dist/onboarding-assets/ceo/AGENTS.md"),
-  read("packages/plugins/telegram-channel-connector/package.json"),
+  read("packages/plugins/telegram-publishing/package.json"),
+  read("packages/plugins/telegram-operator-bot/package.json"),
 ]);
 
 assertIncludes(
@@ -73,21 +75,35 @@ assertExcludes(
   "server/dist/onboarding-assets/ceo/AGENTS.md still references $AGENT_HOME/TOOLS.md",
 );
 
-const telegramPluginPackage = JSON.parse(telegramPluginPackageJson);
-const telegramManifestPath = path.join(
+const telegramPublishingPackage = JSON.parse(telegramPublishingPackageJson);
+const telegramPublishingManifestPath = path.join(
   repoRoot,
-  "packages/plugins/telegram-channel-connector",
-  telegramPluginPackage.paperclipPlugin.manifest,
+  "packages/plugins/telegram-publishing",
+  telegramPublishingPackage.paperclipPlugin.manifest,
 );
-const telegramWorkerPath = path.join(
+const telegramPublishingWorkerPath = path.join(
   repoRoot,
-  "packages/plugins/telegram-channel-connector",
-  telegramPluginPackage.paperclipPlugin.worker,
+  "packages/plugins/telegram-publishing",
+  telegramPublishingPackage.paperclipPlugin.worker,
+);
+
+const telegramOperatorPackage = JSON.parse(telegramOperatorPackageJson);
+const telegramOperatorManifestPath = path.join(
+  repoRoot,
+  "packages/plugins/telegram-operator-bot",
+  telegramOperatorPackage.paperclipPlugin.manifest,
+);
+const telegramOperatorWorkerPath = path.join(
+  repoRoot,
+  "packages/plugins/telegram-operator-bot",
+  telegramOperatorPackage.paperclipPlugin.worker,
 );
 
 await Promise.all([
-  fs.access(telegramManifestPath),
-  fs.access(telegramWorkerPath),
+  fs.access(telegramPublishingManifestPath),
+  fs.access(telegramPublishingWorkerPath),
+  fs.access(telegramOperatorManifestPath),
+  fs.access(telegramOperatorWorkerPath),
 ]);
 
 console.log("Docker runtime build verification passed.");
