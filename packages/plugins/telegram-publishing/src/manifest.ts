@@ -15,11 +15,11 @@ const manifest: PaperclipPluginManifestV1 = {
   version: PLUGIN_VERSION,
   displayName: {
     en: "Telegram Publishing",
-    ru: "Telegram Publishing",
+    ru: "Публикации в Telegram",
   },
   description: {
     en: "Minimal Telegram publishing plugin with channel setup, donor channels, ready-for-approval queue, and governed publication dispatch.",
-    ru: "Minimal Telegram publishing plugin with channel setup, donor channels, ready-for-approval queue, and governed publication dispatch.",
+    ru: "Лаконичный Telegram-плагин с настройкой каналов, каналами-донорами, очередью готовых постов и управляемой публикацией.",
   },
   author: "Paperclip",
   categories: ["connector", "ui"],
@@ -64,11 +64,11 @@ const manifest: PaperclipPluginManifestV1 = {
       jobKey: JOB_KEYS.syncTelegram,
       displayName: {
         en: "Sync Telegram publishing",
-        ru: "Sync Telegram publishing",
+        ru: "Синхронизация публикаций в Telegram",
       },
       description: {
         en: "Poll Telegram getUpdates for donor channels and reconcile publishing state.",
-        ru: "Poll Telegram getUpdates for donor channels and reconcile publishing state.",
+        ru: "Опрашивает Telegram через getUpdates для каналов-доноров и синхронизирует состояние публикаций.",
       },
       schedule: "* * * * *",
     },
@@ -76,11 +76,11 @@ const manifest: PaperclipPluginManifestV1 = {
       jobKey: JOB_KEYS.dispatchTelegramPublications,
       displayName: {
         en: "Dispatch Telegram publications",
-        ru: "Dispatch Telegram publications",
+        ru: "Отправка публикаций в Telegram",
       },
       description: {
         en: "Publish due Telegram publication jobs from the governed queue.",
-        ru: "Publish due Telegram publication jobs from the governed queue.",
+        ru: "Публикует готовые Telegram jobs из управляемой очереди.",
       },
       schedule: "* * * * *",
     },
@@ -94,46 +94,46 @@ const manifest: PaperclipPluginManifestV1 = {
     properties: {
       botTokenSecretRef: {
         type: "string",
-        title: { en: "Legacy Bot Token Secret", ru: "Legacy Bot Token Secret" },
+        title: { en: "Legacy Bot Token Secret", ru: "Legacy-секрет токена бота" },
         description: {
           en: "Legacy instance-scoped secret UUID. Prefer company-scoped publishing settings instead.",
-          ru: "Legacy instance-scoped secret UUID. Prefer company-scoped publishing settings instead.",
+          ru: "Legacy UUID секрета на уровне инстанса. Предпочтительнее использовать company-scoped настройки публикаций.",
         },
         format: "secret-ref",
         default: DEFAULT_CONFIG.botTokenSecretRef,
       },
       defaultChatId: {
         type: "string",
-        title: { en: "Legacy Default Channel", ru: "Legacy Default Channel" },
+        title: { en: "Legacy Default Channel", ru: "Legacy-канал по умолчанию" },
         description: {
           en: "Legacy fallback target channel username like @my_channel or numeric chat id.",
-          ru: "Legacy fallback target channel username like @my_channel or numeric chat id.",
+          ru: "Legacy fallback-канал: username вида @my_channel или числовой chat id.",
         },
         default: DEFAULT_CONFIG.defaultChatId,
       },
       defaultPublicHandle: {
         type: "string",
-        title: { en: "Legacy Public Handle", ru: "Legacy Public Handle" },
+        title: { en: "Legacy Public Handle", ru: "Legacy публичный handle" },
         description: {
           en: "Legacy fallback @handle used to build clickable t.me post links.",
-          ru: "Legacy fallback @handle used to build clickable t.me post links.",
+          ru: "Legacy fallback @handle для построения кликабельных t.me-ссылок на посты.",
         },
         default: DEFAULT_CONFIG.defaultPublicHandle,
       },
       defaultParseMode: {
         type: "string",
-        title: { en: "Legacy Default Parse Mode", ru: "Legacy Default Parse Mode" },
+        title: { en: "Legacy Default Parse Mode", ru: "Legacy parse mode по умолчанию" },
         enum: ["", "HTML", "MarkdownV2"],
         default: DEFAULT_CONFIG.defaultParseMode,
       },
       defaultDisableLinkPreview: {
         type: "boolean",
-        title: { en: "Legacy Disable Link Preview", ru: "Legacy Disable Link Preview" },
+        title: { en: "Legacy Disable Link Preview", ru: "Legacy отключение preview ссылок" },
         default: DEFAULT_CONFIG.defaultDisableLinkPreview,
       },
       defaultDisableNotification: {
         type: "boolean",
-        title: { en: "Legacy Send Silently", ru: "Legacy Send Silently" },
+        title: { en: "Legacy Send Silently", ru: "Legacy тихая отправка" },
         default: DEFAULT_CONFIG.defaultDisableNotification,
       },
     },
@@ -145,7 +145,7 @@ const manifest: PaperclipPluginManifestV1 = {
         id: SLOT_IDS.settingsPage,
         displayName: {
           en: "Telegram Publishing Settings",
-          ru: "Telegram Publishing Settings",
+          ru: "Настройки публикаций в Telegram",
         },
         exportName: EXPORT_NAMES.settingsPage,
       },
@@ -154,7 +154,7 @@ const manifest: PaperclipPluginManifestV1 = {
         id: SLOT_IDS.dashboardWidget,
         displayName: {
           en: "Telegram Publishing",
-          ru: "Telegram Publishing",
+          ru: "Публикации в Telegram",
         },
         exportName: EXPORT_NAMES.dashboardWidget,
       },
@@ -162,8 +162,8 @@ const manifest: PaperclipPluginManifestV1 = {
         type: "sidebar",
         id: SLOT_IDS.sidebar,
         displayName: {
-          en: "Telegram",
-          ru: "Telegram",
+          en: "Telegram Publishing",
+          ru: "Публикации в Telegram",
         },
         exportName: EXPORT_NAMES.sidebar,
       },
@@ -172,7 +172,7 @@ const manifest: PaperclipPluginManifestV1 = {
         id: SLOT_IDS.page,
         displayName: {
           en: "Telegram Publishing",
-          ru: "Telegram Publishing",
+          ru: "Публикации в Telegram",
         },
         exportName: EXPORT_NAMES.page,
         routePath: PAGE_ROUTE,
@@ -182,7 +182,7 @@ const manifest: PaperclipPluginManifestV1 = {
         id: SLOT_IDS.issueTab,
         displayName: {
           en: "Telegram Trace",
-          ru: "Telegram Trace",
+          ru: "След Telegram",
         },
         exportName: EXPORT_NAMES.issueTab,
         entityTypes: ["issue"],

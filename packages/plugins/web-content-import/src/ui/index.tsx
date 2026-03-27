@@ -2,6 +2,8 @@ import { useState, type CSSProperties } from "react";
 import type { PluginPageProps, PluginSettingsPageProps } from "@paperclipai/plugin-sdk/ui";
 import { usePluginToast } from "@paperclipai/plugin-sdk/ui";
 
+type Locale = "en" | "ru";
+
 type ImportResult = {
   url: string;
   title: string | null;
@@ -44,6 +46,10 @@ const button: CSSProperties = {
 };
 const muted: CSSProperties = { fontSize: 12, opacity: 0.72, lineHeight: 1.45 };
 
+function tr(locale: Locale, en: string, ru: string) {
+  return locale === "ru" ? ru : en;
+}
+
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...init,
@@ -65,7 +71,7 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-function WebContentImportSurface({ companyId }: { companyId: string | null }) {
+function WebContentImportSurface({ companyId, locale }: { companyId: string | null; locale: Locale }) {
   const pushToast = usePluginToast();
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
@@ -83,15 +89,19 @@ function WebContentImportSurface({ companyId }: { companyId: string | null }) {
       });
       setResult(next);
       pushToast({
-        title: "Content imported",
-        body: "The page was extracted into clean source text and is ready for editorial use.",
+        title: tr(locale, "Content imported", "Текст импортирован"),
+        body: tr(
+          locale,
+          "The page was extracted into clean source text and is ready for editorial use.",
+          "Страница извлечена в чистый исходный текст и готова для редакторской обработки.",
+        ),
         tone: "success",
       });
     } catch (nextError) {
       const message = nextError instanceof Error ? nextError.message : String(nextError);
       setError(message);
       pushToast({
-        title: "Import failed",
+        title: tr(locale, "Import failed", "Не удалось импортировать"),
         body: message,
         tone: "error",
       });
@@ -100,14 +110,18 @@ function WebContentImportSurface({ companyId }: { companyId: string | null }) {
     }
   }
 
-  if (!companyId) return <div style={muted}>Company context is required.</div>;
+  if (!companyId) return <div style={muted}>{tr(locale, "Company context is required.", "Нужен контекст компании.")}</div>;
 
   return (
     <div style={stack}>
       <div style={card}>
-        <div style={{ fontSize: 14, fontWeight: 600 }}>Import from URL</div>
+        <div style={{ fontSize: 14, fontWeight: 600 }}>{tr(locale, "Import from URL", "Импорт по ссылке")}</div>
         <div style={{ ...muted, marginTop: 8 }}>
-          Paste a source URL and Paperclip will extract a clean text body for editorial work. Telegram Publishing can use the same endpoint during compose-from-link.
+          {tr(
+            locale,
+            "Paste a source URL and Paperclip will extract a clean text body for editorial work. Telegram Publishing can use the same endpoint during compose-from-link.",
+            "Вставь ссылку на источник, и Paperclip извлечет чистый текст для дальнейшей редакторской работы. Telegram Publishing использует этот же импорт для compose-from-link.",
+          )}
         </div>
         <div style={{ ...row, marginTop: 14 }}>
           <input
@@ -117,23 +131,23 @@ function WebContentImportSurface({ companyId }: { companyId: string | null }) {
             placeholder="https://example.com/article"
           />
           <button type="button" style={button} disabled={loading || !url.trim()} onClick={() => void extract()}>
-            {loading ? "Extracting..." : "Extract"}
+            {loading ? tr(locale, "Extracting...", "Извлекаем...") : tr(locale, "Extract", "Извлечь")}
           </button>
         </div>
         {error ? <div style={{ ...muted, color: "var(--destructive, #c00)", marginTop: 12 }}>{error}</div> : null}
       </div>
 
       <div style={card}>
-        <div style={{ fontSize: 14, fontWeight: 600 }}>Preview</div>
+        <div style={{ fontSize: 14, fontWeight: 600 }}>{tr(locale, "Preview", "Предпросмотр")}</div>
         {result ? (
           <div style={{ ...stack, marginTop: 12 }}>
-            <div style={muted}>URL: {result.url}</div>
-            <div style={muted}>Title: {result.title || "No title detected"}</div>
-            {result.excerpt ? <div style={muted}>Excerpt: {result.excerpt}</div> : null}
+            <div style={muted}>{tr(locale, "URL", "Ссылка")}: {result.url}</div>
+            <div style={muted}>{tr(locale, "Title", "Заголовок")}: {result.title || tr(locale, "No title detected", "Заголовок не найден")}</div>
+            {result.excerpt ? <div style={muted}>{tr(locale, "Excerpt", "Краткая выжимка")}: {result.excerpt}</div> : null}
             <textarea style={textarea} readOnly value={result.sourceText} />
           </div>
         ) : (
-          <div style={{ ...muted, marginTop: 10 }}>No imported page yet.</div>
+          <div style={{ ...muted, marginTop: 10 }}>{tr(locale, "No imported page yet.", "Пока ничего не импортировано.")}</div>
         )}
       </div>
     </div>
@@ -141,9 +155,9 @@ function WebContentImportSurface({ companyId }: { companyId: string | null }) {
 }
 
 export function WebContentImportSettingsPage({ context }: PluginSettingsPageProps) {
-  return <WebContentImportSurface companyId={context.companyId} />;
+  return <WebContentImportSurface companyId={context.companyId} locale={context.locale} />;
 }
 
 export function WebContentImportPage({ context }: PluginPageProps) {
-  return <WebContentImportSurface companyId={context.companyId} />;
+  return <WebContentImportSurface companyId={context.companyId} locale={context.locale} />;
 }

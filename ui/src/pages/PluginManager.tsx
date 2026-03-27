@@ -6,7 +6,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import type { PluginRecord } from "@paperclipai/shared";
+import type { LocalizedText, PluginRecord } from "@paperclipai/shared";
 import { Link } from "@/lib/router";
 import { AlertTriangle, FlaskConical, Plus, Power, Puzzle, Settings, Trash } from "lucide-react";
 import { useCompany } from "@/context/CompanyContext";
@@ -46,6 +46,19 @@ function getPluginErrorSummary(plugin: PluginRecord, fallback: string): string {
   return firstNonEmptyLine(plugin.lastError) ?? fallback;
 }
 
+function resolvePluginCatalogText(
+  plugin: Pick<PluginRecord, "packageName" | "manifestJson">,
+  examplesByPackageName: Map<string, { displayName: LocalizedText; description: LocalizedText }>,
+  field: "displayName" | "description",
+): string {
+  const example = examplesByPackageName.get(plugin.packageName);
+  const catalogValue = example?.[field];
+  if (catalogValue) {
+    return resolveUiText(catalogValue);
+  }
+  return resolveUiText(plugin.manifestJson[field]);
+}
+
 /**
  * PluginManager page component.
  *
@@ -64,6 +77,7 @@ function getPluginErrorSummary(plugin: PluginRecord, fallback: string): string {
  * @see doc/plugins/PLUGIN_SPEC.md §3 — Plugin Lifecycle for status semantics.
  */
 export function PluginManager() {
+  const showDevPlugins = false;
   const { selectedCompany } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
@@ -90,8 +104,8 @@ export function PluginManager() {
   });
 
   const examplesQuery = useQuery({
-    queryKey: queryKeys.plugins.examples,
-    queryFn: () => pluginsApi.listExamples(),
+    queryKey: [...queryKeys.plugins.examples, "catalog"],
+    queryFn: () => pluginsApi.listExamples({ includeDevOnly: true }),
   });
 
   const invalidatePluginQueries = () => {
@@ -147,10 +161,30 @@ export function PluginManager() {
     },
   });
 
-  const installedPlugins = plugins ?? [];
+  const allInstalledPlugins = plugins ?? [];
   const examples = examplesQuery.data ?? [];
-  const installedByPackageName = new Map(installedPlugins.map((plugin) => [plugin.packageName, plugin]));
-  const examplePackageNames = new Set(examples.filter((example) => example.tag === "example").map((example) => example.packageName));
+  const examplesByPackageName = useMemo(
+    () =>
+      new Map(
+        examples.map((example) => [
+          example.packageName,
+          {
+            displayName: example.displayName,
+            description: example.description,
+          },
+        ]),
+      ),
+    [examples],
+  );
+  const visibleExamples = examples.filter((example) => showDevPlugins || !example.devOnly);
+  const hiddenExamplePackageNames = new Set(
+    examples.filter((example) => example.devOnly && !showDevPlugins).map((example) => example.packageName),
+  );
+  const installedPlugins = allInstalledPlugins.filter((plugin) => !hiddenExamplePackageNames.has(plugin.packageName));
+  const installedByPackageName = new Map(allInstalledPlugins.map((plugin) => [plugin.packageName, plugin]));
+  const examplePackageNames = new Set(
+    examples.filter((example) => example.tag === "example").map((example) => example.packageName),
+  );
   const errorSummaryByPluginId = useMemo(
     () =>
       new Map(
@@ -237,13 +271,13 @@ export function PluginManager() {
           <div className="text-sm text-muted-foreground">{t("common.loadingBundledPlugins")}</div>
         ) : examplesQuery.error ? (
           <div className="text-sm text-destructive">{t("common.failedToLoadBundledPlugins")}</div>
-        ) : examples.length === 0 ? (
+        ) : visibleExamples.length === 0 ? (
           <div className="rounded-md border border-dashed px-4 py-3 text-sm text-muted-foreground">
             {t("plugin.manager.noBundledPlugins")}
           </div>
         ) : (
           <ul className="divide-y rounded-md border bg-card">
-            {examples.map((example) => {
+            {visibleExamples.map((example) => {
               const installedPlugin = installedByPackageName.get(example.packageName);
               const installedPluginPagePath = getPluginCompanyPagePath(
                 installedPlugin ?? null,
@@ -259,11 +293,11 @@ export function PluginManager() {
                   <div className="flex items-center gap-4 px-4 py-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium">{example.displayName}</span>
+                        <span className="font-medium">{resolveUiText(example.displayName)}</span>
                         <Badge variant="outline">{translateText(example.tag === "bundled" ? "Bundled" : "Example")}</Badge>
                         {example.categories.map((category) => (
                           <Badge key={`${example.packageName}:${category}`} variant="secondary" className="capitalize">
-                            {category}
+                            {translateText(category)}
                           </Badge>
                         ))}
                         {installedPlugin ? (
@@ -277,7 +311,7 @@ export function PluginManager() {
                           <Badge variant="secondary">{translateText("Not installed")}</Badge>
                         )}
                       </div>
-                      <p className="mt-1 text-sm text-muted-foreground">{example.description}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{resolveUiText(example.description)}</p>
                       <p className="mt-1 text-xs text-muted-foreground">{example.packageName}</p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -359,9 +393,9 @@ export function PluginManager() {
                       <Link
                         to={`/instance/settings/plugins/${plugin.id}`}
                         className="font-medium hover:underline truncate block"
-                        title={resolveUiText(plugin.manifestJson.displayName) || plugin.packageName}
+                        title={resolvePluginCatalogText(plugin, examplesByPackageName, "displayName") || plugin.packageName}
                       >
-                        {resolveUiText(plugin.manifestJson.displayName) || plugin.packageName}
+                        {resolvePluginCatalogText(plugin, examplesByPackageName, "displayName") || plugin.packageName}
                       </Link>
                       {examplePackageNames.has(plugin.packageName) && (
                         <Badge variant="outline">{translateText("Example")}</Badge>
@@ -374,9 +408,9 @@ export function PluginManager() {
                     </div>
                     <p
                       className="text-sm text-muted-foreground truncate mt-0.5"
-                      title={resolveUiText(plugin.manifestJson.description) || undefined}
+                      title={resolvePluginCatalogText(plugin, examplesByPackageName, "description") || undefined}
                     >
-                      {resolveUiText(plugin.manifestJson.description) || t("plugin.manager.noDescription")}
+                      {resolvePluginCatalogText(plugin, examplesByPackageName, "description") || t("plugin.manager.noDescription")}
                     </p>
                     {plugin.status === "error" && (
                       <div className="mt-3 rounded-md border border-red-500/25 bg-red-500/[0.06] px-3 py-2">
@@ -446,7 +480,9 @@ export function PluginManager() {
                           title={translateText("Uninstall")}
                           onClick={() => {
                             setUninstallPluginId(plugin.id);
-                            setUninstallPluginName(resolveUiText(plugin.manifestJson.displayName) || plugin.packageName);
+                            setUninstallPluginName(
+                              resolvePluginCatalogText(plugin, examplesByPackageName, "displayName") || plugin.packageName,
+                            );
                           }}
                           disabled={uninstallMutation.isPending}
                         >
@@ -516,7 +552,12 @@ export function PluginManager() {
               <DialogTitle>{translateText("Error Details")}</DialogTitle>
               <DialogDescription>
                 {t("plugin.manager.errorDetailsDescription", {
-                  name: resolveUiText(errorDetailsPlugin?.manifestJson.displayName) || errorDetailsPlugin?.packageName || translateText("Plugin"),
+                  name:
+                    (errorDetailsPlugin
+                      ? resolvePluginCatalogText(errorDetailsPlugin, examplesByPackageName, "displayName")
+                      : null) ||
+                    errorDetailsPlugin?.packageName ||
+                    translateText("Plugin"),
                 })}
             </DialogDescription>
           </DialogHeader>

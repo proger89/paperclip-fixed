@@ -23,6 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "../lib/utils";
 import type { AvailablePluginExample } from "../api/plugins";
+import { resolveUiText } from "../lib/localized";
 import {
   buildInstallApprovalIssueOptions,
   findInstalledConnector,
@@ -182,7 +183,7 @@ export function InstallApprovalComposer({
     () =>
       pluginExamples
         .filter((example) => example.categories.includes("connector"))
-        .sort((left, right) => left.displayName.localeCompare(right.displayName)),
+        .sort((left, right) => resolveUiText(left.displayName).localeCompare(resolveUiText(right.displayName))),
     [pluginExamples],
   );
   const issueOptions = useMemo(
@@ -815,14 +816,14 @@ export function InstallApprovalComposer({
                         ) : (
                           connectorExamples.map((example) => (
                             <SelectItem key={example.localPath} value={example.localPath}>
-                              {example.displayName}
+                              {resolveUiText(example.displayName)}
                             </SelectItem>
                           ))
                         )}
                       </SelectContent>
                     </Select>
                     {selectedConnectorExample ? (
-                      <p className="text-xs text-muted-foreground">{selectedConnectorExample.description}</p>
+                      <p className="text-xs text-muted-foreground">{resolveUiText(selectedConnectorExample.description)}</p>
                     ) : null}
                   </div>
                 ) : null}

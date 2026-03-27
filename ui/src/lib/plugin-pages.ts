@@ -1,5 +1,6 @@
 import type { PluginRecord, PluginUiSlotDeclaration } from "@paperclipai/shared";
 import { resolveUiText } from "./localized";
+import { getCurrentUiLanguage } from "./ui-language";
 
 function getPageSlot(plugin: PluginRecord | null | undefined): PluginUiSlotDeclaration | null {
   const slots = plugin?.manifestJson?.ui?.slots;
@@ -25,8 +26,9 @@ export function getPluginCompanyPagePath(
 }
 
 export function getPluginPageLinkLabel(plugin: PluginRecord | null | undefined): string {
+  const locale = getCurrentUiLanguage();
   const displayName = resolveUiText(plugin?.manifestJson?.displayName).trim();
-  if (!displayName) return "Open plugin page";
-  if (/telegram/i.test(displayName)) return "Open Telegram dashboard";
-  return `Open ${displayName} page`;
+  if (!displayName) return locale === "ru" ? "Открыть страницу плагина" : "Open plugin page";
+  if (/telegram/i.test(displayName)) return locale === "ru" ? "Открыть панель Telegram" : "Open Telegram dashboard";
+  return locale === "ru" ? `Открыть страницу «${displayName}»` : `Open ${displayName} page`;
 }

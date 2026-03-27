@@ -244,12 +244,12 @@ function OperatorSurface({
           settingsPath: "publishing.botTokenSecretRef",
           value: token.trim(),
           secretName: "telegram-operator-bot-token",
-          description: "Telegram Operator Bot token",
+          description: "Telegram operator bot token",
         }),
       });
       setToken("");
       toast({
-        title: tr(locale, "Operator bot token saved", "Токен operator bot сохранен"),
+        title: tr(locale, "Operator bot token saved", "Токен бота оператора сохранен"),
         body: tr(locale, "Stored as a company secret.", "Сохранен как секрет компании."),
         tone: "success",
       });
@@ -285,7 +285,7 @@ function OperatorSurface({
         }),
       });
       toast({
-        title: tr(locale, "Operator bot settings saved", "Настройки operator bot сохранены"),
+        title: tr(locale, "Operator bot settings saved", "Настройки бота оператора сохранены"),
         tone: "success",
       });
       await load();
@@ -339,7 +339,7 @@ function OperatorSurface({
   }
 
   if (!companyId) return <div style={muted}>{tr(locale, "Company context is required.", "Нужен контекст компании.")}</div>;
-  if (loading) return <div style={muted}>{tr(locale, "Loading Telegram Operator Bot...", "Загрузка Telegram Operator Bot...")}</div>;
+  if (loading) return <div style={muted}>{tr(locale, "Loading Telegram Operator Bot...", "Загружаем Telegram-бота оператора...")}</div>;
   if (error) return <div style={danger}>{error}</div>;
   if (!overview) return null;
 
@@ -348,12 +348,12 @@ function OperatorSurface({
       <section style={section}>
         <div style={{ ...row, justifyContent: "space-between" }}>
           <div>
-            <div style={{ fontSize: 18, fontWeight: 700 }}>{tr(locale, "Telegram Operator Bot", "Telegram Operator Bot")}</div>
+            <div style={{ fontSize: 18, fontWeight: 700 }}>{tr(locale, "Telegram Operator Bot", "Telegram-бот оператора")}</div>
             <div style={muted}>
               {tr(
                 locale,
                 "Private-chat bot for tasks, approvals, joins, budgets, and replies through getUpdates polling.",
-                "Приватный бот для задач, approvals, joins, budgets и replies через getUpdates polling.",
+                "Бот для личных чатов: задачи, approvals, joins, бюджеты и ответы через polling getUpdates.",
               )}
             </div>
           </div>
@@ -371,7 +371,7 @@ function OperatorSurface({
           </div>
           <div style={statCard}>
             <strong>{overview.actionableApprovalCount}</strong>
-            <div style={muted}>{tr(locale, "Approvals", "Approvals")}</div>
+            <div style={muted}>{tr(locale, "Approvals", "Одобрения")}</div>
           </div>
           <div style={statCard}>
             <strong>{overview.blockedTaskCount}</strong>
@@ -411,7 +411,7 @@ function OperatorSurface({
             {tr(
               locale,
               "Save the operator bot token, then enable polling and notifications.",
-              "Сохрани токен operator bot, затем включи polling и уведомления.",
+              "Сохрани токен бота оператора, затем включи polling и уведомления.",
             )}
           </div>
         </div>
@@ -445,7 +445,7 @@ function OperatorSurface({
               checked={settingsDraft.enabled}
               onChange={(event) => setSettingsDraft((current) => ({ ...current, enabled: event.target.checked }))}
             />
-            {tr(locale, "Enable operator bot", "Включить operator bot")}
+            {tr(locale, "Enable operator bot", "Включить бота оператора")}
           </label>
           <label style={{ ...row, fontSize: 12 }}>
             <input
@@ -512,7 +512,7 @@ function OperatorSurface({
             {tr(
               locale,
               "This is the operator bot runtime health, not the publishing pipeline.",
-              "Это runtime health operator bot, а не publishing pipeline.",
+              "Это runtime health бота оператора, а не publishing pipeline.",
             )}
           </div>
         </div>

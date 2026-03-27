@@ -1,10 +1,14 @@
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "@/lib/router";
 import { Button } from "@/components/ui/button";
+import { pluginsApi } from "@/api/plugins";
+import { queryKeys } from "@/lib/queryKeys";
 import { cn } from "../lib/utils";
 import { buildInstallApprovalPrefillPath } from "../lib/install-approval-prefill";
 import { getPluginCompanyPagePath, getPluginPageLinkLabel } from "../lib/plugin-pages";
 import type { RoleBundleConnectorSuggestionItem } from "../lib/role-bundle-connector-suggestions";
 import { useI18n } from "@/context/I18nContext";
+import { resolveUiText } from "@/lib/localized";
 
 interface RoleBundleConnectorSuggestionsPanelProps {
   suggestions: RoleBundleConnectorSuggestionItem[];
@@ -28,6 +32,10 @@ export function RoleBundleConnectorSuggestionsPanel({
   companyPrefix = null,
 }: RoleBundleConnectorSuggestionsPanelProps) {
   const { translateText } = useI18n();
+  const { data: examples } = useQuery({
+    queryKey: [...queryKeys.plugins.examples, "role-bundle-suggestions-panel"],
+    queryFn: () => pluginsApi.listExamples(),
+  });
   const visible = (showInstalled
     ? suggestions
     : suggestions.filter((item) => item.status !== "installed"))
@@ -54,6 +62,16 @@ export function RoleBundleConnectorSuggestionsPanel({
             const pluginPagePath = item.installedPlugin
               ? getPluginCompanyPagePath(item.installedPlugin, companyPrefix)
               : null;
+            const catalogEntry = (examples ?? []).find((example) => (
+              example.pluginKey === (item.requirement.pluginKey ?? item.requirement.key)
+              || example.packageName === item.requirement.packageName
+            ));
+            const displayName = catalogEntry
+              ? resolveUiText(catalogEntry.displayName)
+              : item.requirement.displayName;
+            const descriptionText = catalogEntry
+              ? resolveUiText(catalogEntry.description)
+              : item.requirement.description;
 
             return (
               <div
@@ -62,7 +80,7 @@ export function RoleBundleConnectorSuggestionsPanel({
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="text-sm font-medium">{item.requirement.displayName}</div>
+                    <div className="text-sm font-medium">{displayName}</div>
                     <div className="mt-1 text-xs text-muted-foreground">
                       {translateText("Suggested for:")} {item.bundles.map((bundle) => translateText(bundle.label)).join(", ")}
                     </div>
@@ -82,9 +100,9 @@ export function RoleBundleConnectorSuggestionsPanel({
                   )}
                 </div>
 
-                {item.requirement.description ? (
+                {descriptionText ? (
                   <p className="mt-3 text-sm text-muted-foreground">
-                    {translateText(item.requirement.description)}
+                    {translateText(descriptionText)}
                   </p>
                 ) : null}
 
@@ -99,7 +117,7 @@ export function RoleBundleConnectorSuggestionsPanel({
                         key={`${item.requirement.key}:${category}`}
                         className="rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-muted-foreground"
                       >
-                        {category}
+                        {translateText(category)}
                       </span>
                     ))}
                   </div>

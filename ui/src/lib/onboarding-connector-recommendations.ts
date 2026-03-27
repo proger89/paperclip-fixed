@@ -1,5 +1,6 @@
 import type { Approval, PluginRecord } from "@paperclipai/shared";
 import type { AvailablePluginExample } from "../api/plugins";
+import { resolveUiText } from "./localized";
 import {
   findInstalledConnector,
   findOpenConnectorInstallApproval,
@@ -64,7 +65,7 @@ export function getTelegramConnectorRecommendation(input: {
       localPath: example.localPath,
       pluginKey: example.pluginKey,
       packageName: example.packageName,
-      name: example.displayName,
+      name: resolveUiText(example.displayName),
       reason: "Suggested during company onboarding for Telegram and channel workflows",
     }),
   };

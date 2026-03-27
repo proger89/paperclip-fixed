@@ -67,6 +67,11 @@ export const DEFAULT_COMPANY_SETTINGS: TelegramCompanySettings = {
     notificationMode: "fallback_all_linked",
     claimCodeTtlMinutes: 30,
   },
+  ai: {
+    adapterType: "codex_local",
+    model: "",
+    reasoningEffort: "medium",
+  },
   ingestion: {
     sources: [],
   },

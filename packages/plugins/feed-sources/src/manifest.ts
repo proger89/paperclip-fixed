@@ -9,7 +9,7 @@ const manifest: PaperclipPluginManifestV1 = {
   version: PLUGIN_VERSION,
   displayName: {
     en: "Feed Sources",
-    ru: "Источники лент",
+    ru: "Источники ленты",
   },
   description: {
     en: "Simple RSS, Atom, and web feed source configuration for editorial intake.",
@@ -29,7 +29,7 @@ const manifest: PaperclipPluginManifestV1 = {
         id: "feed-sources-settings-page",
         displayName: {
           en: "Feed Sources Settings",
-          ru: "Настройки источников лент",
+          ru: "Настройки источников ленты",
         },
         exportName: "FeedSourcesSettingsPage",
       },
@@ -38,7 +38,7 @@ const manifest: PaperclipPluginManifestV1 = {
         id: "feed-sources-page",
         displayName: {
           en: "Feed Sources",
-          ru: "Источники лент",
+          ru: "Источники ленты",
         },
         exportName: "FeedSourcesPage",
         routePath: "feed-sources",

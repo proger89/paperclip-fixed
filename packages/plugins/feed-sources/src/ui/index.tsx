@@ -2,6 +2,8 @@ import { useEffect, useState, type CSSProperties } from "react";
 import type { PluginPageProps, PluginSettingsPageProps } from "@paperclipai/plugin-sdk/ui";
 import { usePluginToast } from "@paperclipai/plugin-sdk/ui";
 
+type Locale = "en" | "ru";
+
 type FeedSource = {
   id: string;
   label: string;
@@ -51,6 +53,10 @@ const primaryButton: CSSProperties = {
 };
 const muted: CSSProperties = { fontSize: 12, opacity: 0.72, lineHeight: 1.45 };
 
+function tr(locale: Locale, en: string, ru: string) {
+  return locale === "ru" ? ru : en;
+}
+
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...init,
@@ -97,7 +103,7 @@ function emptySource(index: number): FeedSource {
   };
 }
 
-function FeedSourcesSurface({ companyId }: { companyId: string | null }) {
+function FeedSourcesSurface({ companyId, locale }: { companyId: string | null; locale: Locale }) {
   const pushToast = usePluginToast();
   const [sources, setSources] = useState<FeedSource[]>([]);
   const [loading, setLoading] = useState(true);
@@ -149,13 +155,13 @@ function FeedSourcesSurface({ companyId }: { companyId: string | null }) {
         }),
       });
       pushToast({
-        title: "Feed sources saved",
-        body: "The editorial source catalog was updated.",
+        title: tr(locale, "Feed sources saved", "Источники сохранены"),
+        body: tr(locale, "The editorial source catalog was updated.", "Каталог editorial-источников обновлен."),
         tone: "success",
       });
     } catch (nextError) {
       pushToast({
-        title: "Failed to save feed sources",
+        title: tr(locale, "Failed to save feed sources", "Не удалось сохранить источники"),
         body: nextError instanceof Error ? nextError.message : String(nextError),
         tone: "error",
       });
@@ -164,46 +170,50 @@ function FeedSourcesSurface({ companyId }: { companyId: string | null }) {
     }
   }
 
-  if (!companyId) return <div style={muted}>Company context is required.</div>;
-  if (loading) return <div style={muted}>Loading feed sources...</div>;
+  if (!companyId) return <div style={muted}>{tr(locale, "Company context is required.", "Нужен контекст компании.")}</div>;
+  if (loading) return <div style={muted}>{tr(locale, "Loading feed sources...", "Загружаем источники...")}</div>;
   if (error) return <div style={{ ...muted, color: "var(--destructive, #c00)" }}>{error}</div>;
 
   return (
     <div style={stack}>
       <div style={card}>
-        <div style={{ fontSize: 14, fontWeight: 600 }}>Editorial source catalog</div>
+        <div style={{ fontSize: 14, fontWeight: 600 }}>{tr(locale, "Editorial source catalog", "Каталог источников")}</div>
         <div style={{ ...muted, marginTop: 8 }}>
-          Keep this plugin simple: add RSS, Atom, or web feeds that should land in an editorial queue later. Telegram donor channels stay in Telegram Publishing.
+          {tr(
+            locale,
+            "Keep this plugin simple: add RSS, Atom, or web feeds that should land in an editorial queue later. Telegram donor channels stay in Telegram Publishing.",
+            "Здесь только простая настройка RSS, Atom и web-источников, которые потом попадут в editorial queue. Telegram donor channels остаются внутри Telegram Publishing.",
+          )}
         </div>
       </div>
 
       <div style={card}>
         <div style={{ ...row, justifyContent: "space-between" }}>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>Sources</div>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>{tr(locale, "Sources", "Источники")}</div>
           <button type="button" style={button} onClick={() => setSources((current) => [...current, emptySource(current.length)])}>
-            Add source
+            {tr(locale, "Add source", "Добавить источник")}
           </button>
         </div>
 
         <div style={{ ...stack, marginTop: 14 }}>
           {sources.length === 0 ? (
-            <div style={muted}>No feed sources yet.</div>
+            <div style={muted}>{tr(locale, "No feed sources yet.", "Источников пока нет.")}</div>
           ) : (
             sources.map((source, index) => (
               <div key={source.id} style={{ ...card, padding: 14 }}>
                 <div style={{ ...row, justifyContent: "space-between" }}>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>{source.label.trim() || `Source ${index + 1}`}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{source.label.trim() || tr(locale, `Source ${index + 1}`, `Источник ${index + 1}`)}</div>
                   <button
                     type="button"
                     style={button}
                     onClick={() => setSources((current) => current.filter((entry) => entry.id !== source.id))}
                   >
-                    Remove
+                    {tr(locale, "Remove", "Удалить")}
                   </button>
                 </div>
                 <div style={{ ...stack, marginTop: 12 }}>
                   <label style={stack}>
-                    <span style={{ fontSize: 12 }}>Label</span>
+                    <span style={{ fontSize: 12 }}>{tr(locale, "Label", "Название")}</span>
                     <input
                       style={input}
                       value={source.label}
@@ -212,11 +222,11 @@ function FeedSourcesSurface({ companyId }: { companyId: string | null }) {
                           entry.id === source.id ? { ...entry, label: event.target.value } : entry
                         )))
                       }
-                      placeholder="Founder's RSS"
+                      placeholder={tr(locale, "Founder's RSS", "RSS автора")}
                     />
                   </label>
                   <label style={stack}>
-                    <span style={{ fontSize: 12 }}>Feed URL</span>
+                    <span style={{ fontSize: 12 }}>{tr(locale, "Feed URL", "Ссылка на ленту")}</span>
                     <input
                       style={input}
                       value={source.url}
@@ -229,7 +239,7 @@ function FeedSourcesSurface({ companyId }: { companyId: string | null }) {
                     />
                   </label>
                   <label style={stack}>
-                    <span style={{ fontSize: 12 }}>Project ID (optional)</span>
+                    <span style={{ fontSize: 12 }}>{tr(locale, "Project ID (optional)", "Project ID (необязательно)")}</span>
                     <input
                       style={input}
                       value={source.projectId}
@@ -238,7 +248,7 @@ function FeedSourcesSurface({ companyId }: { companyId: string | null }) {
                           entry.id === source.id ? { ...entry, projectId: event.target.value } : entry
                         )))
                       }
-                      placeholder="Attach intake to a specific project"
+                      placeholder={tr(locale, "Attach intake to a specific project", "Привязать intake к конкретному проекту")}
                     />
                   </label>
                   <label style={{ ...row, fontSize: 12 }}>
@@ -251,7 +261,7 @@ function FeedSourcesSurface({ companyId }: { companyId: string | null }) {
                         )))
                       }
                     />
-                    Enabled
+                    {tr(locale, "Enabled", "Включено")}
                   </label>
                 </div>
               </div>
@@ -261,7 +271,7 @@ function FeedSourcesSurface({ companyId }: { companyId: string | null }) {
 
         <div style={{ ...row, marginTop: 14, justifyContent: "flex-end" }}>
           <button type="button" style={primaryButton} disabled={saving} onClick={() => void save()}>
-            {saving ? "Saving..." : "Save sources"}
+            {saving ? tr(locale, "Saving...", "Сохраняем...") : tr(locale, "Save sources", "Сохранить источники")}
           </button>
         </div>
       </div>
@@ -270,9 +280,9 @@ function FeedSourcesSurface({ companyId }: { companyId: string | null }) {
 }
 
 export function FeedSourcesSettingsPage({ context }: PluginSettingsPageProps) {
-  return <FeedSourcesSurface companyId={context.companyId} />;
+  return <FeedSourcesSurface companyId={context.companyId} locale={context.locale} />;
 }
 
 export function FeedSourcesPage({ context }: PluginPageProps) {
-  return <FeedSourcesSurface companyId={context.companyId} />;
+  return <FeedSourcesSurface companyId={context.companyId} locale={context.locale} />;
 }

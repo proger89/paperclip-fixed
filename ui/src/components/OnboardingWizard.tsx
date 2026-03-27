@@ -35,6 +35,7 @@ import { DEFAULT_CURSOR_LOCAL_MODEL } from "@paperclipai/adapter-cursor-local";
 import { DEFAULT_GEMINI_LOCAL_MODEL } from "@paperclipai/adapter-gemini-local";
 import { resolveRouteOnboardingOptions } from "../lib/onboarding-route";
 import { getTelegramConnectorRecommendation } from "../lib/onboarding-connector-recommendations";
+import { resolveUiText } from "../lib/localized";
 import { AsciiArtAnimation } from "./AsciiArtAnimation";
 import { OpenCodeLogoIcon } from "./OpenCodeLogoIcon";
 import {
@@ -1284,7 +1285,7 @@ export function OnboardingWizard() {
                       ) : telegramConnectorRecommendation ? (
                         <div className="rounded-md border border-border bg-background/80 px-3 py-3 space-y-2">
                           <p className="text-sm font-medium">
-                            {telegramConnectorRecommendation.example.displayName}
+                            {resolveUiText(telegramConnectorRecommendation.example.displayName)}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             Requesting install opens a prefilled approval in a

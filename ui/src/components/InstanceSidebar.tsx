@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { Clock3, FlaskConical, Puzzle, Settings, SlidersHorizontal } from "lucide-react";
-import { NavLink } from "@/lib/router";
 import { pluginsApi } from "@/api/plugins";
 import { queryKeys } from "@/lib/queryKeys";
 import { resolveUiText } from "@/lib/localized";
@@ -13,6 +12,13 @@ export function InstanceSidebar() {
     queryKey: queryKeys.plugins.all,
     queryFn: () => pluginsApi.list(),
   });
+  const { data: examples } = useQuery({
+    queryKey: [...queryKeys.plugins.examples, "catalog-sidebar"],
+    queryFn: () => pluginsApi.listExamples(),
+  });
+  const exampleNameByPackageName = new Map(
+    (examples ?? []).map((example) => [example.packageName, resolveUiText(example.displayName)]),
+  );
 
   return (
     <aside className="w-60 h-full min-h-0 border-r border-border bg-background flex flex-col">
@@ -32,20 +38,17 @@ export function InstanceSidebar() {
           {(plugins ?? []).length > 0 ? (
             <div className="ml-4 mt-1 flex flex-col gap-0.5 border-l border-border/70 pl-3">
               {(plugins ?? []).map((plugin) => (
-                <NavLink
+                <SidebarNavItem
                   key={plugin.id}
                   to={`/instance/settings/plugins/${plugin.id}`}
-                  className={({ isActive }) =>
-                    [
-                      "rounded-md px-2 py-1.5 text-xs transition-colors",
-                      isActive
-                        ? "bg-accent text-foreground"
-                        : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-                    ].join(" ")
+                  label={
+                    exampleNameByPackageName.get(plugin.packageName) ||
+                    resolveUiText(plugin.manifestJson.displayName) ||
+                    plugin.packageName
                   }
-                >
-                  {resolveUiText(plugin.manifestJson.displayName) || plugin.packageName}
-                </NavLink>
+                  icon={Puzzle}
+                  className="px-2 py-1.5 text-xs"
+                />
               ))}
             </div>
           ) : null}

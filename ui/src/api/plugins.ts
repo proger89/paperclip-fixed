@@ -11,6 +11,7 @@
  */
 
 import type {
+  LocalizedText,
   PluginLauncherDeclaration,
   PluginLauncherRenderContextSnapshot,
   PluginCategory,
@@ -135,11 +136,12 @@ export interface PluginDashboardData {
 export interface AvailablePluginExample {
   packageName: string;
   pluginKey: string;
-  displayName: string;
-  description: string;
+  displayName: LocalizedText;
+  description: LocalizedText;
   localPath: string;
   tag: "example" | "bundled";
   categories: PluginCategory[];
+  devOnly?: boolean;
 }
 
 /**
@@ -170,8 +172,10 @@ export const pluginsApi = {
   /**
    * List bundled example plugins available from the current repo checkout.
    */
-  listExamples: () =>
-    api.get<AvailablePluginExample[]>("/plugins/examples"),
+  listExamples: (options?: { includeDevOnly?: boolean }) =>
+    api.get<AvailablePluginExample[]>(
+      `/plugins/examples${options?.includeDevOnly ? "?includeDevOnly=true" : ""}`,
+    ),
 
   /**
    * Fetch a single plugin record by its UUID or plugin key.

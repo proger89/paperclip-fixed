@@ -15,11 +15,11 @@ const manifest: PaperclipPluginManifestV1 = {
   version: PLUGIN_VERSION,
   displayName: {
     en: "Telegram Operator Bot",
-    ru: "Telegram Operator Bot",
+    ru: "Telegram-бот оператора",
   },
   description: {
     en: "Private-chat Telegram operator bot for tasks, approvals, joins, budgets, and controlled Paperclip replies over getUpdates polling.",
-    ru: "Private-chat Telegram operator bot for tasks, approvals, joins, budgets, and controlled Paperclip replies over getUpdates polling.",
+    ru: "Telegram-бот для личных чатов: задачи, approvals, joins, бюджеты и управляемые ответы Paperclip через polling getUpdates.",
   },
   author: "Paperclip",
   categories: ["connector", "ui"],
@@ -61,11 +61,11 @@ const manifest: PaperclipPluginManifestV1 = {
       jobKey: JOB_KEYS.syncTelegram,
       displayName: {
         en: "Sync Telegram operator bot",
-        ru: "Sync Telegram operator bot",
+        ru: "Синхронизация Telegram-бота оператора",
       },
       description: {
         en: "Poll Telegram getUpdates and reconcile private-chat control-plane notifications.",
-        ru: "Poll Telegram getUpdates and reconcile private-chat control-plane notifications.",
+        ru: "Опрашивает Telegram через getUpdates и синхронизирует control-plane уведомления в личных чатах.",
       },
       schedule: "* * * * *",
     },
@@ -79,10 +79,10 @@ const manifest: PaperclipPluginManifestV1 = {
     properties: {
       botTokenSecretRef: {
         type: "string",
-        title: { en: "Legacy Bot Token Secret", ru: "Legacy Bot Token Secret" },
+        title: { en: "Legacy Bot Token Secret", ru: "Legacy-секрет токена бота" },
         description: {
           en: "Legacy instance-scoped secret UUID. Prefer company-scoped operator settings instead.",
-          ru: "Legacy instance-scoped secret UUID. Prefer company-scoped operator settings instead.",
+          ru: "Legacy UUID секрета на уровне инстанса. Предпочтительнее использовать company-scoped настройки operator bot.",
         },
         format: "secret-ref",
         default: DEFAULT_CONFIG.botTokenSecretRef,
@@ -96,7 +96,7 @@ const manifest: PaperclipPluginManifestV1 = {
         id: SLOT_IDS.settingsPage,
         displayName: {
           en: "Telegram Operator Settings",
-          ru: "Telegram Operator Settings",
+          ru: "Настройки Telegram-бота оператора",
         },
         exportName: EXPORT_NAMES.settingsPage,
       },
@@ -105,7 +105,7 @@ const manifest: PaperclipPluginManifestV1 = {
         id: SLOT_IDS.page,
         displayName: {
           en: "Telegram Operator Bot",
-          ru: "Telegram Operator Bot",
+          ru: "Telegram-бот оператора",
         },
         exportName: EXPORT_NAMES.page,
         routePath: PAGE_ROUTE,

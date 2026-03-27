@@ -1,5 +1,8 @@
-const OPENAI_API_BASE = (process.env.OPENAI_API_BASE_URL?.trim() || "https://api.openai.com/v1").replace(/\/+$/, "");
-const GPT_54_MODEL = "gpt-5.4";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
+import { execute as codexExecute } from "@paperclipai/adapter-codex-local/server";
 
 export interface EditorialAuthorProfile {
   id: string;
@@ -12,16 +15,24 @@ export interface EditorialAuthorProfile {
   ctaRules?: string | null;
 }
 
+export interface TelegramEditorialExecutionConfig {
+  adapterType: "codex_local";
+  model: string;
+  reasoningEffort: "low" | "medium" | "high";
+}
+
 export interface TelegramEditorialRewriteInput {
   destinationLabel: string;
   sourceTitle?: string | null;
   sourceUrl?: string | null;
   sourceText: string;
   authorProfile: EditorialAuthorProfile;
+  execution: TelegramEditorialExecutionConfig;
 }
 
 export interface TelegramEditorialRewriteResult {
   model: string;
+  reasoningEffort: "low" | "medium" | "high";
   title: string;
   sourceSummary: string;
   finalCopy: string;
@@ -30,19 +41,11 @@ export interface TelegramEditorialRewriteResult {
   rawText: string;
 }
 
-function requireOpenAiApiKey() {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is required for Telegram editorial rewrite with GPT-5.4");
-  }
-  return apiKey;
-}
-
 function buildSystemPrompt(profile: EditorialAuthorProfile) {
   return [
     "You are the editorial engine for a Telegram publishing workflow inside Paperclip.",
     "Always rewrite into a publication-ready Telegram post that preserves facts, respects the source, and matches the target channel voice.",
-    "The target model is GPT-5.4 and there is no fallback editorial path.",
+    "There is no fallback editorial path.",
     "",
     "Return strict JSON with this shape:",
     "{",
@@ -72,6 +75,7 @@ function buildSystemPrompt(profile: EditorialAuthorProfile) {
 
 function buildUserPrompt(input: TelegramEditorialRewriteInput) {
   return [
+    "Prepare Telegram-ready editorial copy from the source below.",
     `Destination label: ${input.destinationLabel}`,
     `Source title: ${input.sourceTitle ?? "none"}`,
     `Source URL: ${input.sourceUrl ?? "none"}`,
@@ -79,94 +83,6 @@ function buildUserPrompt(input: TelegramEditorialRewriteInput) {
     "Source text:",
     input.sourceText,
   ].join("\n");
-}
-
-async function openAiRequest(apiKey: string, path: string, payload: Record<string, unknown>) {
-  const response = await fetch(`${OPENAI_API_BASE}${path}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
-  });
-
-  const rawText = await response.text();
-  let json: Record<string, unknown> | null = null;
-  try {
-    json = rawText ? JSON.parse(rawText) as Record<string, unknown> : null;
-  } catch {
-    json = null;
-  }
-
-  if (!response.ok) {
-    const message =
-      typeof json?.error === "object" && json?.error !== null && typeof (json.error as { message?: unknown }).message === "string"
-        ? (json.error as { message: string }).message
-        : rawText || `OpenAI request failed (${response.status})`;
-    throw new Error(message);
-  }
-
-  return json ?? {};
-}
-
-function extractTextFromResponsesPayload(payload: unknown): string | null {
-  if (!payload || typeof payload !== "object") return null;
-  const record = payload as Record<string, unknown>;
-  if (typeof record.output_text === "string" && record.output_text.trim().length > 0) {
-    return record.output_text.trim();
-  }
-
-  const output = Array.isArray(record.output) ? record.output : [];
-  const textParts: string[] = [];
-  for (const entry of output) {
-    if (!entry || typeof entry !== "object") continue;
-    const content = Array.isArray((entry as Record<string, unknown>).content)
-      ? (entry as Record<string, unknown>).content as Array<Record<string, unknown>>
-      : [];
-    for (const chunk of content) {
-      if (!chunk || typeof chunk !== "object") continue;
-      const candidate =
-        typeof chunk.text === "string"
-          ? chunk.text
-          : typeof chunk.value === "string"
-            ? chunk.value
-            : null;
-      if (candidate && candidate.trim().length > 0) {
-        textParts.push(candidate.trim());
-      }
-    }
-  }
-
-  return textParts.length > 0 ? textParts.join("\n") : null;
-}
-
-function extractTextFromChatCompletionsPayload(payload: unknown): string | null {
-  if (!payload || typeof payload !== "object") return null;
-  const record = payload as Record<string, unknown>;
-  const choices = Array.isArray(record.choices) ? record.choices : [];
-  const first = choices[0];
-  if (!first || typeof first !== "object") return null;
-  const message = (first as Record<string, unknown>).message;
-  if (!message || typeof message !== "object") return null;
-  const content = (message as Record<string, unknown>).content;
-  if (typeof content === "string" && content.trim().length > 0) {
-    return content.trim();
-  }
-  if (Array.isArray(content)) {
-    const text = content
-      .map((entry) => {
-        if (!entry || typeof entry !== "object") return "";
-        if (typeof (entry as Record<string, unknown>).text === "string") {
-          return ((entry as Record<string, unknown>).text as string).trim();
-        }
-        return "";
-      })
-      .filter(Boolean)
-      .join("\n");
-    return text || null;
-  }
-  return null;
 }
 
 function extractJsonObject(text: string): Record<string, unknown> | null {
@@ -203,66 +119,106 @@ function fallbackTitle(sourceTitle: string | null | undefined, sourceText: strin
   return sourceText.replace(/\s+/g, " ").trim().slice(0, 120) || "Telegram editorial draft";
 }
 
+function resolveExecutionConfig(input: TelegramEditorialExecutionConfig): TelegramEditorialExecutionConfig {
+  const model = input.model.trim();
+  if (!model) {
+    throw new Error("AI model is required for Telegram editorial rewrite");
+  }
+  if (input.adapterType !== "codex_local") {
+    throw new Error(`Unsupported AI adapter for Telegram editorial rewrite: ${input.adapterType}`);
+  }
+  if (input.reasoningEffort !== "low" && input.reasoningEffort !== "medium" && input.reasoningEffort !== "high") {
+    throw new Error(`Unsupported AI reasoning effort: ${input.reasoningEffort}`);
+  }
+  return {
+    adapterType: "codex_local",
+    model,
+    reasoningEffort: input.reasoningEffort,
+  };
+}
+
 export async function rewriteTelegramEditorialDraft(
   input: TelegramEditorialRewriteInput,
 ): Promise<TelegramEditorialRewriteResult> {
-  const apiKey = requireOpenAiApiKey();
-  const systemPrompt = buildSystemPrompt(input.authorProfile);
-  const userPrompt = buildUserPrompt(input);
+  const execution = resolveExecutionConfig(input.execution);
+  const prompt = [buildSystemPrompt(input.authorProfile), "", buildUserPrompt(input)].join("\n");
+  const runId = `telegram-editorial-${randomUUID()}`;
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-telegram-editorial-"));
+  const logs: string[] = [];
 
-  let rawText: string | null = null;
   try {
-    const payload = await openAiRequest(apiKey, "/responses", {
-      model: GPT_54_MODEL,
-      input: [
-        {
-          role: "system",
-          content: [{ type: "input_text", text: systemPrompt }],
-        },
-        {
-          role: "user",
-          content: [{ type: "input_text", text: userPrompt }],
-        },
-      ],
+    const result = await codexExecute({
+      runId,
+      agent: {
+        id: "telegram-editorial-ai",
+        companyId: "paperclip-editorial",
+        name: "Telegram Editorial AI",
+        adapterType: "codex_local",
+        adapterConfig: {},
+      },
+      runtime: {
+        sessionId: null,
+        sessionParams: null,
+        sessionDisplayId: null,
+        taskKey: null,
+      },
+      config: {
+        command: process.env.PAPERCLIP_EDITORIAL_CODEX_COMMAND?.trim() || "codex",
+        cwd: tempDir,
+        model: execution.model,
+        modelReasoningEffort: execution.reasoningEffort,
+        dangerouslyBypassApprovalsAndSandbox: true,
+        promptTemplate: prompt,
+      },
+      context: {},
+      authToken: "",
+      onLog: async (_stream, chunk) => {
+        if (chunk.trim()) logs.push(chunk.trim());
+      },
     });
-    rawText = extractTextFromResponsesPayload(payload);
-  } catch (error) {
-    const payload = await openAiRequest(apiKey, "/chat/completions", {
-      model: GPT_54_MODEL,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.7,
-    });
-    rawText = extractTextFromChatCompletionsPayload(payload);
-    if (!rawText) {
-      throw error;
+
+    if (result.timedOut) {
+      throw new Error(`AI rewrite timed out${result.errorMessage ? `: ${result.errorMessage}` : ""}`);
     }
-  }
+    if ((result.exitCode ?? 0) !== 0) {
+      const stderr =
+        result.resultJson && typeof result.resultJson === "object" && typeof (result.resultJson as Record<string, unknown>).stderr === "string"
+          ? ((result.resultJson as Record<string, unknown>).stderr as string).trim()
+          : "";
+      throw new Error(result.errorMessage || stderr || "AI rewrite failed");
+    }
 
-  const output = extractJsonObject(rawText ?? "");
-  const finalCopy =
-    typeof output?.finalCopy === "string" && output.finalCopy.trim().length > 0
-      ? output.finalCopy.trim()
-      : (rawText ?? "").trim();
-  if (!finalCopy) {
-    throw new Error("GPT-5.4 did not return Telegram copy");
-  }
+    const rawText = result.summary?.trim() || "";
+    const output = extractJsonObject(rawText);
+    const finalCopy =
+      typeof output?.finalCopy === "string" && output.finalCopy.trim().length > 0
+        ? output.finalCopy.trim()
+        : rawText;
+    if (!finalCopy) {
+      throw new Error("AI did not return Telegram copy");
+    }
 
-  return {
-    model: GPT_54_MODEL,
-    title:
-      typeof output?.title === "string" && output.title.trim().length > 0
-        ? output.title.trim()
-        : fallbackTitle(input.sourceTitle, input.sourceText),
-    sourceSummary:
-      typeof output?.sourceSummary === "string" && output.sourceSummary.trim().length > 0
-        ? output.sourceSummary.trim()
-        : fallbackTitle(input.sourceTitle, input.sourceText),
-    finalCopy,
-    checklist: normalizeStringArray(output?.checklist),
-    riskFlags: normalizeStringArray(output?.riskFlags),
-    rawText: rawText ?? finalCopy,
-  };
+    return {
+      model: execution.model,
+      reasoningEffort: execution.reasoningEffort,
+      title:
+        typeof output?.title === "string" && output.title.trim().length > 0
+          ? output.title.trim()
+          : fallbackTitle(input.sourceTitle, input.sourceText),
+      sourceSummary:
+        typeof output?.sourceSummary === "string" && output.sourceSummary.trim().length > 0
+          ? output.sourceSummary.trim()
+          : fallbackTitle(input.sourceTitle, input.sourceText),
+      finalCopy,
+      checklist: normalizeStringArray(output?.checklist),
+      riskFlags: normalizeStringArray(output?.riskFlags),
+      rawText: rawText || finalCopy,
+    };
+  } catch (error) {
+    const detail = logs.slice(-6).join("\n").trim();
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(detail ? `${message}\n${detail}` : message);
+  } finally {
+    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  }
 }

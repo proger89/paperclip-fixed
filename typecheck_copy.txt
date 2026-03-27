@@ -1,0 +1,87 @@
+Scope: 24 of 25 workspace projects
+packages/adapter-utils typecheck$ tsc --noEmit
+packages/shared typecheck$ tsc --noEmit
+packages/adapter-utils typecheck: Done
+packages/shared typecheck: Done
+packages/adapters/claude-local typecheck$ tsc --noEmit
+packages/adapters/cursor-local typecheck$ tsc --noEmit
+packages/adapters/codex-local typecheck$ tsc --noEmit
+packages/adapters/gemini-local typecheck$ tsc --noEmit
+packages/adapters/cursor-local typecheck: Done
+packages/adapters/openclaw-gateway typecheck$ tsc --noEmit
+packages/adapters/gemini-local typecheck: Done
+packages/adapters/opencode-local typecheck$ tsc --noEmit
+packages/adapters/claude-local typecheck: Done
+packages/adapters/pi-local typecheck$ tsc --noEmit
+packages/adapters/codex-local typecheck: Done
+packages/db typecheck$ tsc --noEmit
+packages/adapters/openclaw-gateway typecheck: Done
+packages/plugins/sdk typecheck$ pnpm --filter @paperclipai/shared build && tsc --noEmit
+packages/adapters/pi-local typecheck: Done
+packages/adapters/opencode-local typecheck: Done
+packages/plugins/sdk typecheck: > @paperclipai/shared@0.3.1 build D:\new-projects\paperclip\packages\shared
+packages/plugins/sdk typecheck: > tsc
+packages/db typecheck: Done
+packages/plugins/sdk typecheck: Done
+packages/plugins/author-voice-profiles typecheck$ pnpm --filter @paperclipai/plugin-sdk build && tsc --noEmit
+packages/plugins/create-paperclip-plugin typecheck$ tsc --noEmit
+.../plugin-authoring-smoke-example typecheck$ pnpm --filter @paperclipai/plugin-sdk build && tsc --noEmit
+.../examples/plugin-file-browser-example typecheck$ pnpm --filter @paperclipai/plugin-sdk build && tsc --noEmit
+packages/plugins/author-voice-profiles typecheck: > @paperclipai/plugin-sdk@1.0.0 build D:\new-projects\paperclip\packages\plugins\sdk
+packages/plugins/author-voice-profiles typecheck: > pnpm --filter @paperclipai/shared build && tsc
+.../examples/plugin-file-browser-example typecheck: > @paperclipai/plugin-sdk@1.0.0 build D:\new-projects\paperclip\packages\plugins\sdk
+.../examples/plugin-file-browser-example typecheck: > pnpm --filter @paperclipai/shared build && tsc
+.../plugin-authoring-smoke-example typecheck: > @paperclipai/plugin-sdk@1.0.0 build D:\new-projects\paperclip\packages\plugins\sdk
+.../plugin-authoring-smoke-example typecheck: > pnpm --filter @paperclipai/shared build && tsc
+packages/plugins/create-paperclip-plugin typecheck: Done
+.../examples/plugin-hello-world-example typecheck$ pnpm --filter @paperclipai/plugin-sdk build && tsc --noEmit
+packages/plugins/author-voice-profiles typecheck: > @paperclipai/shared@0.3.1 build D:\new-projects\paperclip\packages\shared
+packages/plugins/author-voice-profiles typecheck: > tsc
+.../examples/plugin-file-browser-example typecheck: > @paperclipai/shared@0.3.1 build D:\new-projects\paperclip\packages\shared
+.../examples/plugin-file-browser-example typecheck: > tsc
+.../plugin-authoring-smoke-example typecheck: > @paperclipai/shared@0.3.1 build D:\new-projects\paperclip\packages\shared
+.../plugin-authoring-smoke-example typecheck: > tsc
+.../examples/plugin-hello-world-example typecheck: > @paperclipai/plugin-sdk@1.0.0 build D:\new-projects\paperclip\packages\plugins\sdk
+.../examples/plugin-hello-world-example typecheck: > pnpm --filter @paperclipai/shared build && tsc
+.../examples/plugin-hello-world-example typecheck: > @paperclipai/shared@0.3.1 build D:\new-projects\paperclip\packages\shared
+.../examples/plugin-hello-world-example typecheck: > tsc
+packages/plugins/author-voice-profiles typecheck: Done
+.../examples/plugin-kitchen-sink-example typecheck$ pnpm --filter @paperclipai/plugin-sdk build && tsc --noEmit
+.../examples/plugin-file-browser-example typecheck: Done
+packages/plugins/feed-sources typecheck$ pnpm --filter @paperclipai/plugin-sdk build && tsc --noEmit
+.../plugin-authoring-smoke-example typecheck: Done
+packages/plugins/telegram-operator-bot typecheck$ pnpm --filter @paperclipai/plugin-sdk build && tsc --noEmit
+.../examples/plugin-kitchen-sink-example typecheck: > @paperclipai/plugin-sdk@1.0.0 build D:\new-projects\paperclip\packages\plugins\sdk
+.../examples/plugin-kitchen-sink-example typecheck: > pnpm --filter @paperclipai/shared build && tsc
+.../examples/plugin-hello-world-example typecheck: Done
+packages/plugins/telegram-publishing typecheck$ pnpm --filter @paperclipai/plugin-sdk build && tsc --noEmit
+packages/plugins/feed-sources typecheck: > @paperclipai/plugin-sdk@1.0.0 build D:\new-projects\paperclip\packages\plugins\sdk
+packages/plugins/feed-sources typecheck: > pnpm --filter @paperclipai/shared build && tsc
+packages/plugins/telegram-operator-bot typecheck: > @paperclipai/plugin-sdk@1.0.0 build D:\new-projects\paperclip\packages\plugins\sdk
+packages/plugins/telegram-operator-bot typecheck: > pnpm --filter @paperclipai/shared build && tsc
+.../examples/plugin-kitchen-sink-example typecheck: > @paperclipai/shared@0.3.1 build D:\new-projects\paperclip\packages\shared
+.../examples/plugin-kitchen-sink-example typecheck: > tsc
+packages/plugins/telegram-publishing typecheck: > @paperclipai/plugin-sdk@1.0.0 build D:\new-projects\paperclip\packages\plugins\sdk
+packages/plugins/telegram-publishing typecheck: > pnpm --filter @paperclipai/shared build && tsc
+packages/plugins/feed-sources typecheck: > @paperclipai/shared@0.3.1 build D:\new-projects\paperclip\packages\shared
+packages/plugins/feed-sources typecheck: > tsc
+packages/plugins/telegram-operator-bot typecheck: > @paperclipai/shared@0.3.1 build D:\new-projects\paperclip\packages\shared
+packages/plugins/telegram-operator-bot typecheck: > tsc
+packages/plugins/telegram-publishing typecheck: > @paperclipai/shared@0.3.1 build D:\new-projects\paperclip\packages\shared
+packages/plugins/telegram-publishing typecheck: > tsc
+packages/plugins/feed-sources typecheck: Done
+packages/plugins/web-content-import typecheck$ pnpm --filter @paperclipai/plugin-sdk build && tsc --noEmit
+packages/plugins/web-content-import typecheck: > @paperclipai/plugin-sdk@1.0.0 build D:\new-projects\paperclip\packages\plugins\sdk
+packages/plugins/web-content-import typecheck: > pnpm --filter @paperclipai/shared build && tsc
+packages/plugins/web-content-import typecheck: > @paperclipai/shared@0.3.1 build D:\new-projects\paperclip\packages\shared
+packages/plugins/web-content-import typecheck: > tsc
+.../examples/plugin-kitchen-sink-example typecheck: Done
+server typecheck$ pnpm --filter @paperclipai/plugin-sdk build && tsc --noEmit
+packages/plugins/telegram-operator-bot typecheck: Done
+ui typecheck$ tsc -b
+packages/plugins/telegram-publishing typecheck: src/ui/index.tsx(3,3): error TS2305: Module '"@paperclipai/plugin-sdk/ui"' has no exported member 'PluginDashboardWidgetProps'.
+packages/plugins/telegram-publishing typecheck: Failed
+D:\new-projects\paperclip\packages\plugins\telegram-publishing:
+?ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL? @paperclipai/plugin-telegram-publishing@0.1.0 typecheck: `pnpm --filter @paperclipai/plugin-sdk build && tsc --noEmit`
+Exit status 2
+

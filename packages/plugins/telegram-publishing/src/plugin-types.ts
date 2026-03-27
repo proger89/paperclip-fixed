@@ -20,6 +20,12 @@ export type TelegramPublishingSettings = {
   defaultDestinationId: string;
 };
 
+export type TelegramPublishingAiSettings = {
+  adapterType: "codex_local";
+  model: string;
+  reasoningEffort: "low" | "medium" | "high";
+};
+
 export type TelegramTaskBotSettings = {
   enabled: boolean;
   pollingEnabled: boolean;
@@ -58,6 +64,7 @@ export type TelegramIngestionSource = {
 export type TelegramCompanySettings = {
   publishing: TelegramPublishingSettings;
   taskBot: TelegramTaskBotSettings;
+  ai: TelegramPublishingAiSettings;
   ingestion: {
     sources: TelegramIngestionSource[];
   };

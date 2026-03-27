@@ -1,6 +1,7 @@
 import { DEFAULT_COMPANY_SETTINGS, DEFAULT_CONFIG } from "./constants.js";
 import type {
   TelegramDestination,
+  TelegramPublishingAiSettings,
   TelegramIngestionSource,
   LegacyTelegramConfig,
   TelegramCompanySettings,
@@ -53,6 +54,22 @@ function normalizeSource(input: unknown, index: number): TelegramIngestionSource
   };
 }
 
+function normalizeAiSettings(input: unknown): TelegramPublishingAiSettings {
+  const record = typeof input === "object" && input !== null ? input as Record<string, unknown> : {};
+  const adapterType = trimString(record.adapterType) === "codex_local" ? "codex_local" : "codex_local";
+  const reasoningEffortRaw = trimString(record.reasoningEffort);
+  const reasoningEffort =
+    reasoningEffortRaw === "low" || reasoningEffortRaw === "medium" || reasoningEffortRaw === "high"
+      ? reasoningEffortRaw
+      : DEFAULT_COMPANY_SETTINGS.ai.reasoningEffort;
+
+  return {
+    adapterType,
+    model: trimString(record.model),
+    reasoningEffort,
+  };
+}
+
 function materializeLegacyDestinations(input: LegacyTelegramConfig): TelegramDestination[] {
   const chatId = trimString(input.defaultChatId);
   const publicHandle = trimString(input.defaultPublicHandle);
@@ -91,6 +108,10 @@ export function sanitizeTelegramCompanySettings(input: unknown): TelegramCompany
   const taskBotInput =
     typeof record.taskBot === "object" && record.taskBot !== null
       ? record.taskBot as Record<string, unknown>
+      : {};
+  const aiInput =
+    typeof record.ai === "object" && record.ai !== null
+      ? record.ai as Record<string, unknown>
       : {};
   const ingestionInput =
     typeof record.ingestion === "object" && record.ingestion !== null
@@ -136,6 +157,7 @@ export function sanitizeTelegramCompanySettings(input: unknown): TelegramCompany
           : DEFAULT_COMPANY_SETTINGS.taskBot.notificationMode,
       claimCodeTtlMinutes: ttl,
     },
+    ai: normalizeAiSettings(aiInput),
     ingestion: {
       sources: sourceInputs.map((entry, index) => normalizeSource(entry, index)).filter((entry) => entry.chatId),
     },
@@ -157,6 +179,7 @@ export function companySettingsFromLegacyConfig(input: unknown): TelegramCompany
       defaultDestinationId: destinations[0]?.id ?? "",
     },
     taskBot: { ...DEFAULT_COMPANY_SETTINGS.taskBot },
+    ai: { ...DEFAULT_COMPANY_SETTINGS.ai },
     ingestion: { ...DEFAULT_COMPANY_SETTINGS.ingestion },
   };
 }

@@ -49,6 +49,11 @@ interface TelegramPublishingSettings {
     destinations: TelegramDestination[];
     defaultDestinationId: string;
   };
+  ai: {
+    adapterType: "codex_local";
+    model: string;
+    reasoningEffort: "low" | "medium" | "high";
+  };
   ingestion: {
     sources: TelegramSource[];
   };
@@ -129,6 +134,9 @@ function normalizePublishingSettings(input: unknown): TelegramPublishingSettings
   const taskBot = record.taskBot && typeof record.taskBot === "object" && !Array.isArray(record.taskBot)
     ? record.taskBot as Record<string, unknown>
     : {};
+  const ai = record.ai && typeof record.ai === "object" && !Array.isArray(record.ai)
+    ? record.ai as Record<string, unknown>
+    : {};
 
   const destinations = (Array.isArray(publishing.destinations) ? publishing.destinations : [])
     .map((entry, index) => normalizeTelegramDestination(entry, index))
@@ -161,6 +169,14 @@ function normalizePublishingSettings(input: unknown): TelegramPublishingSettings
         typeof taskBot.claimCodeTtlMinutes === "number" && Number.isFinite(taskBot.claimCodeTtlMinutes)
           ? Math.max(5, Math.min(24 * 60, Math.floor(taskBot.claimCodeTtlMinutes)))
           : 30,
+    },
+    ai: {
+      adapterType: "codex_local",
+      model: trimToNull(ai.model) ?? "",
+      reasoningEffort:
+        ai.reasoningEffort === "low" || ai.reasoningEffort === "high"
+          ? ai.reasoningEffort
+          : "medium",
     },
   };
 }
@@ -227,6 +243,7 @@ export function telegramPublishingRoutes(db: Db) {
 
     return {
       publishingPlugin,
+      authorVoicePlugin,
       settings: normalizePublishingSettings(publishingSettingsRow?.settingsJson ?? {}),
       authorProfiles: normalizeAuthorVoiceProfiles(authorVoiceRow?.settingsJson ?? {}),
     };
@@ -293,7 +310,7 @@ export function telegramPublishingRoutes(db: Db) {
     assertCompanyAccess(req, companyId);
 
     try {
-      const { publishingPlugin, settings, authorProfiles } = await loadPublishingContext(companyId);
+      const { publishingPlugin, authorVoicePlugin, settings, authorProfiles } = await loadPublishingContext(companyId);
       const [botHealth, lastPublication, recentPublications, scheduledJobs, recentSources, readyQueue] = await Promise.all([
         state.get(publishingPlugin.id, "company", "bot-health", { scopeId: companyId }),
         state.get(publishingPlugin.id, "company", "last-publication", { scopeId: companyId }),
@@ -311,6 +328,7 @@ export function telegramPublishingRoutes(db: Db) {
 
       res.json({
         configured: Boolean(settings.publishing.botTokenSecretRef && settings.publishing.destinations.length > 0),
+        authorVoicePluginInstalled: Boolean(authorVoicePlugin),
         settings,
         publishChannels: settings.publishing.destinations,
         donorChannels: settings.ingestion.sources,
@@ -367,6 +385,10 @@ export function telegramPublishingRoutes(db: Db) {
         res.status(422).json({ error: "This Telegram channel is blocked until an author voice profile is configured" });
         return;
       }
+      if (!settings.ai.model) {
+        res.status(422).json({ error: "AI settings are incomplete. Configure Codex model first." });
+        return;
+      }
 
       const imported = sourceUrl ? await importWebContent(sourceUrl) : null;
       const effectiveSourceText = sourceText ?? imported?.sourceText ?? "";
@@ -376,6 +398,7 @@ export function telegramPublishingRoutes(db: Db) {
         sourceUrl: imported?.url ?? sourceUrl,
         sourceText: effectiveSourceText,
         authorProfile,
+        execution: settings.ai,
       });
 
       const issue = await issues.create(companyId, {
@@ -408,7 +431,7 @@ export function telegramPublishingRoutes(db: Db) {
         title: rewrite.title,
         format: "markdown",
         body: rewrite.finalCopy,
-        changeSummary: "Draft Telegram rewrite via GPT-5.4",
+        changeSummary: "Draft Telegram rewrite via AI",
         createdByAgentId: actor.agentId,
         createdByUserId: actor.actorType === "user" ? actor.actorId : null,
       });
@@ -433,12 +456,13 @@ export function telegramPublishingRoutes(db: Db) {
         format: "markdown",
         body: [
           `Model: ${rewrite.model}`,
+          `Reasoning: ${rewrite.reasoningEffort}`,
           "",
           "Checklist:",
           ...(rewrite.checklist.length > 0 ? rewrite.checklist.map((entry) => `- ${entry}`) : ["- Confirm the post matches the channel voice profile."]),
           "",
           "Risk flags:",
-          ...(rewrite.riskFlags.length > 0 ? rewrite.riskFlags.map((entry) => `- ${entry}`) : ["- No explicit risks flagged by GPT-5.4."]),
+          ...(rewrite.riskFlags.length > 0 ? rewrite.riskFlags.map((entry) => `- ${entry}`) : ["- No explicit risks flagged by AI."]),
         ].join("\n"),
         changeSummary: "Telegram publish checklist",
         createdByAgentId: actor.agentId,
@@ -493,6 +517,7 @@ export function telegramPublishingRoutes(db: Db) {
           authorProfileId: authorProfile.id,
           sourceUrl: imported?.url ?? null,
           model: rewrite.model,
+          reasoningEffort: rewrite.reasoningEffort,
         },
       });
 
@@ -547,7 +572,7 @@ export function telegramPublishingRoutes(db: Db) {
       ]);
 
       res.json({
-        configured: Boolean(settings.publishing.botTokenSecretRef && settings.taskBot.enabled),
+        configured: Boolean(settings.publishing.botTokenSecretRef && settings.publishing.destinations.length > 0),
         settings,
         linkedChats: linkedChats.map((entity) => entity.data),
         botHealth,

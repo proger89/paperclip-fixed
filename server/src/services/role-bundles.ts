@@ -4,6 +4,7 @@ import type {
   ReviewPolicyKey,
   RoleBundleKey,
 } from "@paperclipai/shared";
+import { resolveLocalizedText } from "@paperclipai/shared";
 import { resolveRoleBundleSkillRequirement } from "./role-bundle-skills.js";
 import { listBundledProductPlugins } from "./plugin-example-catalog.js";
 
@@ -97,12 +98,12 @@ function bundledConnectorSuggestion(
 
   return {
     key: example.pluginKey,
-    displayName: example.displayName,
+    displayName: resolveLocalizedText(example.displayName, "en"),
     pluginKey: example.pluginKey,
     packageName: example.packageName,
     source: "local_path",
     localPath: example.localPath,
-    description: example.description,
+    description: resolveLocalizedText(example.description, "en"),
     categories: example.categories,
     reason,
   };
@@ -419,19 +420,19 @@ export const ROLE_BUNDLES: Record<RoleBundleKey, RoleBundleDefinition> = {
     suggestedConnectorPlugins: [
       bundledConnectorSuggestion(
         "paperclip.telegram-publishing",
-        "Useful for PM-led editorial planning when Telegram channel workflows need a visible publishing control plane.",
+        "Полезно, когда PM нужен наглядный контур планирования и публикаций для Telegram-каналов.",
       ),
       bundledConnectorSuggestion(
         "paperclip.telegram-operator-bot",
-        "Useful when PMs want Telegram inbox visibility for approvals, joins, and blocked execution without opening the full board.",
+        "Полезно, когда PM хочет видеть согласования, заявки на вход и блокеры прямо в Telegram без открытия всей панели.",
       ),
       bundledConnectorSuggestion(
         "paperclip.author-voice-profiles",
-        "Install to capture channel-specific author voice, banned phrases, and CTA constraints before GPT-driven rewrites go live.",
+        "Установи, чтобы зафиксировать стиль автора, запрещенные фразы и CTA-ограничения по каналам до ИИ-рерайта.",
       ),
       bundledConnectorSuggestion(
         "paperclip.feed-sources",
-        "Useful when PMs need a simple editorial intake surface for recurring RSS, Atom, or web sources.",
+        "Полезно, когда PM нужен простой приемник регулярных RSS, Atom и web-источников в редакционную очередь.",
       ),
     ],
     managedInstructions: ["AGENTS.md"],
@@ -492,21 +493,21 @@ export const ROLE_BUNDLES: Record<RoleBundleKey, RoleBundleDefinition> = {
     requiredConnectorPlugins: [
       bundledConnectorSuggestion(
         "paperclip.telegram-publishing",
-        "Content workflows should install Telegram Publishing before this role starts faking external distribution or approval queues.",
+        "Контентный контур должен поставить Telegram Publishing до того, как эта роль начнет имитировать внешнюю дистрибуцию или очереди согласования.",
       ),
       bundledConnectorSuggestion(
         "paperclip.author-voice-profiles",
-        "Telegram Publishing should not ship without a per-channel author profile that captures voice, banned phrases, and CTA rules.",
+        "Telegram Publishing не должен выпускать посты без профиля стиля по каждому каналу с голосом автора, стоп-фразами и CTA-правилами.",
       ),
     ],
     suggestedConnectorPlugins: [
       bundledConnectorSuggestion(
         "paperclip.web-content-import",
-        "Lets operators turn a raw URL into clean source text before GPT-5.4 rewrites it into an approval-ready Telegram post.",
+        "Позволяет превратить сырую ссылку в чистый исходный текст до того, как ИИ подготовит пост для одобрения.",
       ),
       bundledConnectorSuggestion(
         "paperclip.feed-sources",
-        "Useful when donor feeds should land in the editorial queue without hand-copying source material.",
+        "Полезно, когда донорские ленты должны попадать в редакционную очередь без ручного копирования материала.",
       ),
     ],
     managedInstructions: ["AGENTS.md"],

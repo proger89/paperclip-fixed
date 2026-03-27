@@ -9,11 +9,11 @@ const manifest: PaperclipPluginManifestV1 = {
   version: PLUGIN_VERSION,
   displayName: {
     en: "Web Content Import",
-    ru: "Импорт веб-контента",
+    ru: "Импорт текста по ссылке",
   },
   description: {
     en: "Simple URL import surface that extracts clean source text for editorial workflows.",
-    ru: "Лаконичный импорт URL в чистый текст для editorial-пайплайна.",
+    ru: "Лаконичный импорт URL в чистый текст для editorial workflow.",
   },
   author: "Paperclip",
   categories: ["automation", "ui"],
@@ -29,7 +29,7 @@ const manifest: PaperclipPluginManifestV1 = {
         id: "web-content-import-settings-page",
         displayName: {
           en: "Web Content Import Settings",
-          ru: "Настройки импорта веб-контента",
+          ru: "Настройки импорта по ссылке",
         },
         exportName: "WebContentImportSettingsPage",
       },
@@ -38,7 +38,7 @@ const manifest: PaperclipPluginManifestV1 = {
         id: "web-content-import-page",
         displayName: {
           en: "Web Content Import",
-          ru: "Импорт веб-контента",
+          ru: "Импорт текста по ссылке",
         },
         exportName: "WebContentImportPage",
         routePath: "web-import",

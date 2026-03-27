@@ -98,6 +98,10 @@ export function PluginSettings() {
     enabled: !!pluginId && plugin?.status === "ready",
     refetchInterval: 30000,
   });
+  const examplesQuery = useQuery({
+    queryKey: [...queryKeys.plugins.examples, "plugin-settings-catalog"],
+    queryFn: () => pluginsApi.listExamples(),
+  });
 
   // Fetch existing config for the plugin
   const configSchema = plugin?.manifestJson?.instanceConfigSchema as JsonSchemaNode | undefined;
@@ -213,14 +217,28 @@ export function PluginSettings() {
   // intentionally provide richer settings UIs than their instanceConfigSchema.
   const hasCustomSettingsPage = pluginDeclaresCustomSettingsPage && pluginSlots.length > 0;
 
+  const catalogExample = useMemo(
+    () => (examplesQuery.data ?? []).find((example) => example.packageName === plugin?.packageName),
+    [examplesQuery.data, plugin?.packageName],
+  );
+  const pluginDisplayName =
+    (catalogExample ? resolveUiText(catalogExample.displayName) : null) ||
+    resolveUiText(plugin?.manifestJson?.displayName) ||
+    plugin?.packageName ||
+    "Plugin Details";
+  const pluginDescription =
+    (catalogExample ? resolveUiText(catalogExample.description) : null) ||
+    resolveUiText(plugin?.manifestJson?.description) ||
+    t("plugin.manager.noDescription");
+
   useEffect(() => {
     setBreadcrumbs([
       { label: selectedCompany?.name ?? "Company", href: "/dashboard" },
       { label: "Settings", href: "/instance/settings/heartbeats" },
       { label: "Plugins", href: "/instance/settings/plugins" },
-      { label: resolveUiText(plugin?.manifestJson?.displayName) || plugin?.packageName || "Plugin Details" },
+      { label: pluginDisplayName },
     ]);
-  }, [selectedCompany?.name, setBreadcrumbs, companyPrefix, plugin]);
+  }, [selectedCompany?.name, setBreadcrumbs, companyPrefix, pluginDisplayName]);
 
   useEffect(() => {
     setActiveTab("configuration");
@@ -241,7 +259,6 @@ export function PluginSettings() {
       : plugin.status === "error"
         ? "destructive"
         : "secondary";
-  const pluginDescription = resolveUiText(plugin.manifestJson.description) || t("plugin.manager.noDescription");
   const pluginCapabilities = plugin.manifestJson.capabilities ?? [];
   const companyPluginPagePath = getPluginCompanyPagePath(plugin, selectedCompany?.issuePrefix ?? companyPrefix ?? null);
 
@@ -256,7 +273,7 @@ export function PluginSettings() {
           </Link>
           <div className="flex items-center gap-2">
             <Puzzle className="h-6 w-6 text-muted-foreground" />
-            <h1 className="text-xl font-semibold">{resolveUiText(plugin.manifestJson.displayName) || plugin.packageName}</h1>
+            <h1 className="text-xl font-semibold">{pluginDisplayName}</h1>
             <Badge variant={statusVariant} className="ml-2">
               {translateText(displayStatus)}
             </Badge>
@@ -303,7 +320,7 @@ export function PluginSettings() {
                       {plugin.categories.length > 0 ? (
                         plugin.categories.map((category) => (
                           <Badge key={category} variant="outline" className="capitalize">
-                            {category}
+                            {translateText(category)}
                           </Badge>
                         ))
                       ) : (
